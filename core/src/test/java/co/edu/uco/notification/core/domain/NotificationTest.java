@@ -97,12 +97,13 @@ class NotificationTest {
     notification.markQueued();
     notification.pullEvents();
 
-    notification.markDelivered(AttemptOrigin.AUTOMATIC);
+    notification.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
 
     assertEquals(NotificationStatus.DELIVERED, notification.status());
     assertEquals(1, notification.deliveryAttempts().size());
     assertEquals(AttemptResult.ACCEPTED, notification.deliveryAttempts().get(0).result());
     assertEquals(AttemptOrigin.AUTOMATIC, notification.deliveryAttempts().get(0).origin());
+    assertEquals(ProviderId.of("brevo"), notification.deliveryAttempts().get(0).providerId());
     assertInstanceOf(NotificationDelivered.class, notification.pullEvents().get(0));
   }
 
@@ -111,7 +112,7 @@ class NotificationTest {
     final Notification notification = accepted();
     assertThrows(
         InvalidStatusTransitionException.class,
-        () -> notification.markDelivered(AttemptOrigin.AUTOMATIC));
+        () -> notification.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
   }
 
   @Test
@@ -120,11 +121,12 @@ class NotificationTest {
     notification.markQueued();
     notification.pullEvents();
 
-    notification.markRecoverable(AttemptOrigin.AUTOMATIC);
+    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
 
     assertEquals(NotificationStatus.RECOVERABLE, notification.status());
     assertEquals(
         AttemptResult.RECOVERABLE_FAILURE, notification.deliveryAttempts().get(0).result());
+    assertEquals(ProviderId.of("brevo"), notification.deliveryAttempts().get(0).providerId());
     assertTrue(notification.pullEvents().isEmpty());
   }
 
@@ -134,10 +136,11 @@ class NotificationTest {
     notification.markQueued();
     notification.pullEvents();
 
-    notification.markFailed(AttemptOrigin.AUTOMATIC);
+    notification.markFailed(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
 
     assertEquals(NotificationStatus.FAILED, notification.status());
     assertEquals(AttemptResult.PERMANENT_FAILURE, notification.deliveryAttempts().get(0).result());
+    assertEquals(ProviderId.of("brevo"), notification.deliveryAttempts().get(0).providerId());
     assertInstanceOf(NotificationFailed.class, notification.pullEvents().get(0));
   }
 
@@ -145,7 +148,7 @@ class NotificationTest {
   void requeueFromRecoverableGoesToPending() {
     final Notification notification = accepted();
     notification.markQueued();
-    notification.markRecoverable(AttemptOrigin.AUTOMATIC);
+    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
 
     notification.requeue();
 
@@ -156,7 +159,7 @@ class NotificationTest {
   void requeueFromFailedGoesToPending() {
     final Notification notification = accepted();
     notification.markQueued();
-    notification.markFailed(AttemptOrigin.AUTOMATIC);
+    notification.markFailed(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
     notification.pullEvents();
 
     notification.requeue();
@@ -257,7 +260,10 @@ class NotificationTest {
     final List<DeliveryAttempt> attempts =
         List.of(
             DeliveryAttempt.of(
-                acceptedAt, AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC));
+                acceptedAt,
+                AttemptResult.RECOVERABLE_FAILURE,
+                AttemptOrigin.AUTOMATIC,
+                ProviderId.of("brevo")));
 
     final Notification notification =
         Notification.reconstitute(

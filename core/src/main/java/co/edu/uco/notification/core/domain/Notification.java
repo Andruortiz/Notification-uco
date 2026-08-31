@@ -18,6 +18,7 @@ public final class Notification {
   private final TenantId tenantId;
   private final ExternalId externalId;
   private final ChannelType channelType;
+  private final RecipientId recipientId;
   private final Recipient recipient;
   private final NotificationContent content;
   private final Priority priority;
@@ -32,6 +33,7 @@ public final class Notification {
       final TenantId tenantId,
       final ExternalId externalId,
       final ChannelType channelType,
+      final RecipientId recipientId,
       final Recipient recipient,
       final NotificationContent content,
       final Priority priority,
@@ -40,6 +42,7 @@ public final class Notification {
     this.tenantId = tenantId;
     this.externalId = externalId;
     this.channelType = channelType;
+    this.recipientId = recipientId;
     this.recipient = recipient;
     this.content = content;
     this.priority = priority;
@@ -51,12 +54,14 @@ public final class Notification {
       final TenantId tenantId,
       final ExternalId externalId,
       final ChannelType channelType,
+      final RecipientId recipientId,
       final Recipient recipient,
       final NotificationContent content,
       final Priority priority) {
     Preconditions.requireNonNull(tenantId, "tenantId must not be null");
     Preconditions.requireNonNull(externalId, "externalId must not be null");
     Preconditions.requireNonNull(channelType, "channelType must not be null");
+    Preconditions.requireNonNull(recipientId, "recipientId must not be null");
     Preconditions.requireNonNull(recipient, "recipient must not be null");
     Preconditions.requireNonNull(content, "content must not be null");
     Preconditions.requireNonNull(priority, "priority must not be null");
@@ -67,6 +72,7 @@ public final class Notification {
             tenantId,
             externalId,
             channelType,
+            recipientId,
             recipient,
             content,
             priority,
@@ -81,6 +87,7 @@ public final class Notification {
       final TenantId tenantId,
       final ExternalId externalId,
       final ChannelType channelType,
+      final RecipientId recipientId,
       final Recipient recipient,
       final NotificationContent content,
       final Priority priority,
@@ -91,6 +98,7 @@ public final class Notification {
     Preconditions.requireNonNull(tenantId, "tenantId must not be null");
     Preconditions.requireNonNull(externalId, "externalId must not be null");
     Preconditions.requireNonNull(channelType, "channelType must not be null");
+    Preconditions.requireNonNull(recipientId, "recipientId must not be null");
     Preconditions.requireNonNull(recipient, "recipient must not be null");
     Preconditions.requireNonNull(content, "content must not be null");
     Preconditions.requireNonNull(priority, "priority must not be null");
@@ -104,6 +112,7 @@ public final class Notification {
             tenantId,
             externalId,
             channelType,
+            recipientId,
             recipient,
             content,
             priority,
@@ -172,6 +181,10 @@ public final class Notification {
 
   public ChannelType channelType() {
     return channelType;
+  }
+
+  public RecipientId recipientId() {
+    return recipientId;
   }
 
   public Recipient recipient() {

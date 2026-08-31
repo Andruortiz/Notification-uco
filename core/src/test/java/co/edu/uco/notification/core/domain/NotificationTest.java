@@ -1,7 +1,9 @@
 package co.edu.uco.notification.core.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -194,6 +196,61 @@ class NotificationTest {
   }
 
   @Test
+  void equalityIsByNotificationIdNotByFieldValues() {
+    final NotificationId id = NotificationId.newId();
+    final Instant now = Instant.now();
+
+    final Notification first =
+        Notification.reconstitute(
+            id,
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            Recipient.of("alice@example.com"),
+            NotificationContent.of("Body"),
+            Priority.NORMAL,
+            NotificationStatus.PENDING,
+            now,
+            List.of());
+    // Same id, but every other field differs -- must still be equal because identity is the id.
+    final Notification second =
+        Notification.reconstitute(
+            id,
+            TenantId.of("tenant-2"),
+            ExternalId.of("order-99"),
+            ChannelType.of("SMS"),
+            Recipient.of("bob@example.com"),
+            NotificationContent.of("Different body"),
+            Priority.HIGH,
+            NotificationStatus.DELIVERED,
+            now.plusSeconds(60),
+            List.of());
+
+    assertEquals(first, second);
+    assertEquals(first.hashCode(), second.hashCode());
+  }
+
+  @Test
+  void differentNotificationIdsAreNeverEqual() {
+    assertNotEquals(accepted(), accepted());
+  }
+
+  @Test
+  void isEqualToItself() {
+    final Notification notification = accepted();
+    assertEquals(notification, notification);
+  }
+
+  @Test
+  void isNotEqualToNullOrADifferentType() {
+    final Notification notification = accepted();
+    // called directly (not via assertNotEquals) to guarantee Notification.equals is the one
+    // invoked, not the argument's -- assertNotEquals's direction isn't guaranteed either way.
+    assertFalse(notification.equals(null));
+    assertFalse(notification.equals("not a notification"));
+  }
+
+  @Test
   void reconstituteRestoresGivenStateWithoutFiringEvents() {
     final NotificationId id = NotificationId.newId();
     final Instant acceptedAt = Instant.now();
@@ -229,6 +286,8 @@ class NotificationTest {
     assertEquals(ExternalId.of("order-42"), notification.externalId());
     assertEquals(ChannelType.of("EMAIL"), notification.channelType());
     assertEquals(Recipient.of("alice@example.com"), notification.recipient());
+    assertEquals(NotificationContent.of("Subject", "Body"), notification.content());
     assertEquals(Priority.NORMAL, notification.priority());
+    assertTrue(notification.acceptedAt().isBefore(Instant.now().plusSeconds(1)));
   }
 }

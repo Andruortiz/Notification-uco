@@ -24,6 +24,7 @@ class NotificationTest {
         TenantId.of("tenant-1"),
         ExternalId.of("order-42"),
         ChannelType.of("EMAIL"),
+        RecipientId.of("recipient-1"),
         Recipient.of("alice@example.com"),
         NotificationContent.of("Subject", "Body"),
         Priority.NORMAL);
@@ -53,6 +54,22 @@ class NotificationTest {
                 null,
                 ExternalId.of("order-42"),
                 ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com"),
+                NotificationContent.of("Body"),
+                Priority.NORMAL));
+  }
+
+  @Test
+  void acceptRejectsNullRecipientId() {
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            Notification.accept(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                null,
                 Recipient.of("alice@example.com"),
                 NotificationContent.of("Body"),
                 Priority.NORMAL));
@@ -67,6 +84,7 @@ class NotificationTest {
                 TenantId.of("tenant-1"),
                 ExternalId.of("order-42"),
                 ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
                 Recipient.of("alice@example.com"),
                 null,
                 Priority.NORMAL));
@@ -209,6 +227,7 @@ class NotificationTest {
             TenantId.of("tenant-1"),
             ExternalId.of("order-42"),
             ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
             Recipient.of("alice@example.com"),
             NotificationContent.of("Body"),
             Priority.NORMAL,
@@ -222,6 +241,7 @@ class NotificationTest {
             TenantId.of("tenant-2"),
             ExternalId.of("order-99"),
             ChannelType.of("SMS"),
+            RecipientId.of("recipient-2"),
             Recipient.of("bob@example.com"),
             NotificationContent.of("Different body"),
             Priority.HIGH,
@@ -271,6 +291,7 @@ class NotificationTest {
             TenantId.of("tenant-1"),
             ExternalId.of("order-42"),
             ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
             Recipient.of("alice@example.com"),
             NotificationContent.of("Body"),
             Priority.HIGH,
@@ -291,6 +312,7 @@ class NotificationTest {
     assertEquals(TenantId.of("tenant-1"), notification.tenantId());
     assertEquals(ExternalId.of("order-42"), notification.externalId());
     assertEquals(ChannelType.of("EMAIL"), notification.channelType());
+    assertEquals(RecipientId.of("recipient-1"), notification.recipientId());
     assertEquals(Recipient.of("alice@example.com"), notification.recipient());
     assertEquals(NotificationContent.of("Subject", "Body"), notification.content());
     assertEquals(Priority.NORMAL, notification.priority());

@@ -196,4 +196,22 @@ public final class Notification {
   public List<DeliveryAttempt> deliveryAttempts() {
     return List.copyOf(deliveryAttempts);
   }
+
+  // Identidad de entidad: dos instancias con el mismo notificationId son la misma notificación,
+  // sin importar si el resto de sus campos difiere por haberse cargado en momentos distintos.
+  @Override
+  public boolean equals(final Object other) {
+    if (this == other) {
+      return true;
+    }
+    if (!(other instanceof Notification that)) {
+      return false;
+    }
+    return notificationId.equals(that.notificationId);
+  }
+
+  @Override
+  public int hashCode() {
+    return notificationId.hashCode();
+  }
 }

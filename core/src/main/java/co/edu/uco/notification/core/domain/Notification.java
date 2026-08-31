@@ -118,23 +118,24 @@ public final class Notification {
     eventRecorder.record(new NotificationQueued(notificationId, Instant.now()));
   }
 
-  public void markDelivered(final AttemptOrigin origin) {
+  public void markDelivered(final AttemptOrigin origin, final ProviderId providerId) {
     transitionTo(NotificationStatus.DELIVERED);
     final Instant now = Instant.now();
-    deliveryAttempts.add(DeliveryAttempt.of(now, AttemptResult.ACCEPTED, origin));
+    deliveryAttempts.add(DeliveryAttempt.of(now, AttemptResult.ACCEPTED, origin, providerId));
     eventRecorder.record(new NotificationDelivered(notificationId, now));
   }
 
-  public void markRecoverable(final AttemptOrigin origin) {
+  public void markRecoverable(final AttemptOrigin origin, final ProviderId providerId) {
     transitionTo(NotificationStatus.RECOVERABLE);
     deliveryAttempts.add(
-        DeliveryAttempt.of(Instant.now(), AttemptResult.RECOVERABLE_FAILURE, origin));
+        DeliveryAttempt.of(Instant.now(), AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
   }
 
-  public void markFailed(final AttemptOrigin origin) {
+  public void markFailed(final AttemptOrigin origin, final ProviderId providerId) {
     transitionTo(NotificationStatus.FAILED);
     final Instant now = Instant.now();
-    deliveryAttempts.add(DeliveryAttempt.of(now, AttemptResult.PERMANENT_FAILURE, origin));
+    deliveryAttempts.add(
+        DeliveryAttempt.of(now, AttemptResult.PERMANENT_FAILURE, origin, providerId));
     eventRecorder.record(new NotificationFailed(notificationId, now));
   }
 

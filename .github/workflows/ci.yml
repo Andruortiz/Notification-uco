@@ -22,14 +22,8 @@ jobs:
       - name: Compilar
         run: ./mvnw -B -ntp clean compile
 
-      - name: Ejecutar pruebas
-        run: ./mvnw -B -ntp test
-
-      - name: Verificar cobertura
-        run: ./mvnw -B -ntp jacoco:report jacoco:check
-
-      - name: Análisis estático
-        run: ./mvnw -B -ntp spotless:check spotbugs:check
+      - name: Pruebas y puertas de calidad (cobertura, Spotless, SpotBugs)
+        run: ./mvnw -B -ntp verify
 
       - name: Construir imagen Docker
         if: false

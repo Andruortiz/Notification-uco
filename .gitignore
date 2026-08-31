@@ -18,7 +18,20 @@
 *.zip
 *.tar.gz
 *.rar
+# excepcion: el jar del Maven Wrapper debe versionarse, si no ./mvnw falla en un clon nuevo (y en CI)
+!.mvn/wrapper/maven-wrapper.jar
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Maven build output
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Environment
+.env

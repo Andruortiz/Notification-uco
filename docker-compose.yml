@@ -1,0 +1,30 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: notification-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-notification}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-notification}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-notification}
+    volumes:
+      - mongodb-data:/data/db
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: notification-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-notification}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-notification}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+volumes:
+  mongodb-data:
+  rabbitmq-data:

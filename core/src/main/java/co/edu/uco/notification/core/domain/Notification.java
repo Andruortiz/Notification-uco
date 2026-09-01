@@ -140,6 +140,18 @@ public final class Notification {
         DeliveryAttempt.of(Instant.now(), AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
   }
 
+  // The provider's own attempt was still a recoverable failure -- what changed is that the
+  // notification ran out of retry budget, not that this particular attempt was non-retryable.
+  // Recording it as PERMANENT_FAILURE (via markFailed) would misrepresent what the provider
+  // actually said in the audit trail.
+  public void markRetriesExhausted(final AttemptOrigin origin, final ProviderId providerId) {
+    transitionTo(NotificationStatus.FAILED);
+    final Instant now = Instant.now();
+    deliveryAttempts.add(
+        DeliveryAttempt.of(now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
+    eventRecorder.record(new NotificationFailed(notificationId, now));
+  }
+
   public void markFailed(final AttemptOrigin origin, final ProviderId providerId) {
     transitionTo(NotificationStatus.FAILED);
     final Instant now = Instant.now();

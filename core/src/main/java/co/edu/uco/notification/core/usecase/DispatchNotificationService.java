@@ -91,9 +91,9 @@ public final class DispatchNotificationService implements DispatchNotificationUs
     if (outcome == AttemptResult.ACCEPTED) {
       notification.markDelivered(AttemptOrigin.AUTOMATIC, providerId);
     } else if (outcome == AttemptResult.RECOVERABLE_FAILURE) {
-      final long attemptNumber = recoverableAttemptCount(notification) + 1;
-      if (retryPolicy.shouldGiveUp(Math.toIntExact(attemptNumber))) {
-        notification.markFailed(AttemptOrigin.AUTOMATIC, providerId);
+      final int attemptNumber = recoverableAttemptCount(notification) + 1;
+      if (retryPolicy.shouldGiveUp(attemptNumber)) {
+        notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, providerId);
       } else {
         notification.markRecoverable(AttemptOrigin.AUTOMATIC, providerId);
       }
@@ -103,9 +103,10 @@ public final class DispatchNotificationService implements DispatchNotificationUs
     return notification;
   }
 
-  private static long recoverableAttemptCount(final Notification notification) {
+  private static int recoverableAttemptCount(final Notification notification) {
     return notification.deliveryAttempts().stream()
         .filter(attempt -> attempt.result() == AttemptResult.RECOVERABLE_FAILURE)
-        .count();
+        .toList()
+        .size();
   }
 }

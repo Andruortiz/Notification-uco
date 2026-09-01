@@ -156,12 +156,16 @@ class DispatchNotificationServiceTest {
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
     assertEquals(NotificationStatus.FAILED, notification.status());
+    // the provider's own outcome was still a recoverable failure -- only the notification's
+    // overall status becomes FAILED once the retry budget is exhausted.
+    final List<DeliveryAttempt> attempts = notification.deliveryAttempts();
+    assertEquals(AttemptResult.RECOVERABLE_FAILURE, attempts.get(attempts.size() - 1).result());
   }
 
   @Test
   void dispatchCountsOnlyRecoverableAttemptsAmongMixedHistory() {
-    // a permanent-failure attempt from an earlier, manually-requeued dispatch must not count
-    // toward the recoverable-attempt budget.
+    // a permanent-failure attempt from an earlier dispatch must not count toward the
+    // recoverable-attempt budget, regardless of what else is mixed into the history.
     final Notification notification =
         pendingNotificationWithAttempts(
             List.of(

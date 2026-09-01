@@ -1,8 +1,10 @@
 package co.edu.uco.notification.core.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -83,6 +85,7 @@ class SendNotificationServiceTest {
 
     assertNotNull(result);
     assertEquals(NotificationStatus.PENDING, result.status());
+    assertFalse(result.duplicate());
 
     verify(notificationRepository).save(any(Notification.class));
     verify(eventPublisherPort).publish(any());
@@ -111,6 +114,7 @@ class SendNotificationServiceTest {
 
     assertNotNull(result);
     assertEquals(existing.notificationId(), result.notificationId());
+    assertTrue(result.duplicate());
 
     verify(notificationRepository, never()).save(any(Notification.class));
     verify(eventPublisherPort, never()).publish(any());

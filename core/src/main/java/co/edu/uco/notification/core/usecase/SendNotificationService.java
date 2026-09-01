@@ -44,7 +44,7 @@ public final class SendNotificationService implements SendNotificationUseCase {
                 () ->
                     notificationRepository
                         .findByTenantAndExternalId(command.tenantId(), command.externalId())
-                        .map(SendNotificationService::toResult)
+                        .map(existing -> toResult(existing, true))
                         .switchIfEmpty(Mono.defer(() -> acceptAndDispatch(command)))));
   }
 
@@ -67,10 +67,12 @@ public final class SendNotificationService implements SendNotificationUseCase {
                 eventPublisherPort
                     .publish(events)
                     .then(eventPublisherPort.enqueueForDispatch(saved))
-                    .thenReturn(toResult(saved)));
+                    .thenReturn(toResult(saved, false)));
   }
 
-  private static SendNotificationResult toResult(final Notification notification) {
-    return new SendNotificationResult(notification.notificationId(), notification.status());
+  private static SendNotificationResult toResult(
+      final Notification notification, final boolean duplicate) {
+    return new SendNotificationResult(
+        notification.notificationId(), notification.status(), duplicate);
   }
 }

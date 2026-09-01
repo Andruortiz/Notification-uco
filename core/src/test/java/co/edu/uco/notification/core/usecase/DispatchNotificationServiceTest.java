@@ -7,8 +7,10 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import co.edu.uco.notification.core.domain.AttemptOrigin;
 import co.edu.uco.notification.core.domain.AttemptResult;
 import co.edu.uco.notification.core.domain.ChannelType;
+import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.ExternalId;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.NotificationContent;
@@ -18,6 +20,7 @@ import co.edu.uco.notification.core.domain.Priority;
 import co.edu.uco.notification.core.domain.ProviderId;
 import co.edu.uco.notification.core.domain.Recipient;
 import co.edu.uco.notification.core.domain.RecipientId;
+import co.edu.uco.notification.core.domain.RetryPolicy;
 import co.edu.uco.notification.core.domain.TenantId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
@@ -26,6 +29,8 @@ import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,11 +50,17 @@ class DispatchNotificationServiceTest {
 
   private DispatchNotificationService service;
 
+  private final RetryPolicy retryPolicy = new RetryPolicy();
+
   @BeforeEach
   void setUp() {
     service =
         new DispatchNotificationService(
-            notificationRepository, channelCatalogPort, notificationSenderPort, eventPublisherPort);
+            notificationRepository,
+            channelCatalogPort,
+            notificationSenderPort,
+            eventPublisherPort,
+            retryPolicy);
   }
 
   private static Notification pendingNotification() {
@@ -61,6 +72,36 @@ class DispatchNotificationServiceTest {
         Recipient.of("alice@example.com"),
         NotificationContent.of("Body"),
         Priority.NORMAL);
+  }
+
+  private static Notification pendingNotificationWithRecoverableAttempts(final int count) {
+    final List<AttemptResult> results = new ArrayList<>();
+    for (int i = 0; i < count; i++) {
+      results.add(AttemptResult.RECOVERABLE_FAILURE);
+    }
+    return pendingNotificationWithAttempts(results);
+  }
+
+  private static Notification pendingNotificationWithAttempts(final List<AttemptResult> results) {
+    final NotificationId id = NotificationId.newId();
+    final Instant now = Instant.now();
+    final List<DeliveryAttempt> attempts = new ArrayList<>();
+    for (final AttemptResult result : results) {
+      attempts.add(
+          DeliveryAttempt.of(now, result, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
+    }
+    return Notification.reconstitute(
+        id,
+        TenantId.of("tenant-1"),
+        ExternalId.of("order-42"),
+        ChannelType.of("EMAIL"),
+        RecipientId.of("recipient-1"),
+        Recipient.of("alice@example.com"),
+        NotificationContent.of("Body"),
+        Priority.NORMAL,
+        NotificationStatus.PENDING,
+        now,
+        attempts);
   }
 
   private static ChannelRoute activeRoute() {
@@ -95,6 +136,43 @@ class DispatchNotificationServiceTest {
   void dispatchMarksRecoverableOnRecoverableFailureOutcome() {
     final Notification notification = pendingNotification();
     notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    assertEquals(NotificationStatus.RECOVERABLE, notification.status());
+  }
+
+  @Test
+  void dispatchMarksFailedWhenRecoverableRetriesAreExhausted() {
+    // default RetryPolicy gives up at 5 attempts; this notification already has 4 recorded.
+    final Notification notification = pendingNotificationWithRecoverableAttempts(4);
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    assertEquals(NotificationStatus.FAILED, notification.status());
+    // the provider's own outcome was still a recoverable failure -- only the notification's
+    // overall status becomes FAILED once the retry budget is exhausted.
+    final List<DeliveryAttempt> attempts = notification.deliveryAttempts();
+    assertEquals(AttemptResult.RECOVERABLE_FAILURE, attempts.get(attempts.size() - 1).result());
+  }
+
+  @Test
+  void dispatchCountsOnlyRecoverableAttemptsAmongMixedHistory() {
+    // a permanent-failure attempt from an earlier dispatch must not count toward the
+    // recoverable-attempt budget, regardless of what else is mixed into the history.
+    final Notification notification =
+        pendingNotificationWithAttempts(
+            List.of(
+                AttemptResult.PERMANENT_FAILURE,
+                AttemptResult.RECOVERABLE_FAILURE,
+                AttemptResult.RECOVERABLE_FAILURE,
+                AttemptResult.RECOVERABLE_FAILURE));
     stubHappyPathUpTo(notification);
     when(notificationSenderPort.send(notification))
         .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
@@ -156,7 +234,7 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                null, channelCatalogPort, notificationSenderPort, eventPublisherPort));
+                null, channelCatalogPort, notificationSenderPort, eventPublisherPort, retryPolicy));
   }
 
   @Test
@@ -165,7 +243,11 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                notificationRepository, null, notificationSenderPort, eventPublisherPort));
+                notificationRepository,
+                null,
+                notificationSenderPort,
+                eventPublisherPort,
+                retryPolicy));
   }
 
   @Test
@@ -174,7 +256,7 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                notificationRepository, channelCatalogPort, null, eventPublisherPort));
+                notificationRepository, channelCatalogPort, null, eventPublisherPort, retryPolicy));
   }
 
   @Test
@@ -183,6 +265,23 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                notificationRepository, channelCatalogPort, notificationSenderPort, null));
+                notificationRepository,
+                channelCatalogPort,
+                notificationSenderPort,
+                null,
+                retryPolicy));
+  }
+
+  @Test
+  void constructorRejectsNullRetryPolicy() {
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            new DispatchNotificationService(
+                notificationRepository,
+                channelCatalogPort,
+                notificationSenderPort,
+                eventPublisherPort,
+                null));
   }
 }

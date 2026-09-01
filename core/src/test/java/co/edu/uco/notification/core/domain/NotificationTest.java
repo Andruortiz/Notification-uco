@@ -149,6 +149,31 @@ class NotificationTest {
   }
 
   @Test
+  void markRetriesExhaustedTransitionsToFailedButRecordsRecoverableFailureAttempt() {
+    final Notification notification = accepted();
+    notification.markQueued();
+    notification.pullEvents();
+
+    notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+
+    assertEquals(NotificationStatus.FAILED, notification.status());
+    // the attempt itself was still a recoverable failure -- only the overall status becomes
+    // FAILED because the retry budget ran out, not because the provider said "don't retry".
+    assertEquals(
+        AttemptResult.RECOVERABLE_FAILURE, notification.deliveryAttempts().get(0).result());
+    assertEquals(ProviderId.of("brevo"), notification.deliveryAttempts().get(0).providerId());
+    assertInstanceOf(NotificationFailed.class, notification.pullEvents().get(0));
+  }
+
+  @Test
+  void markRetriesExhaustedFromPendingThrows() {
+    final Notification notification = accepted();
+    assertThrows(
+        InvalidStatusTransitionException.class,
+        () -> notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
+  }
+
+  @Test
   void markFailedTransitionsRecordsAttemptAndFiresEvent() {
     final Notification notification = accepted();
     notification.markQueued();

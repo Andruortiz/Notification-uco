@@ -5,6 +5,7 @@ import co.edu.uco.notification.core.domain.AttemptResult;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.NotificationId;
 import co.edu.uco.notification.core.domain.ProviderId;
+import co.edu.uco.notification.core.domain.RetryPolicy;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
@@ -24,12 +25,14 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   private final ChannelCatalogPort channelCatalogPort;
   private final NotificationSenderPort notificationSenderPort;
   private final NotificationEventPublisherPort eventPublisherPort;
+  private final RetryPolicy retryPolicy;
 
   public DispatchNotificationService(
       final NotificationRepository notificationRepository,
       final ChannelCatalogPort channelCatalogPort,
       final NotificationSenderPort notificationSenderPort,
-      final NotificationEventPublisherPort eventPublisherPort) {
+      final NotificationEventPublisherPort eventPublisherPort,
+      final RetryPolicy retryPolicy) {
     this.notificationRepository =
         Preconditions.requireNonNull(
             notificationRepository, "notificationRepository must not be null");
@@ -40,6 +43,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
             notificationSenderPort, "notificationSenderPort must not be null");
     this.eventPublisherPort =
         Preconditions.requireNonNull(eventPublisherPort, "eventPublisherPort must not be null");
+    this.retryPolicy = Preconditions.requireNonNull(retryPolicy, "retryPolicy must not be null");
   }
 
   @Override
@@ -66,7 +70,8 @@ public final class DispatchNotificationService implements DispatchNotificationUs
         .send(notification)
         .flatMap(
             outcome ->
-                saveAndPublish(applyOutcome(notification, outcome, route.preferredProvider())));
+                saveAndPublish(
+                    applyOutcome(notification, outcome, route.preferredProvider(), retryPolicy)));
   }
 
   private Mono<Void> saveAndPublish(final Notification notification) {
@@ -79,14 +84,29 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   }
 
   private static Notification applyOutcome(
-      final Notification notification, final AttemptResult outcome, final ProviderId providerId) {
+      final Notification notification,
+      final AttemptResult outcome,
+      final ProviderId providerId,
+      final RetryPolicy retryPolicy) {
     if (outcome == AttemptResult.ACCEPTED) {
       notification.markDelivered(AttemptOrigin.AUTOMATIC, providerId);
     } else if (outcome == AttemptResult.RECOVERABLE_FAILURE) {
-      notification.markRecoverable(AttemptOrigin.AUTOMATIC, providerId);
+      final int attemptNumber = recoverableAttemptCount(notification) + 1;
+      if (retryPolicy.shouldGiveUp(attemptNumber)) {
+        notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, providerId);
+      } else {
+        notification.markRecoverable(AttemptOrigin.AUTOMATIC, providerId);
+      }
     } else {
       notification.markFailed(AttemptOrigin.AUTOMATIC, providerId);
     }
     return notification;
+  }
+
+  private static int recoverableAttemptCount(final Notification notification) {
+    return notification.deliveryAttempts().stream()
+        .filter(attempt -> attempt.result() == AttemptResult.RECOVERABLE_FAILURE)
+        .toList()
+        .size();
   }
 }

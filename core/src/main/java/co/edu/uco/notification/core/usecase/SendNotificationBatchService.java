@@ -15,6 +15,11 @@ import reactor.core.publisher.Mono;
 
 public final class SendNotificationBatchService implements SendNotificationBatchUseCase {
 
+  // Bounded so one large batch can't fan out into an unbounded number of concurrent sends
+  // against the repository/provider adapters -- Reactor's flatMapSequential default (256) is
+  // too high for that. Not yet tied to a per-provider rate limit (still an open design gap).
+  private static final int MAX_CONCURRENT_ITEMS = 16;
+
   private final SendNotificationUseCase sendNotificationUseCase;
 
   public SendNotificationBatchService(final SendNotificationUseCase sendNotificationUseCase) {
@@ -30,7 +35,7 @@ public final class SendNotificationBatchService implements SendNotificationBatch
     final BatchId batchId = command.batchId() != null ? command.batchId() : BatchId.newId();
 
     return Flux.fromIterable(command.items())
-        .flatMapSequential(item -> processItem(command, item))
+        .flatMapSequential(item -> processItem(command, item), MAX_CONCURRENT_ITEMS)
         .collectList()
         .map(results -> new BatchAcceptedResult(batchId, results));
   }

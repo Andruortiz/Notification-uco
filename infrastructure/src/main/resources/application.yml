@@ -9,3 +9,6 @@ notification:
         providers:
           - simulated
         content-schema:
+  provider:
+    simulated:
+      result: ACCEPTED

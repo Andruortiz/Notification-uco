@@ -29,6 +29,7 @@
         <resilience4j.version>2.2.0</resilience4j.version>
         <spring-modulith.version>1.2.4</spring-modulith.version>
         <springdoc.version>2.6.0</springdoc.version>
+        <json-schema-validator.version>1.4.0</json-schema-validator.version>
 
         <spotless-maven-plugin.version>2.43.0</spotless-maven-plugin.version>
         <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>

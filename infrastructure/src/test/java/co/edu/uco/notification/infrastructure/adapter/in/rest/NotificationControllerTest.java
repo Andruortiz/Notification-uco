@@ -8,6 +8,7 @@ import co.edu.uco.notification.core.domain.NotificationId;
 import co.edu.uco.notification.core.domain.NotificationStatus;
 import co.edu.uco.notification.core.domain.ProviderId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusUseCase;
 import co.edu.uco.notification.core.port.in.NotificationStatusView;
@@ -73,6 +74,24 @@ class NotificationControllerTest {
   void sendReturnsBadRequestWhenChannelIsNotAvailable() {
     when(sendNotificationUseCase.send(any()))
         .thenReturn(Mono.error(new ChannelNotAvailableException(ChannelType.of("SMS"))));
+
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("X-Tenant-Id", "tenant-1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(REQUEST_BODY)
+        .exchange()
+        .expectStatus()
+        .isBadRequest();
+  }
+
+  @Test
+  void sendReturnsBadRequestWhenContentDoesNotMatchTheChannelSchema() {
+    when(sendNotificationUseCase.send(any()))
+        .thenReturn(
+            Mono.error(
+                new InvalidContentException(ChannelType.of("EMAIL"), "subject is required")));
 
     webTestClient
         .post()

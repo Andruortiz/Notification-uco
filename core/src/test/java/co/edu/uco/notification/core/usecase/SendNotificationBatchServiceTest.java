@@ -16,6 +16,7 @@ import co.edu.uco.notification.core.domain.Recipient;
 import co.edu.uco.notification.core.domain.RecipientId;
 import co.edu.uco.notification.core.domain.TenantId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.port.in.BatchAcceptedResult;
 import co.edu.uco.notification.core.port.in.BatchItemOutcome;
 import co.edu.uco.notification.core.port.in.BatchNotificationItem;
@@ -100,6 +101,22 @@ class SendNotificationBatchServiceTest {
 
     assertEquals(BatchItemOutcome.REJECTED, result.results().get(2).outcome());
     assertEquals("Channel not available: EMAIL", result.results().get(2).rejectionReason());
+  }
+
+  @Test
+  void sendBatchRejectsItemsWithInvalidContent() {
+    final BatchNotificationItem rejected = item("order-1");
+    when(sendNotificationUseCase.send(toCommand(rejected)))
+        .thenReturn(
+            Mono.error(new InvalidContentException(rejected.channelType(), "subject is required")));
+
+    final SendNotificationBatchCommand command =
+        new SendNotificationBatchCommand(TENANT_ID, BatchId.of("batch-1"), List.of(rejected));
+
+    final BatchAcceptedResult result = service.sendBatch(command).block();
+
+    assertNotNull(result);
+    assertEquals(BatchItemOutcome.REJECTED, result.results().get(0).outcome());
   }
 
   @Test

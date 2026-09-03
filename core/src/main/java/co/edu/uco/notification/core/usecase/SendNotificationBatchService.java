@@ -2,6 +2,7 @@ package co.edu.uco.notification.core.usecase;
 
 import co.edu.uco.notification.core.domain.BatchId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.port.in.BatchAcceptedResult;
 import co.edu.uco.notification.core.port.in.BatchItemResult;
 import co.edu.uco.notification.core.port.in.BatchNotificationItem;
@@ -60,7 +61,8 @@ public final class SendNotificationBatchService implements SendNotificationBatch
                     ? BatchItemResult.duplicate(item.externalId(), result.notificationId())
                     : BatchItemResult.accepted(item.externalId(), result.notificationId()))
         .onErrorResume(
-            ChannelNotAvailableException.class,
+            ex ->
+                ex instanceof ChannelNotAvailableException || ex instanceof InvalidContentException,
             ex -> Mono.just(BatchItemResult.rejected(item.externalId(), ex.getMessage())));
   }
 }

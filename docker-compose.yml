@@ -6,8 +6,8 @@ services:
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:-notification}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-notification}
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:?MONGO_USERNAME is not set, define it in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD is not set, define it in .env}
       MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-notification}
     volumes:
       - mongodb-data:/data/db
@@ -20,8 +20,8 @@ services:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:-notification}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-notification}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME is not set, define it in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is not set, define it in .env}
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
 

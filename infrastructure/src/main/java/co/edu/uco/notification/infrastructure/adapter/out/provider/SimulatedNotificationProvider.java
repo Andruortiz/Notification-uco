@@ -8,10 +8,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-// No external system -- for tests/dev only, until a real provider (e.g. Brevo) lands. Always
-// returns the single AttemptResult configured in notification.provider.simulated.result, so
-// dispatch behavior (success/recoverable/permanent-failure paths) can be exercised end-to-end
-// without a live provider.
 @Component
 @EnableConfigurationProperties(SimulatedProviderProperties.class)
 public class SimulatedNotificationProvider implements NotificationSenderPort {

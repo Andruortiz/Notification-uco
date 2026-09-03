@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -258,7 +259,8 @@ class NotificationTest {
             Priority.NORMAL,
             NotificationStatus.PENDING,
             now,
-            List.of());
+            List.of(),
+            1L);
     // Same id, but every other field differs -- must still be equal because identity is the id.
     final Notification second =
         Notification.reconstitute(
@@ -272,7 +274,8 @@ class NotificationTest {
             Priority.HIGH,
             NotificationStatus.DELIVERED,
             now.plusSeconds(60),
-            List.of());
+            List.of(),
+            2L);
 
     assertEquals(first, second);
     assertEquals(first.hashCode(), second.hashCode());
@@ -322,11 +325,13 @@ class NotificationTest {
             Priority.HIGH,
             NotificationStatus.RECOVERABLE,
             acceptedAt,
-            attempts);
+            attempts,
+            3L);
 
     assertEquals(id, notification.notificationId());
     assertEquals(NotificationStatus.RECOVERABLE, notification.status());
     assertEquals(1, notification.deliveryAttempts().size());
+    assertEquals(3L, notification.version());
     assertTrue(notification.pullEvents().isEmpty());
   }
 
@@ -342,5 +347,10 @@ class NotificationTest {
     assertEquals(NotificationContent.of("Subject", "Body"), notification.content());
     assertEquals(Priority.NORMAL, notification.priority());
     assertTrue(notification.acceptedAt().isBefore(Instant.now().plusSeconds(1)));
+  }
+
+  @Test
+  void versionIsNullForANewlyAcceptedNotification() {
+    assertNull(accepted().version());
   }
 }

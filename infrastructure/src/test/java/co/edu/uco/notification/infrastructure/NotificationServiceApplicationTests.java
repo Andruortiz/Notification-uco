@@ -10,7 +10,14 @@ import org.springframework.boot.test.context.SpringBootTest;
 // startup, which would make this test's outcome depend on whatever Rabbit instance happens to be
 // reachable at test time (absent, or present with different credentials). Disabling listener
 // auto-startup keeps this test about wiring, not ambient infrastructure state.
-@SpringBootTest(properties = "spring.rabbitmq.listener.simple.auto-startup=false")
+@SpringBootTest(
+    properties = {
+      "spring.rabbitmq.listener.simple.auto-startup=false",
+      "MONGO_USERNAME=test",
+      "MONGO_PASSWORD=test",
+      "RABBITMQ_USERNAME=test",
+      "RABBITMQ_PASSWORD=test"
+    })
 class NotificationServiceApplicationTests {
 
   @Test

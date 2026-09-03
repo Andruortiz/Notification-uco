@@ -27,7 +27,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import reactor.test.StepVerifier;
 
-@DataMongoTest
+@DataMongoTest(properties = {"MONGO_USERNAME=test", "MONGO_PASSWORD=test"})
 @Testcontainers
 class NotificationMongoAdapterTest {
 

@@ -22,6 +22,7 @@ import co.edu.uco.notification.core.domain.Recipient;
 import co.edu.uco.notification.core.domain.RecipientId;
 import co.edu.uco.notification.core.domain.TenantId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
@@ -132,6 +133,44 @@ class SendNotificationServiceTest {
 
     verify(notificationRepository, never())
         .findByTenantAndExternalId(any(TenantId.class), any(ExternalId.class));
+  }
+
+  @Test
+  void sendAcceptsWhenContentMatchesTheChannelSchema() {
+    final ChannelRoute routeWithSchema =
+        new ChannelRoute(CHANNEL_TYPE, List.of(ProviderId.of("brevo")), "{\"type\":\"object\"}");
+    when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID))
+        .thenReturn(Mono.just(routeWithSchema));
+    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
+        .thenReturn(Mono.empty());
+    when(notificationRepository.save(any(Notification.class)))
+        .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+
+    final SendNotificationResult result = service.send(command()).block();
+
+    assertNotNull(result);
+    assertFalse(result.duplicate());
+  }
+
+  @Test
+  void sendFailsWithInvalidContentWhenContentDoesNotMatchTheChannelSchema() {
+    final ChannelRoute routeWithSchema =
+        new ChannelRoute(
+            CHANNEL_TYPE,
+            List.of(ProviderId.of("brevo")),
+            "{\"type\":\"object\",\"properties\":{\"subject\":{\"type\":\"string\",\"minLength\":1}}}");
+    when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID))
+        .thenReturn(Mono.just(routeWithSchema));
+
+    StepVerifier.create(service.send(command()))
+        .expectError(InvalidContentException.class)
+        .verify();
+
+    verify(notificationRepository, never())
+        .findByTenantAndExternalId(any(TenantId.class), any(ExternalId.class));
+    verify(notificationRepository, never()).save(any(Notification.class));
   }
 
   @Test

@@ -1,5 +1,6 @@
 package co.edu.uco.notification.core.usecase;
 
+import co.edu.uco.notification.core.domain.ContentSchemaValidator;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
@@ -7,6 +8,7 @@ import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
+import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.Preconditions;
@@ -39,13 +41,16 @@ public final class SendNotificationService implements SendNotificationUseCase {
     return channelCatalogPort
         .findActiveRoute(command.channelType(), command.tenantId())
         .switchIfEmpty(Mono.error(new ChannelNotAvailableException(command.channelType())))
-        .then(
-            Mono.defer(
-                () ->
-                    notificationRepository
-                        .findByTenantAndExternalId(command.tenantId(), command.externalId())
-                        .map(existing -> toResult(existing, true))
-                        .switchIfEmpty(Mono.defer(() -> acceptAndDispatch(command)))));
+        .flatMap(route -> validateAndProceed(route, command));
+  }
+
+  private Mono<SendNotificationResult> validateAndProceed(
+      final ChannelRoute route, final SendNotificationCommand command) {
+    ContentSchemaValidator.validate(route.channelType(), route.contentSchema(), command.content());
+    return notificationRepository
+        .findByTenantAndExternalId(command.tenantId(), command.externalId())
+        .map(existing -> toResult(existing, true))
+        .switchIfEmpty(Mono.defer(() -> acceptAndDispatch(command)));
   }
 
   private Mono<SendNotificationResult> acceptAndDispatch(final SendNotificationCommand command) {

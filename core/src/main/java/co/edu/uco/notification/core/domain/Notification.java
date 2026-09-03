@@ -27,6 +27,7 @@ public final class Notification {
   private final List<DeliveryAttempt> deliveryAttempts = new ArrayList<>();
 
   private NotificationStatus status;
+  private Long version;
 
   private Notification(
       final NotificationId notificationId,
@@ -37,7 +38,8 @@ public final class Notification {
       final Recipient recipient,
       final NotificationContent content,
       final Priority priority,
-      final Instant acceptedAt) {
+      final Instant acceptedAt,
+      final Long version) {
     this.notificationId = notificationId;
     this.tenantId = tenantId;
     this.externalId = externalId;
@@ -48,6 +50,7 @@ public final class Notification {
     this.priority = priority;
     this.acceptedAt = acceptedAt;
     this.status = NotificationStatus.PENDING;
+    this.version = version;
   }
 
   public static Notification accept(
@@ -76,7 +79,8 @@ public final class Notification {
             recipient,
             content,
             priority,
-            Instant.now());
+            Instant.now(),
+            null);
     notification.eventRecorder.record(
         new NotificationAccepted(notification.notificationId, notification.acceptedAt));
     return notification;
@@ -93,7 +97,8 @@ public final class Notification {
       final Priority priority,
       final NotificationStatus status,
       final Instant acceptedAt,
-      final List<DeliveryAttempt> deliveryAttempts) {
+      final List<DeliveryAttempt> deliveryAttempts,
+      final Long version) {
     Preconditions.requireNonNull(notificationId, "notificationId must not be null");
     Preconditions.requireNonNull(tenantId, "tenantId must not be null");
     Preconditions.requireNonNull(externalId, "externalId must not be null");
@@ -116,7 +121,8 @@ public final class Notification {
             recipient,
             content,
             priority,
-            acceptedAt);
+            acceptedAt,
+            version);
     notification.status = status;
     notification.deliveryAttempts.addAll(deliveryAttempts);
     return notification;
@@ -221,6 +227,13 @@ public final class Notification {
 
   public List<DeliveryAttempt> deliveryAttempts() {
     return List.copyOf(deliveryAttempts);
+  }
+
+  // Null until the first save -- the persistence adapter is the only party that assigns a
+  // version, mirroring how a database-generated optimistic-locking counter works. Not part of
+  // domain identity or equality, just carried through so the adapter can round-trip it.
+  public Long version() {
+    return version;
   }
 
   // Identidad de entidad: dos instancias con el mismo notificationId son la misma notificación,

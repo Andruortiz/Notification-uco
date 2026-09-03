@@ -101,7 +101,8 @@ class DispatchNotificationServiceTest {
         Priority.NORMAL,
         NotificationStatus.PENDING,
         now,
-        attempts);
+        attempts,
+        1L);
   }
 
   private static ChannelRoute activeRoute() {

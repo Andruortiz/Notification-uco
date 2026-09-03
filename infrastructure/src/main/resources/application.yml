@@ -1,3 +1,11 @@
 spring:
   application:
     name: notification-service
+
+notification:
+  catalog:
+    channels:
+      EMAIL:
+        providers:
+          - simulated
+        content-schema:

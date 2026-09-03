@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.domain.Priority;
 import co.edu.uco.notification.core.domain.Recipient;
 import co.edu.uco.notification.core.domain.RecipientId;
 import co.edu.uco.notification.core.domain.TenantId;
+import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +21,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.index.CompoundIndexDefinition;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -40,6 +42,16 @@ class NotificationMongoAdapterTest {
   void setUp() {
     adapter = new NotificationMongoAdapter(mongoTemplate);
     mongoTemplate.dropCollection(NotificationDocument.class).block();
+    // notification.data.mongodb.auto-index-creation from application.yml doesn't reliably run in
+    // time for a @DataMongoTest slice, so the unique index is created explicitly here to exercise
+    // the same guarantee the real @CompoundIndex on NotificationDocument declares.
+    mongoTemplate
+        .indexOps(NotificationDocument.class)
+        .ensureIndex(
+            new CompoundIndexDefinition(Document.parse("{'tenantId': 1, 'externalId': 1}"))
+                .unique()
+                .named("tenant_external_unique"))
+        .block();
   }
 
   private static Notification aNotification(final String externalId) {

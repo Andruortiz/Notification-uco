@@ -3,8 +3,11 @@ spring:
     name: notification-service
   data:
     mongodb:
-      uri: mongodb://localhost:27017/notification
+      uri: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@localhost:27017/${MONGO_DATABASE:notification}?authSource=admin
       auto-index-creation: true
+  rabbitmq:
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
 
 notification:
   catalog:

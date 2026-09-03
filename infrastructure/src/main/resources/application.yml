@@ -16,3 +16,9 @@ notification:
   provider:
     simulated:
       result: ACCEPTED
+  rabbit:
+    dispatch:
+      exchange: notification.dispatch.exchange
+      routing-key: notification.dispatch
+      queue: notification.dispatch.queue
+    events-exchange: notification.events.exchange

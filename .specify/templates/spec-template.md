@@ -87,16 +87,16 @@
 
 ### Functional Requirements
 
-- **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
-- **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]
-- **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
-- **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
-- **FR-005**: System MUST [behavior, e.g., "log all security events"]
+- **FR-001**: System MUST [specific capability, e.g., "allow client systems to send an individual notification"]
+- **FR-002**: System MUST [specific capability, e.g., "validate content against the channel's schema"]
+- **FR-003**: Client systems MUST be able to [key interaction, e.g., "query a notification's status"]
+- **FR-004**: System MUST [data requirement, e.g., "persist the complete history of delivery attempts"]
+- **FR-005**: System MUST [behavior, e.g., "record every status transition as a domain event"]
 
 *Example of marking unclear requirements:*
 
-- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
-- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
+- **FR-006**: System MUST authenticate client systems via [NEEDS CLARIFICATION: auth mechanism not specified - JWT, API key, OAuth?]
+- **FR-007**: System MUST retain notification history for [NEEDS CLARIFICATION: retention period not specified]
 
 ### Key Entities *(include if feature involves data)*
 
@@ -112,10 +112,10 @@
 
 ### Measurable Outcomes
 
-- **SC-001**: [Measurable metric, e.g., "Users can complete account creation in under 2 minutes"]
-- **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
-- **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
-- **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+- **SC-001**: [Measurable metric, e.g., "Client system receives an acceptance confirmation in under 200ms p95"]
+- **SC-002**: [Measurable metric, e.g., "System handles 500 notifications/minute per replica without degradation"]
+- **SC-003**: [User satisfaction metric, e.g., "Operator finds a notification's full history in a single step"]
+- **SC-004**: [Business metric, e.g., "Reduce accepted-but-lost notifications to zero"]
 
 ## Assumptions
 
@@ -125,7 +125,7 @@
   chosen when the feature description did not specify certain details.
 -->
 
-- [Assumption about target users, e.g., "Users have stable internet connectivity"]
-- [Assumption about scope boundaries, e.g., "Mobile support is out of scope for v1"]
-- [Assumption about data/environment, e.g., "Existing authentication system will be reused"]
-- [Dependency on existing system/service, e.g., "Requires access to the existing user profile API"]
+- [Assumption about target users, e.g., "Client systems have stable connectivity"]
+- [Assumption about scope boundaries, e.g., "The dynamic channel catalog is out of scope for this story"]
+- [Assumption about data/environment, e.g., "The static application.yml catalog already exists and is sufficient"]
+- [Dependency on existing system/service, e.g., "Requires ChannelCatalogPort to already be implemented"]

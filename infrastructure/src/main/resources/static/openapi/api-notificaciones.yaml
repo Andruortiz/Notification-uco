@@ -2,10 +2,12 @@ openapi: 3.1.0
 info:
   title: API de Notificaciones
   description: >
-    API de Notification-uco. Cada endpoint corresponde a un caso de uso documentado en Notion
-    (contracts/casos-de-uso.md, contracts/ports-in.md). CU-01 (enviar) y CU-04 (consultar estado)
-    están implementados; los demás casos de uso (lote, búsqueda, reintento, preferencias) se agregan
-    a este contrato antes de implementarse, siguiendo el enfoque contract-first acordado.
+    API de Notification-uco. Cada endpoint corresponde a un caso de uso documentado.  Convención de nombramiento: los endpoints
+    que representan una acción de negocio explícita (no CRUD genérico) usan el sufijo `:accion` en
+    el path (patrón "custom methods", ej. Google AIP-136) en vez de forzar un verbo HTTP que no
+    encaja; los que sí son CRUD natural (crear, consultar) usan REST estándar. CU-03 (despachar) no
+    tiene endpoint propio -- es un proceso interno disparado por el consumidor de RabbitMQ, nunca
+    invocado directamente por un cliente.
   version: 1.0.0
 servers:
   - url: /
@@ -13,9 +15,18 @@ servers:
       Relativo al host donde se sirve este contrato -- funciona igual en local, dev y prod sin
       editar este archivo cuando cambie el puerto o el dominio.
 
+tags:
+  - name: Notificaciones
+    description: CU-01, CU-02, CU-04, CU-05, CU-06
+  - name: Catálogo
+    description: CU-07, CU-08 (bloqueado hasta que exista el catálogo dinámico, Fase 6)
+  - name: Preferencias
+    description: CU-09
+
 paths:
   /notifications:
     post:
+      tags: [Notificaciones]
       summary: Enviar una notificación
       description: >
         CU-01. Acepta la notificación, la registra en estado PENDING y la encola para su despacho
@@ -44,21 +55,83 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags: [Notificaciones]
+      summary: Consultar histórico y trazabilidad
+      description: >
+        CU-05. Busca notificaciones por filtros combinables. Cada resultado incluye su recorrido
+        completo de intentos, no solo el estado actual (a diferencia de GET /notifications/{id}).
+      operationId: searchNotifications
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: recipientId
+          in: query
+          schema:
+            type: string
+        - name: channelType
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/NotificationStatus'
+        - name: from
+          in: query
+          description: Fecha/hora mínima de aceptación (inclusive).
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Fecha/hora máxima de aceptación (inclusive).
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Lista de notificaciones que cumplen el criterio (vacía si no hay resultados).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationHistoryItem'
+
+  /notifications:sendBatch:
+    post:
+      tags: [Notificaciones]
+      summary: Enviar un lote de notificaciones
+      description: >
+        CU-02. El lote es su propia unidad de seguimiento (RF-02), no un bucle sobre POST
+        /notifications -- cada elemento se valida e idempotiza por separado, y un elemento
+        inválido no bloquea a los demás.
+      operationId: sendNotificationBatch
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendNotificationBatchRequest'
+      responses:
+        '202':
+          description: Lote aceptado -- ver el resultado individual de cada elemento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchAcceptedResponse'
 
   /notifications/{id}:
     get:
+      tags: [Notificaciones]
       summary: Consultar el estado de una notificación
       description: CU-04. Devuelve el estado actual, canal, proveedor y marca de tiempo del último intento.
       operationId: getNotificationStatus
       parameters:
         - $ref: '#/components/parameters/TenantId'
-        - name: id
-          in: path
-          required: true
-          description: Identificador de la notificación (el que devolvió POST /notifications).
-          schema:
-            type: string
-            format: uuid
+        - $ref: '#/components/parameters/NotificationId'
       responses:
         '200':
           description: Estado actual de la notificación.
@@ -75,6 +148,140 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /notifications/{id}:retry:
+    post:
+      tags: [Notificaciones]
+      summary: Reintentar el envío manualmente
+      description: >
+        CU-06. Solo válido si el estado actual es FAILED o RECOVERABLE. Reencola la notificación y
+        registra el reintento como manual (distinto del automático) para efectos de auditoría.
+      operationId: retryNotification
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '202':
+          description: Reintento aceptado, la notificación vuelve al flujo de despacho.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationStatusResponse'
+        '400':
+          description: El estado actual no admite reintento (ej. ya está DELIVERED).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: No existe una notificación con ese id para este tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /channels:register:
+    post:
+      tags: [Catálogo]
+      summary: Registrar o actualizar un canal
+      description: >
+        CU-07. Requiere permiso de ADMINISTRADOR. Da de alta el canal en el catálogo, sin
+        desplegar código (RF-19). Si el canal ya existe, esta misma operación lo actualiza.
+        Bloqueado hasta que exista el catálogo dinámico (Fase 6) -- hoy el catálogo es estático
+        en application.yml.
+      operationId: registerChannel
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterChannelRequest'
+      responses:
+        '200':
+          description: Canal registrado o actualizado.
+        '400':
+          description: El esquema de validación del canal está mal formado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /providers:register:
+    post:
+      tags: [Catálogo]
+      summary: Registrar un proveedor para uno o más canales
+      description: >
+        CU-08. Requiere permiso de ADMINISTRADOR y que el adaptador del proveedor ya exista en el
+        código (no puede registrarse un providerId sin adaptador). Si falta una credencial
+        requerida, el proveedor queda registrado pero deshabilitado -- nunca a medias en silencio.
+        Bloqueado hasta que exista el catálogo dinámico (Fase 6).
+      operationId: registerProvider
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterProviderRequest'
+      responses:
+        '201':
+          description: Proveedor registrado -- ver el campo "enabled" si faltó alguna credencial.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterProviderResponse'
+        '404':
+          description: No existe un adaptador de código para ese providerId.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /recipients/{recipientId}/preferences:
+    get:
+      tags: [Preferencias]
+      summary: Consultar las preferencias de un destinatario
+      description: CU-09. Lectura antes de escribir -- el actor consulta lo vigente antes de modificarlo.
+      operationId: getRecipientPreferences
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/RecipientId'
+      responses:
+        '200':
+          description: Preferencias vigentes (por defecto, todos los canales aceptados).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipientPreferencesResponse'
+
+  /recipients/{recipientId}:updatePreferences:
+    post:
+      tags: [Preferencias]
+      summary: Actualizar las preferencias de un destinatario
+      description: >
+        CU-09. Declara por qué canales acepta ser contactado, o solicita su baja total
+        (optedOutAll). Una baja total hace que CU-03 descarte (DISCARDED) sus notificaciones
+        futuras en vez de intentarlas.
+      operationId: updateRecipientPreferences
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/RecipientId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePreferencesRequest'
+      responses:
+        '200':
+          description: Preferencias actualizadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecipientPreferencesResponse'
+
 components:
   parameters:
     TenantId:
@@ -85,6 +292,21 @@ components:
         Identificador del tenant solicitante. Placeholder mientras CU-10 (autenticación) sigue
         bloqueado por DEP-01 -- se reemplazará por la identidad resuelta desde el token una vez
         se cierre esa dependencia con el equipo de Seguridad.
+      schema:
+        type: string
+    NotificationId:
+      name: id
+      in: path
+      required: true
+      description: Identificador de la notificación.
+      schema:
+        type: string
+        format: uuid
+    RecipientId:
+      name: recipientId
+      in: path
+      required: true
+      description: Identificador del destinatario, estable entre canales.
       schema:
         type: string
 
@@ -138,6 +360,49 @@ components:
           type: boolean
           description: true si ya existía una notificación con el mismo (tenantId, externalId).
 
+    SendNotificationBatchRequest:
+      type: object
+      required:
+        - items
+      properties:
+        batchId:
+          type: string
+          nullable: true
+          description: Opcional -- si no se envía, el componente genera uno.
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/SendNotificationRequest'
+
+    BatchAcceptedResponse:
+      type: object
+      properties:
+        batchId:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/BatchItemResult'
+
+    BatchItemResult:
+      type: object
+      properties:
+        externalId:
+          type: string
+        outcome:
+          type: string
+          enum: [ACCEPTED, DUPLICATE, REJECTED]
+        notificationId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Nulo cuando outcome es REJECTED.
+        rejectionReason:
+          type: string
+          nullable: true
+          description: Solo presente cuando outcome es REJECTED.
+
     NotificationStatusResponse:
       type: object
       properties:
@@ -155,6 +420,124 @@ components:
         lastUpdatedAt:
           type: string
           format: date-time
+
+    NotificationHistoryItem:
+      type: object
+      properties:
+        notificationId:
+          type: string
+          format: uuid
+        externalId:
+          type: string
+        recipientId:
+          type: string
+        channelType:
+          type: string
+        status:
+          $ref: '#/components/schemas/NotificationStatus'
+        acceptedAt:
+          type: string
+          format: date-time
+        deliveryAttempts:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeliveryAttempt'
+
+    DeliveryAttempt:
+      type: object
+      properties:
+        occurredOn:
+          type: string
+          format: date-time
+        result:
+          type: string
+          enum: [ACCEPTED, RECOVERABLE_FAILURE, PERMANENT_FAILURE]
+        origin:
+          type: string
+          enum: [MANUAL, AUTOMATIC]
+        providerId:
+          type: string
+
+    RegisterChannelRequest:
+      type: object
+      required:
+        - channelType
+      properties:
+        channelType:
+          type: string
+          example: SMS
+        contentSchema:
+          type: string
+          nullable: true
+          description: Esquema JSON Schema (como string) contra el que se valida el contenido enviado por este canal.
+        maxRetryAttempts:
+          type: integer
+          nullable: true
+          description: Tope de reintentos automáticos para este canal. Nulo usa el default global.
+
+    RegisterProviderRequest:
+      type: object
+      required:
+        - providerId
+        - channels
+      properties:
+        providerId:
+          type: string
+          example: brevo
+        channels:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [channelType, preferenceOrder]
+            properties:
+              channelType:
+                type: string
+              preferenceOrder:
+                type: integer
+                description: Orden de preferencia dentro del canal (1 = preferente).
+
+    RegisterProviderResponse:
+      type: object
+      properties:
+        providerId:
+          type: string
+        enabled:
+          type: boolean
+          description: false si falta alguna credencial requerida por este proveedor.
+        missingCredentials:
+          type: array
+          items:
+            type: string
+          description: Vacío cuando enabled es true.
+
+    RecipientPreferencesResponse:
+      type: object
+      properties:
+        recipientId:
+          type: string
+        optedOutAll:
+          type: boolean
+        acceptedChannels:
+          type: array
+          items:
+            type: string
+          description: Ignorado si optedOutAll es true.
+        updatedAt:
+          type: string
+          format: date-time
+
+    UpdatePreferencesRequest:
+      type: object
+      properties:
+        optedOutAll:
+          type: boolean
+          default: false
+        acceptedChannels:
+          type: array
+          items:
+            type: string
+          description: Ignorado si optedOutAll es true.
 
     ErrorResponse:
       type: object

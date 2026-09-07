@@ -146,10 +146,6 @@ public final class Notification {
         DeliveryAttempt.of(Instant.now(), AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
   }
 
-  // The provider's own attempt was still a recoverable failure -- what changed is that the
-  // notification ran out of retry budget, not that this particular attempt was non-retryable.
-  // Recording it as PERMANENT_FAILURE (via markFailed) would misrepresent what the provider
-  // actually said in the audit trail.
   public void markRetriesExhausted(final AttemptOrigin origin, final ProviderId providerId) {
     transitionTo(NotificationStatus.FAILED);
     final Instant now = Instant.now();
@@ -229,15 +225,10 @@ public final class Notification {
     return List.copyOf(deliveryAttempts);
   }
 
-  // Null until the first save -- the persistence adapter is the only party that assigns a
-  // version, mirroring how a database-generated optimistic-locking counter works. Not part of
-  // domain identity or equality, just carried through so the adapter can round-trip it.
   public Long version() {
     return version;
   }
 
-  // Identidad de entidad: dos instancias con el mismo notificationId son la misma notificación,
-  // sin importar si el resto de sus campos difiere por haberse cargado en momentos distintos.
   @Override
   public boolean equals(final Object other) {
     if (this == other) {

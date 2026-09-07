@@ -37,8 +37,6 @@ class NotificationRabbitPublisherTest {
               "notification.dispatch.queue"),
           "notification.events.exchange");
 
-  // Mirrors Spring Boot's auto-configured ObjectMapper, which registers JSR-310 (Instant support)
-  // automatically -- a bare "objectMapper()" can't serialize Instant and would mask that.
   private static ObjectMapper objectMapper() {
     return new ObjectMapper().findAndRegisterModules();
   }

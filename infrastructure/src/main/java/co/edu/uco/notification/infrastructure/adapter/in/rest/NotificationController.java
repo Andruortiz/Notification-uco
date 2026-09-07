@@ -24,10 +24,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
-// X-Tenant-Id is a stand-in for real tenant identification: CU-10 (token-based auth,
-// TokenValidationPort) is approved but blocked on the Security team's DEP-01, so there's no
-// filter yet to derive tenantId from a validated token. Replace this header with that once CU-10
-// unblocks -- tracked as a known gap, not a design decision.
 @RestController
 @RequestMapping("/notifications")
 public class NotificationController {

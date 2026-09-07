@@ -13,9 +13,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-// Global, static catalog read from application.yml -- no per-tenant catalog yet (tenantId is
-// accepted per the port contract but deliberately ignored) and no admin API to change it without
-// a redeploy. Both are Fase 6 (catálogo dinámico), not this adapter's job.
 @Component
 @EnableConfigurationProperties(ChannelCatalogProperties.class)
 public class ConfigurationChannelCatalogAdapter implements ChannelCatalogPort {

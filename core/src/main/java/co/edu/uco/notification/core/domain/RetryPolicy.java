@@ -26,8 +26,6 @@ public final class RetryPolicy {
     return recoverableAttemptCount >= maxAttempts;
   }
 
-  // Growing wait before the next retry: doubles with every recoverable attempt, capped so a
-  // channel that has been failing for a while doesn't end up waiting for hours between tries.
   public Duration nextBackoff(final int recoverableAttemptCount) {
     Preconditions.requireTrue(
         recoverableAttemptCount > 0, "recoverableAttemptCount must be positive");

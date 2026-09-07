@@ -23,7 +23,6 @@ class HexagonalArchitectureTest {
 
   @Test
   void coreMustNotDependOnInfrastructure() {
-    // allowEmptyShould: core aún no tiene clases; la regla igual queda activa para cuando las haya.
     final ArchRule rule =
         noClasses()
             .that()

@@ -35,3 +35,7 @@ target/
 
 # Environment
 .env
+
+# spec-kit / Claude Code runtime state (local-only, not part of the versioned governance artifact)
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

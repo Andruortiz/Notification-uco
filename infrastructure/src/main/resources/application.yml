@@ -1,13 +1,21 @@
+server:
+  port: 8060
+
 spring:
   application:
     name: notification-service
   data:
     mongodb:
-      uri: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@localhost:27017/${MONGO_DATABASE:notification}?authSource=admin
+      uri: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@localhost:27018/${MONGO_DATABASE:notification}?authSource=admin
       auto-index-creation: true
   rabbitmq:
+    port: 5673
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
+
+springdoc:
+  swagger-ui:
+    url: /openapi/api-notificaciones.yaml
 
 notification:
   catalog:

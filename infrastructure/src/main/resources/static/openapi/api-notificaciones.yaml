@@ -1,0 +1,169 @@
+openapi: 3.1.0
+info:
+  title: API de Notificaciones
+  description: >
+    API de Notification-uco. Cada endpoint corresponde a un caso de uso documentado en Notion
+    (contracts/casos-de-uso.md, contracts/ports-in.md). CU-01 (enviar) y CU-04 (consultar estado)
+    están implementados; los demás casos de uso (lote, búsqueda, reintento, preferencias) se agregan
+    a este contrato antes de implementarse, siguiendo el enfoque contract-first acordado.
+  version: 1.0.0
+servers:
+  - url: http://localhost:8060
+    description: Servidor local de desarrollo
+
+paths:
+  /notifications:
+    post:
+      summary: Enviar una notificación
+      description: >
+        CU-01. Acepta la notificación, la registra en estado PENDING y la encola para su despacho
+        asíncrono. Si ya existe una notificación con el mismo (tenantId, externalId), devuelve esa
+        misma notificación en vez de crear una segunda (idempotencia).
+      operationId: sendNotification
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendNotificationRequest'
+      responses:
+        '202':
+          description: Notificación aceptada (nueva o duplicada -- ver el campo "duplicate").
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendNotificationResponse'
+        '400':
+          description: >
+            El canal no existe/está deshabilitado, o el contenido no cumple el esquema del canal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /notifications/{id}:
+    get:
+      summary: Consultar el estado de una notificación
+      description: CU-04. Devuelve el estado actual, canal, proveedor y marca de tiempo del último intento.
+      operationId: getNotificationStatus
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: id
+          in: path
+          required: true
+          description: Identificador de la notificación (el que devolvió POST /notifications).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Estado actual de la notificación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationStatusResponse'
+        '404':
+          description: >
+            No existe una notificación con ese id, o no pertenece al tenant del solicitante --
+            ambos casos responden igual, para no revelar si el id existe bajo otro cliente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    TenantId:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      description: >
+        Identificador del tenant solicitante. Placeholder mientras CU-10 (autenticación) sigue
+        bloqueado por DEP-01 -- se reemplazará por la identidad resuelta desde el token una vez
+        se cierre esa dependencia con el equipo de Seguridad.
+      schema:
+        type: string
+
+  schemas:
+    SendNotificationRequest:
+      type: object
+      required:
+        - externalId
+        - channelType
+        - recipientId
+        - recipientAddress
+        - body
+        - priority
+      properties:
+        externalId:
+          type: string
+          description: Identificador propio del sistema cliente, usado para idempotencia.
+          example: order-42
+        channelType:
+          type: string
+          description: Canal registrado en el catálogo (hoy solo EMAIL está configurado).
+          example: EMAIL
+        recipientId:
+          type: string
+          description: Identificador del destinatario, estable entre canales.
+          example: recipient-1
+        recipientAddress:
+          type: string
+          description: Dirección concreta del canal usado en este envío (email, teléfono, etc.).
+          example: alice@example.com
+        subject:
+          type: string
+          nullable: true
+          description: Opcional -- algunos canales (ej. SMS) no lo usan.
+          example: Bienvenida
+        body:
+          type: string
+          example: Hola Alice, tu pedido fue confirmado.
+        priority:
+          $ref: '#/components/schemas/Priority'
+
+    SendNotificationResponse:
+      type: object
+      properties:
+        notificationId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/NotificationStatus'
+        duplicate:
+          type: boolean
+          description: true si ya existía una notificación con el mismo (tenantId, externalId).
+
+    NotificationStatusResponse:
+      type: object
+      properties:
+        notificationId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/NotificationStatus'
+        channelType:
+          type: string
+        providerId:
+          type: string
+          nullable: true
+          description: Proveedor del último intento de envío. Nulo si aún no se ha intentado despachar.
+        lastUpdatedAt:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+
+    Priority:
+      type: string
+      enum: [LOW, NORMAL, HIGH]
+
+    NotificationStatus:
+      type: string
+      enum: [PENDING, IN_PROCESS, DELIVERED, RECOVERABLE, FAILED, DISCARDED]

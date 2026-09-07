@@ -1,15 +1,16 @@
 server:
-  port: 8060
+  port: ${APP_PORT:8060}
 
 spring:
   application:
     name: notification-service
   data:
     mongodb:
-      uri: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@localhost:27018/${MONGO_DATABASE:notification}?authSource=admin
+      uri: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:localhost}:${MONGO_PORT:27018}/${MONGO_DATABASE:notification}?authSource=admin
       auto-index-creation: true
   rabbitmq:
-    port: 5673
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5673}
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
 
@@ -26,7 +27,7 @@ notification:
         content-schema:
   provider:
     simulated:
-      result: ACCEPTED
+      result: ${SIMULATED_PROVIDER_RESULT:ACCEPTED}
   rabbit:
     dispatch:
       exchange: notification.dispatch.exchange

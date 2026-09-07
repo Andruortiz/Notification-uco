@@ -158,8 +158,6 @@ class NotificationTest {
     notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
 
     assertEquals(NotificationStatus.FAILED, notification.status());
-    // the attempt itself was still a recoverable failure -- only the overall status becomes
-    // FAILED because the retry budget ran out, not because the provider said "don't retry".
     assertEquals(
         AttemptResult.RECOVERABLE_FAILURE, notification.deliveryAttempts().get(0).result());
     assertEquals(ProviderId.of("brevo"), notification.deliveryAttempts().get(0).providerId());
@@ -261,7 +259,6 @@ class NotificationTest {
             now,
             List.of(),
             1L);
-    // Same id, but every other field differs -- must still be equal because identity is the id.
     final Notification second =
         Notification.reconstitute(
             id,
@@ -295,8 +292,6 @@ class NotificationTest {
   @Test
   void isNotEqualToNullOrADifferentType() {
     final Notification notification = accepted();
-    // called directly (not via assertNotEquals) to guarantee Notification.equals is the one
-    // invoked, not the argument's -- assertNotEquals's direction isn't guaranteed either way.
     assertFalse(notification.equals(null));
     assertFalse(notification.equals("not a notification"));
   }

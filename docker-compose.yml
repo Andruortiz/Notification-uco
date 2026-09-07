@@ -4,7 +4,7 @@ services:
     container_name: notification-mongodb
     restart: unless-stopped
     ports:
-      - "27018:27017"
+      - "${MONGO_PORT:-27018}:27017"
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:?MONGO_USERNAME is not set, define it in .env}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD is not set, define it in .env}
@@ -17,8 +17,8 @@ services:
     container_name: notification-rabbitmq
     restart: unless-stopped
     ports:
-      - "5673:5672"
-      - "15673:15672"
+      - "${RABBITMQ_PORT:-5673}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15673}:15672"
     environment:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME is not set, define it in .env}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is not set, define it in .env}

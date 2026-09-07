@@ -42,9 +42,6 @@ class NotificationMongoAdapterTest {
   void setUp() {
     adapter = new NotificationMongoAdapter(mongoTemplate);
     mongoTemplate.dropCollection(NotificationDocument.class).block();
-    // notification.data.mongodb.auto-index-creation from application.yml doesn't reliably run in
-    // time for a @DataMongoTest slice, so the unique index is created explicitly here to exercise
-    // the same guarantee the real @CompoundIndex on NotificationDocument declares.
     mongoTemplate
         .indexOps(NotificationDocument.class)
         .ensureIndex(

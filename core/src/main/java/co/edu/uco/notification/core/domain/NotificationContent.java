@@ -4,8 +4,6 @@ import co.edu.uco.notification.utils.Preconditions;
 
 public record NotificationContent(String subject, String body) {
 
-  // well under MongoDB's 16MB document limit and RabbitMQ's throughput sweet spot,
-  // generous for any real channel (email, SMS, push)
   public static final int MAX_LENGTH = 32_768;
 
   public NotificationContent {

@@ -16,9 +16,6 @@ import co.edu.uco.notification.core.usecase.SendNotificationService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-// The core use-case classes stay free of Spring annotations (ADR-0002), so this is where they're
-// registered as beans instead. Max retry attempts is RetryPolicy's own default (5) -- see the
-// documented gap in casos-de-uso.md: it's a global default, not yet per-channel.
 @Configuration
 public class UseCaseConfig {
 

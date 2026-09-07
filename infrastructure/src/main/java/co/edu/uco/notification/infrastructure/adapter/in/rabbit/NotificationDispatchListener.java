@@ -6,11 +6,6 @@ import co.edu.uco.notification.utils.Preconditions;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
-// Spring AMQP's listener container is imperative, not reactive, so the use case's Mono is
-// blocked on here to bridge the two -- reactor-rabbitmq would avoid this but isn't a dependency
-// yet (a build-vs-buy call, not made for this walking skeleton). A failed dispatch() propagates
-// as an exception, which the default listener error handling requeues; no dead-letter queue or
-// poison-message handling exists yet (documented gap, same as the rest of the retry story).
 @Component
 public class NotificationDispatchListener {
 

@@ -8,8 +8,10 @@ info:
     a este contrato antes de implementarse, siguiendo el enfoque contract-first acordado.
   version: 1.0.0
 servers:
-  - url: http://localhost:8060
-    description: Servidor local de desarrollo
+  - url: /
+    description: >
+      Relativo al host donde se sirve este contrato -- funciona igual en local, dev y prod sin
+      editar este archivo cuando cambie el puerto o el dominio.
 
 paths:
   /notifications:

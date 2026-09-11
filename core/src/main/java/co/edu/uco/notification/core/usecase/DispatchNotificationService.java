@@ -1,12 +1,12 @@
 package co.edu.uco.notification.core.usecase;
 
-import co.edu.uco.notification.core.domain.AttemptOrigin;
-import co.edu.uco.notification.core.domain.AttemptResult;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.ProviderId;
-import co.edu.uco.notification.core.domain.RetryPolicy;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
+import co.edu.uco.notification.core.domain.policy.RetryPolicy;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;

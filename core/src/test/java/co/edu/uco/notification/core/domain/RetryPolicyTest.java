@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 

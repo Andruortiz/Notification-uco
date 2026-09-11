@@ -1,6 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rabbit;
 
-import co.edu.uco.notification.core.domain.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
 import co.edu.uco.notification.utils.Preconditions;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;

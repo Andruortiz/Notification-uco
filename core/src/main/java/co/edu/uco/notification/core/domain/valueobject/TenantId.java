@@ -1,4 +1,4 @@
-package co.edu.uco.notification.core.domain;
+package co.edu.uco.notification.core.domain.valueobject;
 
 import co.edu.uco.notification.utils.Preconditions;
 

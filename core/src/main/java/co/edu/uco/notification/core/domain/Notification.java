@@ -6,6 +6,8 @@ import co.edu.uco.notification.core.domain.event.NotificationAccepted;
 import co.edu.uco.notification.core.domain.event.NotificationDelivered;
 import co.edu.uco.notification.core.domain.event.NotificationFailed;
 import co.edu.uco.notification.core.domain.event.NotificationQueued;
+import co.edu.uco.notification.core.domain.policy.StatusTransitionPolicy;
+import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
@@ -27,102 +29,56 @@ public final class Notification {
   private final List<DeliveryAttempt> deliveryAttempts = new ArrayList<>();
 
   private NotificationStatus status;
-  private Long version;
+  private final Long version;
 
   private Notification(
       final NotificationId notificationId,
-      final TenantId tenantId,
-      final ExternalId externalId,
-      final ChannelType channelType,
-      final RecipientId recipientId,
-      final Recipient recipient,
-      final NotificationContent content,
-      final Priority priority,
-      final Instant acceptedAt,
-      final Long version) {
+      final NotificationRouting routing,
+      final NotificationDetails details,
+      final NotificationMetadata metadata) {
     this.notificationId = notificationId;
-    this.tenantId = tenantId;
-    this.externalId = externalId;
-    this.channelType = channelType;
-    this.recipientId = recipientId;
-    this.recipient = recipient;
-    this.content = content;
-    this.priority = priority;
-    this.acceptedAt = acceptedAt;
+    this.tenantId = routing.tenantId();
+    this.externalId = routing.externalId();
+    this.channelType = routing.channelType();
+    this.recipientId = routing.recipientId();
+    this.recipient = routing.recipient();
+    this.content = details.content();
+    this.priority = details.priority();
+    this.acceptedAt = metadata.acceptedAt();
     this.status = NotificationStatus.PENDING;
-    this.version = version;
+    this.version = metadata.version();
   }
 
   public static Notification accept(
-      final TenantId tenantId,
-      final ExternalId externalId,
-      final ChannelType channelType,
-      final RecipientId recipientId,
-      final Recipient recipient,
-      final NotificationContent content,
-      final Priority priority) {
-    Preconditions.requireNonNull(tenantId, "tenantId must not be null");
-    Preconditions.requireNonNull(externalId, "externalId must not be null");
-    Preconditions.requireNonNull(channelType, "channelType must not be null");
-    Preconditions.requireNonNull(recipientId, "recipientId must not be null");
-    Preconditions.requireNonNull(recipient, "recipient must not be null");
-    Preconditions.requireNonNull(content, "content must not be null");
-    Preconditions.requireNonNull(priority, "priority must not be null");
-
+      final NotificationRouting routing, final NotificationDetails details) {
+    Preconditions.requireNonNull(routing, "routing must not be null");
+    Preconditions.requireNonNull(details, "details must not be null");
     final Notification notification =
         new Notification(
             NotificationId.newId(),
-            tenantId,
-            externalId,
-            channelType,
-            recipientId,
-            recipient,
-            content,
-            priority,
-            Instant.now(),
-            null);
-    notification.eventRecorder.record(
+            routing,
+            details,
+            new NotificationMetadata(Instant.now(), null));
+    notification.eventRecorder.registerEvent(
         new NotificationAccepted(notification.notificationId, notification.acceptedAt));
     return notification;
   }
 
   public static Notification reconstitute(
       final NotificationId notificationId,
-      final TenantId tenantId,
-      final ExternalId externalId,
-      final ChannelType channelType,
-      final RecipientId recipientId,
-      final Recipient recipient,
-      final NotificationContent content,
-      final Priority priority,
+      final NotificationRouting routing,
+      final NotificationDetails details,
       final NotificationStatus status,
-      final Instant acceptedAt,
-      final List<DeliveryAttempt> deliveryAttempts,
-      final Long version) {
+      final NotificationMetadata metadata,
+      final List<DeliveryAttempt> deliveryAttempts) {
     Preconditions.requireNonNull(notificationId, "notificationId must not be null");
-    Preconditions.requireNonNull(tenantId, "tenantId must not be null");
-    Preconditions.requireNonNull(externalId, "externalId must not be null");
-    Preconditions.requireNonNull(channelType, "channelType must not be null");
-    Preconditions.requireNonNull(recipientId, "recipientId must not be null");
-    Preconditions.requireNonNull(recipient, "recipient must not be null");
-    Preconditions.requireNonNull(content, "content must not be null");
-    Preconditions.requireNonNull(priority, "priority must not be null");
+    Preconditions.requireNonNull(routing, "routing must not be null");
+    Preconditions.requireNonNull(details, "details must not be null");
     Preconditions.requireNonNull(status, "status must not be null");
-    Preconditions.requireNonNull(acceptedAt, "acceptedAt must not be null");
+    Preconditions.requireNonNull(metadata, "metadata must not be null");
     Preconditions.requireNonNull(deliveryAttempts, "deliveryAttempts must not be null");
 
-    final Notification notification =
-        new Notification(
-            notificationId,
-            tenantId,
-            externalId,
-            channelType,
-            recipientId,
-            recipient,
-            content,
-            priority,
-            acceptedAt,
-            version);
+    final Notification notification = new Notification(notificationId, routing, details, metadata);
     notification.status = status;
     notification.deliveryAttempts.addAll(deliveryAttempts);
     return notification;
@@ -130,14 +86,14 @@ public final class Notification {
 
   public void markQueued() {
     transitionTo(NotificationStatus.IN_PROCESS);
-    eventRecorder.record(new NotificationQueued(notificationId, Instant.now()));
+    eventRecorder.registerEvent(new NotificationQueued(notificationId, Instant.now()));
   }
 
   public void markDelivered(final AttemptOrigin origin, final ProviderId providerId) {
     transitionTo(NotificationStatus.DELIVERED);
     final Instant now = Instant.now();
     deliveryAttempts.add(DeliveryAttempt.of(now, AttemptResult.ACCEPTED, origin, providerId));
-    eventRecorder.record(new NotificationDelivered(notificationId, now));
+    eventRecorder.registerEvent(new NotificationDelivered(notificationId, now));
   }
 
   public void markRecoverable(final AttemptOrigin origin, final ProviderId providerId) {
@@ -151,7 +107,7 @@ public final class Notification {
     final Instant now = Instant.now();
     deliveryAttempts.add(
         DeliveryAttempt.of(now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
-    eventRecorder.record(new NotificationFailed(notificationId, now));
+    eventRecorder.registerEvent(new NotificationFailed(notificationId, now));
   }
 
   public void markFailed(final AttemptOrigin origin, final ProviderId providerId) {
@@ -159,7 +115,7 @@ public final class Notification {
     final Instant now = Instant.now();
     deliveryAttempts.add(
         DeliveryAttempt.of(now, AttemptResult.PERMANENT_FAILURE, origin, providerId));
-    eventRecorder.record(new NotificationFailed(notificationId, now));
+    eventRecorder.registerEvent(new NotificationFailed(notificationId, now));
   }
 
   public void requeue() {

@@ -1,7 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
-import co.edu.uco.notification.core.domain.AttemptResult;
 import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.utils.Preconditions;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

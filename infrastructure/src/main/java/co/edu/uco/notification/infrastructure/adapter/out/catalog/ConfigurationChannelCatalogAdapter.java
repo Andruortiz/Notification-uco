@@ -1,8 +1,8 @@
 package co.edu.uco.notification.infrastructure.adapter.out.catalog;
 
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.ProviderId;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.utils.Preconditions;

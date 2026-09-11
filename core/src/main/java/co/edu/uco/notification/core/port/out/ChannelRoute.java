@@ -1,7 +1,7 @@
 package co.edu.uco.notification.core.port.out;
 
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.List;
 

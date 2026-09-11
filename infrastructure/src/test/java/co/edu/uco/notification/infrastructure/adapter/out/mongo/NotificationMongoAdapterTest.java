@@ -3,15 +3,8 @@ package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.ExternalId;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.NotificationContent;
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.Priority;
-import co.edu.uco.notification.core.domain.Recipient;
-import co.edu.uco.notification.core.domain.RecipientId;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.*;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -53,13 +46,13 @@ class NotificationMongoAdapterTest {
 
   private static Notification aNotification(final String externalId) {
     return Notification.accept(
-        TenantId.of("tenant-1"),
-        ExternalId.of(externalId),
-        ChannelType.of("EMAIL"),
-        RecipientId.of("recipient-1"),
-        Recipient.of("alice@example.com"),
-        NotificationContent.of("Subject", "Body"),
-        Priority.NORMAL);
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
   }
 
   @Test

@@ -1,8 +1,10 @@
 package co.edu.uco.notification.core.usecase;
 
-import co.edu.uco.notification.core.domain.ContentSchemaValidator;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
+import co.edu.uco.notification.core.domain.policy.ContentSchemaValidator;
+import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
+import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
@@ -56,13 +58,13 @@ public final class SendNotificationService implements SendNotificationUseCase {
   private Mono<SendNotificationResult> acceptAndDispatch(final SendNotificationCommand command) {
     final Notification notification =
         Notification.accept(
-            command.tenantId(),
-            command.externalId(),
-            command.channelType(),
-            command.recipientId(),
-            command.recipient(),
-            command.content(),
-            command.priority());
+            new NotificationRouting(
+                command.tenantId(),
+                command.externalId(),
+                command.channelType(),
+                command.recipientId(),
+                command.recipient()),
+            new NotificationDetails(command.content(), command.priority()));
     final List<DomainEvent> events = notification.pullEvents();
 
     return notificationRepository

@@ -1,6 +1,6 @@
 package co.edu.uco.notification.infrastructure.config;
 
-import co.edu.uco.notification.core.domain.RetryPolicy;
+import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusUseCase;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchUseCase;

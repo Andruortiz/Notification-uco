@@ -3,10 +3,10 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.NotificationStatus;
-import co.edu.uco.notification.core.domain.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;

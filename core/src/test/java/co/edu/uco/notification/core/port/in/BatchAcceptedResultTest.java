@@ -3,9 +3,9 @@ package co.edu.uco.notification.core.port.in;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import co.edu.uco.notification.core.domain.BatchId;
-import co.edu.uco.notification.core.domain.ExternalId;
-import co.edu.uco.notification.core.domain.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.BatchId;
+import co.edu.uco.notification.core.domain.valueobject.ExternalId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

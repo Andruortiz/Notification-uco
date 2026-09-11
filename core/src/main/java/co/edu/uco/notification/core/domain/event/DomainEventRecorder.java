@@ -7,7 +7,7 @@ public final class DomainEventRecorder {
 
   private final List<DomainEvent> events = new ArrayList<>();
 
-  public void record(final DomainEvent event) {
+  public void registerEvent(final DomainEvent event) {
     events.add(event);
   }
 

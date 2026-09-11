@@ -3,7 +3,7 @@ package co.edu.uco.notification.core.domain.event;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import co.edu.uco.notification.core.domain.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -17,8 +17,8 @@ class DomainEventRecorderTest {
     final NotificationAccepted accepted = new NotificationAccepted(id, Instant.now());
     final NotificationQueued queued = new NotificationQueued(id, Instant.now());
 
-    recorder.record(accepted);
-    recorder.record(queued);
+    recorder.registerEvent(accepted);
+    recorder.registerEvent(queued);
 
     final List<DomainEvent> pulled = recorder.pullEvents();
 
@@ -28,7 +28,7 @@ class DomainEventRecorderTest {
   @Test
   void pullEventsEmptiesTheRecorder() {
     final DomainEventRecorder recorder = new DomainEventRecorder();
-    recorder.record(new NotificationAccepted(NotificationId.newId(), Instant.now()));
+    recorder.registerEvent(new NotificationAccepted(NotificationId.newId(), Instant.now()));
 
     recorder.pullEvents();
     final List<DomainEvent> secondPull = recorder.pullEvents();

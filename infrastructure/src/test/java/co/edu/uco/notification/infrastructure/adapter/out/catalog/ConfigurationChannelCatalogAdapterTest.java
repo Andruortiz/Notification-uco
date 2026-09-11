@@ -3,8 +3,8 @@ package co.edu.uco.notification.infrastructure.adapter.out.catalog;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;

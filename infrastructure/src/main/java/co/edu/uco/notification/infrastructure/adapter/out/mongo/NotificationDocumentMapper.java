@@ -1,15 +1,20 @@
 package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
-import co.edu.uco.notification.core.domain.ChannelType;
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
-import co.edu.uco.notification.core.domain.ExternalId;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.NotificationContent;
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.ProviderId;
-import co.edu.uco.notification.core.domain.Recipient;
-import co.edu.uco.notification.core.domain.RecipientId;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.ExternalId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
+import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationMetadata;
+import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.Recipient;
+import co.edu.uco.notification.core.domain.valueobject.RecipientId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import java.util.List;
+import java.util.Objects;
 
 final class NotificationDocumentMapper {
 
@@ -37,17 +42,21 @@ final class NotificationDocumentMapper {
   static Notification toDomain(final NotificationDocument document) {
     return Notification.reconstitute(
         NotificationId.of(document.id()),
-        TenantId.of(document.tenantId()),
-        ExternalId.of(document.externalId()),
-        ChannelType.of(document.channelType()),
-        RecipientId.of(document.recipientId()),
-        Recipient.of(document.recipientAddress()),
-        NotificationContent.of(document.contentSubject(), document.contentBody()),
-        document.priority(),
+        new NotificationRouting(
+            TenantId.of(document.tenantId()),
+            ExternalId.of(document.externalId()),
+            ChannelType.of(document.channelType()),
+            RecipientId.of(document.recipientId()),
+            Recipient.of(document.recipientAddress())),
+        new NotificationDetails(
+            NotificationContent.of(document.contentSubject(), document.contentBody()),
+            document.priority()),
         document.status(),
-        document.acceptedAt(),
-        document.deliveryAttempts().stream().map(NotificationDocumentMapper::toDomain).toList(),
-        document.version());
+        new NotificationMetadata(document.acceptedAt(), document.version()),
+        Objects.requireNonNullElse(document.deliveryAttempts(), List.<DeliveryAttemptDocument>of())
+            .stream()
+            .map(NotificationDocumentMapper::toDomain)
+            .toList());
   }
 
   private static DeliveryAttemptDocument toDocument(final DeliveryAttempt attempt) {

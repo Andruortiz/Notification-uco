@@ -1,9 +1,9 @@
 package co.edu.uco.notification.core.port.in;
 
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.NotificationStatus;
-import co.edu.uco.notification.core.domain.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
 

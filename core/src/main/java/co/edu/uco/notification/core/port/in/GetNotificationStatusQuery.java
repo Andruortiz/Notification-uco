@@ -1,7 +1,7 @@
 package co.edu.uco.notification.core.port.in;
 
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.utils.Preconditions;
 
 public record GetNotificationStatusQuery(TenantId tenantId, NotificationId notificationId) {

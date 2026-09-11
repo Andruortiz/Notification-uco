@@ -3,12 +3,12 @@ package co.edu.uco.notification.core.port.in;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.ExternalId;
-import co.edu.uco.notification.core.domain.NotificationContent;
-import co.edu.uco.notification.core.domain.Priority;
-import co.edu.uco.notification.core.domain.Recipient;
-import co.edu.uco.notification.core.domain.RecipientId;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.ExternalId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
+import co.edu.uco.notification.core.domain.valueobject.Priority;
+import co.edu.uco.notification.core.domain.valueobject.Recipient;
+import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import org.junit.jupiter.api.Test;
 
 class BatchNotificationItemTest {

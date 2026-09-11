@@ -8,17 +8,11 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.ExternalId;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.NotificationContent;
-import co.edu.uco.notification.core.domain.Priority;
-import co.edu.uco.notification.core.domain.Recipient;
-import co.edu.uco.notification.core.domain.RecipientId;
-import co.edu.uco.notification.core.domain.TenantId;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.event.NotificationAccepted;
 import co.edu.uco.notification.core.domain.event.NotificationQueued;
+import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
@@ -43,13 +37,13 @@ class NotificationRabbitPublisherTest {
 
   private static Notification aNotification() {
     return Notification.accept(
-        TenantId.of("tenant-1"),
-        ExternalId.of("order-42"),
-        ChannelType.of("EMAIL"),
-        RecipientId.of("recipient-1"),
-        Recipient.of("alice@example.com"),
-        NotificationContent.of("Body"),
-        Priority.NORMAL);
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
   }
 
   @Test

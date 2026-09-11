@@ -4,6 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import co.edu.uco.notification.core.domain.policy.ContentSchemaValidator;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import org.junit.jupiter.api.Test;
 

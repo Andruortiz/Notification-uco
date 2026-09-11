@@ -1,6 +1,6 @@
 package co.edu.uco.notification.core.domain.event;
 
-import co.edu.uco.notification.core.domain.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
 

@@ -2,7 +2,7 @@ package co.edu.uco.notification.core.usecase;
 
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusQuery;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusUseCase;
@@ -36,8 +36,7 @@ public final class GetNotificationStatusService implements GetNotificationStatus
 
   private static NotificationStatusView toView(final Notification notification) {
     final List<DeliveryAttempt> attempts = notification.deliveryAttempts();
-    final DeliveryAttempt lastAttempt =
-        attempts.isEmpty() ? null : attempts.get(attempts.size() - 1);
+    final DeliveryAttempt lastAttempt = attempts.isEmpty() ? null : attempts.getLast();
     final ProviderId lastProviderId = lastAttempt == null ? null : lastAttempt.providerId();
     final Instant lastUpdatedAt =
         lastAttempt == null ? notification.acceptedAt() : lastAttempt.occurredOn();

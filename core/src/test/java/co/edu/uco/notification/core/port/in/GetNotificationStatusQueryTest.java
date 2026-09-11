@@ -3,8 +3,8 @@ package co.edu.uco.notification.core.port.in;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import org.junit.jupiter.api.Test;
 
 class GetNotificationStatusQueryTest {

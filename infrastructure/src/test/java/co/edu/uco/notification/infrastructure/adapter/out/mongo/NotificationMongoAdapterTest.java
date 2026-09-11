@@ -2,22 +2,32 @@ package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
+import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.usecase.RequeuePendingNotificationsService;
+import java.time.Instant;
+import java.util.List;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.dao.DuplicateKeyException;
-import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.index.CompoundIndexDefinition;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 @DataMongoTest(properties = {"MONGO_USERNAME=test", "MONGO_PASSWORD=test"})
@@ -116,6 +126,54 @@ class NotificationMongoAdapterTest {
     adapter.save(firstLoad).block();
 
     secondLoad.markQueued();
-    assertThrows(OptimisticLockingFailureException.class, () -> adapter.save(secondLoad).block());
+    assertThrows(
+        NotificationVersionConflictException.class, () -> adapter.save(secondLoad).block());
+  }
+
+  @Test
+  void requeuePendingRequeuesOnlyNotificationsWhoseBackoffAlreadyElapsed() {
+    final Notification due =
+        adapter.save(recoverableNotification("order-6", Instant.now().minusSeconds(120))).block();
+    final Notification notDue =
+        adapter.save(recoverableNotification("order-7", Instant.now())).block();
+
+    final NotificationEventPublisherPort eventPublisherPort =
+        Mockito.mock(NotificationEventPublisherPort.class);
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any())).thenReturn(Mono.empty());
+    final RequeuePendingNotificationsService service =
+        new RequeuePendingNotificationsService(adapter, eventPublisherPort, new RetryPolicy());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    StepVerifier.create(adapter.findById(due.notificationId()))
+        .assertNext(found -> assertEquals(NotificationStatus.PENDING, found.status()))
+        .verifyComplete();
+    StepVerifier.create(adapter.findById(notDue.notificationId()))
+        .assertNext(found -> assertEquals(NotificationStatus.RECOVERABLE, found.status()))
+        .verifyComplete();
+  }
+
+  private static Notification recoverableNotification(
+      final String externalId, final Instant lastAttemptAt) {
+    final List<DeliveryAttempt> attempts =
+        List.of(
+            DeliveryAttempt.of(
+                lastAttemptAt,
+                AttemptResult.RECOVERABLE_FAILURE,
+                AttemptOrigin.AUTOMATIC,
+                ProviderId.of("brevo")));
+    return Notification.reconstitute(
+        NotificationId.newId(),
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of(externalId),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+        NotificationStatus.RECOVERABLE,
+        new NotificationMetadata(Instant.now().minusSeconds(300), null),
+        attempts);
   }
 }

@@ -1,6 +1,6 @@
 package co.edu.uco.notification.core.port.in;
 
-import co.edu.uco.notification.core.domain.BatchId;
+import co.edu.uco.notification.core.domain.valueobject.BatchId;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.List;
 

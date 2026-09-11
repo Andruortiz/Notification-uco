@@ -3,6 +3,8 @@ package co.edu.uco.notification.core.domain;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import co.edu.uco.notification.core.domain.policy.StatusTransitionPolicy;
+import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 

@@ -3,6 +3,9 @@ package co.edu.uco.notification.core.domain;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 

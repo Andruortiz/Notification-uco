@@ -1,7 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
-import co.edu.uco.notification.core.domain.AttemptOrigin;
-import co.edu.uco.notification.core.domain.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import java.time.Instant;
 
 public record DeliveryAttemptDocument(

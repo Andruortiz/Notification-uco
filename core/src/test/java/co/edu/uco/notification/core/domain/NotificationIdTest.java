@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import org.junit.jupiter.api.Test;
 
 class NotificationIdTest {

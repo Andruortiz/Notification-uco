@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.domain.event.NotificationAccepted;
 import co.edu.uco.notification.core.domain.event.NotificationDelivered;
 import co.edu.uco.notification.core.domain.event.NotificationFailed;
 import co.edu.uco.notification.core.domain.event.NotificationQueued;
+import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
 import java.time.Instant;
 import java.util.List;
@@ -22,13 +23,13 @@ class NotificationTest {
 
   private static Notification accepted() {
     return Notification.accept(
-        TenantId.of("tenant-1"),
-        ExternalId.of("order-42"),
-        ChannelType.of("EMAIL"),
-        RecipientId.of("recipient-1"),
-        Recipient.of("alice@example.com"),
-        NotificationContent.of("Subject", "Body"),
-        Priority.NORMAL);
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Subject", "Body"), Priority.NORMAL));
   }
 
   @Test
@@ -48,17 +49,19 @@ class NotificationTest {
 
   @Test
   void acceptRejectsNullTenantId() {
+
+    final ExternalId externalId = ExternalId.of("order-42");
+    final ChannelType channelType = ChannelType.of("EMAIL");
+    final RecipientId recipientId = RecipientId.of("recipient-1");
+    final Recipient recipient = Recipient.of("alice@example.com");
+    final NotificationDetails details =
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL);
     assertThrows(
         NullPointerException.class,
         () ->
             Notification.accept(
-                null,
-                ExternalId.of("order-42"),
-                ChannelType.of("EMAIL"),
-                RecipientId.of("recipient-1"),
-                Recipient.of("alice@example.com"),
-                NotificationContent.of("Body"),
-                Priority.NORMAL));
+                new NotificationRouting(null, externalId, channelType, recipientId, recipient),
+                details));
   }
 
   @Test
@@ -67,13 +70,13 @@ class NotificationTest {
         NullPointerException.class,
         () ->
             Notification.accept(
-                TenantId.of("tenant-1"),
-                ExternalId.of("order-42"),
-                ChannelType.of("EMAIL"),
-                null,
-                Recipient.of("alice@example.com"),
-                NotificationContent.of("Body"),
-                Priority.NORMAL));
+                new NotificationRouting(
+                    null,
+                    ExternalId.of("order-42"),
+                    ChannelType.of("EMAIL"),
+                    RecipientId.of("recipient-1"),
+                    Recipient.of("alice@example.com")),
+                new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL)));
   }
 
   @Test
@@ -82,13 +85,13 @@ class NotificationTest {
         NullPointerException.class,
         () ->
             Notification.accept(
-                TenantId.of("tenant-1"),
-                ExternalId.of("order-42"),
-                ChannelType.of("EMAIL"),
-                RecipientId.of("recipient-1"),
-                Recipient.of("alice@example.com"),
-                null,
-                Priority.NORMAL));
+                new NotificationRouting(
+                    TenantId.of("tenant-1"),
+                    ExternalId.of("order-42"),
+                    ChannelType.of("EMAIL"),
+                    null,
+                    Recipient.of("alice@example.com")),
+                new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL)));
   }
 
   @Test
@@ -167,9 +170,10 @@ class NotificationTest {
   @Test
   void markRetriesExhaustedFromPendingThrows() {
     final Notification notification = accepted();
+    final ProviderId providerId = ProviderId.of("brevo");
     assertThrows(
         InvalidStatusTransitionException.class,
-        () -> notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
+        () -> notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, providerId));
   }
 
   @Test
@@ -248,31 +252,29 @@ class NotificationTest {
     final Notification first =
         Notification.reconstitute(
             id,
-            TenantId.of("tenant-1"),
-            ExternalId.of("order-42"),
-            ChannelType.of("EMAIL"),
-            RecipientId.of("recipient-1"),
-            Recipient.of("alice@example.com"),
-            NotificationContent.of("Body"),
-            Priority.NORMAL,
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
             NotificationStatus.PENDING,
-            now,
-            List.of(),
-            1L);
+            new NotificationMetadata(now, 1L),
+            List.of());
     final Notification second =
         Notification.reconstitute(
             id,
-            TenantId.of("tenant-2"),
-            ExternalId.of("order-99"),
-            ChannelType.of("SMS"),
-            RecipientId.of("recipient-2"),
-            Recipient.of("bob@example.com"),
-            NotificationContent.of("Different body"),
-            Priority.HIGH,
+            new NotificationRouting(
+                TenantId.of("tenant-2"),
+                ExternalId.of("order-99"),
+                ChannelType.of("SMS"),
+                RecipientId.of("recipient-2"),
+                Recipient.of("bob@example.com")),
+            new NotificationDetails(NotificationContent.of("Different body"), Priority.HIGH),
             NotificationStatus.DELIVERED,
-            now.plusSeconds(60),
-            List.of(),
-            2L);
+            new NotificationMetadata(now.plusSeconds(60), 2L),
+            List.of());
 
     assertEquals(first, second);
     assertEquals(first.hashCode(), second.hashCode());
@@ -311,17 +313,16 @@ class NotificationTest {
     final Notification notification =
         Notification.reconstitute(
             id,
-            TenantId.of("tenant-1"),
-            ExternalId.of("order-42"),
-            ChannelType.of("EMAIL"),
-            RecipientId.of("recipient-1"),
-            Recipient.of("alice@example.com"),
-            NotificationContent.of("Body"),
-            Priority.HIGH,
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.HIGH),
             NotificationStatus.RECOVERABLE,
-            acceptedAt,
-            attempts,
-            3L);
+            new NotificationMetadata(acceptedAt, 3L),
+            attempts);
 
     assertEquals(id, notification.notificationId());
     assertEquals(NotificationStatus.RECOVERABLE, notification.status());

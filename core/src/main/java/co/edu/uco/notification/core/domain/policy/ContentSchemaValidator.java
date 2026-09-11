@@ -1,5 +1,7 @@
-package co.edu.uco.notification.core.domain;
+package co.edu.uco.notification.core.domain.policy;
 
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;

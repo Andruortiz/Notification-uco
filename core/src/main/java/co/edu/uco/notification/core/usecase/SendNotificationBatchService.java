@@ -1,6 +1,6 @@
 package co.edu.uco.notification.core.usecase;
 
-import co.edu.uco.notification.core.domain.BatchId;
+import co.edu.uco.notification.core.domain.valueobject.BatchId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.port.in.BatchAcceptedResult;

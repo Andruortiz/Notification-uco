@@ -1,7 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
-import co.edu.uco.notification.core.domain.NotificationStatus;
-import co.edu.uco.notification.core.domain.Priority;
+import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
+import co.edu.uco.notification.core.domain.valueobject.Priority;
 import java.time.Instant;
 import java.util.List;
 import org.springframework.data.annotation.Id;

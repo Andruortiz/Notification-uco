@@ -1,9 +1,9 @@
 package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
-import co.edu.uco.notification.core.domain.ExternalId;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.ExternalId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.Preconditions;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;

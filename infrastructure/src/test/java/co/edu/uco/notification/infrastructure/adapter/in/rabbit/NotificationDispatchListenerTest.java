@@ -6,7 +6,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import co.edu.uco.notification.core.domain.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
 import org.junit.jupiter.api.Test;

@@ -1,9 +1,9 @@
 package co.edu.uco.notification.core.repository;
 
-import co.edu.uco.notification.core.domain.ExternalId;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.ExternalId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import reactor.core.publisher.Mono;
 
 public interface NotificationRepository {

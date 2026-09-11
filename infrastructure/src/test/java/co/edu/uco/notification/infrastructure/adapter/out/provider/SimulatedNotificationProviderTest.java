@@ -2,15 +2,8 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import co.edu.uco.notification.core.domain.AttemptResult;
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.ExternalId;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.NotificationContent;
-import co.edu.uco.notification.core.domain.Priority;
-import co.edu.uco.notification.core.domain.Recipient;
-import co.edu.uco.notification.core.domain.RecipientId;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.*;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
@@ -18,13 +11,13 @@ class SimulatedNotificationProviderTest {
 
   private static Notification aNotification() {
     return Notification.accept(
-        TenantId.of("tenant-1"),
-        ExternalId.of("order-42"),
-        ChannelType.of("EMAIL"),
-        RecipientId.of("recipient-1"),
-        Recipient.of("alice@example.com"),
-        NotificationContent.of("Body"),
-        Priority.NORMAL);
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
   }
 
   @Test

@@ -4,27 +4,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import co.edu.uco.notification.core.domain.AttemptOrigin;
-import co.edu.uco.notification.core.domain.ChannelType;
-import co.edu.uco.notification.core.domain.ExternalId;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.NotificationContent;
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.NotificationStatus;
-import co.edu.uco.notification.core.domain.Priority;
-import co.edu.uco.notification.core.domain.ProviderId;
-import co.edu.uco.notification.core.domain.Recipient;
-import co.edu.uco.notification.core.domain.RecipientId;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusQuery;
 import co.edu.uco.notification.core.port.in.NotificationStatusView;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -32,8 +22,7 @@ class GetNotificationStatusServiceTest {
 
   private static final TenantId TENANT_ID = TenantId.of("tenant-1");
 
-  private final NotificationRepository notificationRepository =
-      Mockito.mock(NotificationRepository.class);
+  private final NotificationRepository notificationRepository = mock(NotificationRepository.class);
 
   private GetNotificationStatusService service;
 
@@ -44,13 +33,13 @@ class GetNotificationStatusServiceTest {
 
   private static Notification acceptedNotification() {
     return Notification.accept(
-        TENANT_ID,
-        ExternalId.of("order-42"),
-        ChannelType.of("EMAIL"),
-        RecipientId.of("recipient-1"),
-        Recipient.of("alice@example.com"),
-        NotificationContent.of("Body"),
-        Priority.NORMAL);
+        new NotificationRouting(
+            TENANT_ID,
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
   }
 
   @Test
@@ -70,7 +59,7 @@ class GetNotificationStatusServiceTest {
     assertEquals(NotificationStatus.DELIVERED, view.status());
     assertEquals(ChannelType.of("EMAIL"), view.channelType());
     assertEquals(ProviderId.of("brevo"), view.lastProviderId());
-    assertEquals(notification.deliveryAttempts().get(0).occurredOn(), view.lastUpdatedAt());
+    assertEquals(notification.deliveryAttempts().getFirst().occurredOn(), view.lastUpdatedAt());
   }
 
   @Test

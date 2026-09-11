@@ -1,4 +1,4 @@
-package co.edu.uco.notification.core.domain;
+package co.edu.uco.notification.core.domain.valueobject;
 
 public enum Priority {
   LOW(1),

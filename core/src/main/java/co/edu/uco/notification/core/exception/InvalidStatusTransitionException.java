@@ -1,6 +1,6 @@
 package co.edu.uco.notification.core.exception;
 
-import co.edu.uco.notification.core.domain.NotificationStatus;
+import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 
 public class InvalidStatusTransitionException extends RuntimeException {
 

@@ -1,5 +1,6 @@
-package co.edu.uco.notification.core.domain;
+package co.edu.uco.notification.core.domain.policy;
 
+import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import java.util.EnumMap;
 import java.util.EnumSet;
 import java.util.Map;

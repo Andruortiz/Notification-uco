@@ -2,7 +2,7 @@ package co.edu.uco.notification.core.exception;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import co.edu.uco.notification.core.domain.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import org.junit.jupiter.api.Test;
 
 class ChannelNotAvailableExceptionTest {

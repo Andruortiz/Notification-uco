@@ -7,21 +7,24 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import co.edu.uco.notification.core.domain.AttemptOrigin;
-import co.edu.uco.notification.core.domain.AttemptResult;
-import co.edu.uco.notification.core.domain.ChannelType;
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
-import co.edu.uco.notification.core.domain.ExternalId;
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.NotificationContent;
-import co.edu.uco.notification.core.domain.NotificationId;
-import co.edu.uco.notification.core.domain.NotificationStatus;
-import co.edu.uco.notification.core.domain.Priority;
-import co.edu.uco.notification.core.domain.ProviderId;
-import co.edu.uco.notification.core.domain.Recipient;
-import co.edu.uco.notification.core.domain.RecipientId;
-import co.edu.uco.notification.core.domain.RetryPolicy;
-import co.edu.uco.notification.core.domain.TenantId;
+import co.edu.uco.notification.core.domain.policy.RetryPolicy;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.ExternalId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
+import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationMetadata;
+import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
+import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
+import co.edu.uco.notification.core.domain.valueobject.Priority;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.Recipient;
+import co.edu.uco.notification.core.domain.valueobject.RecipientId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
@@ -65,13 +68,13 @@ class DispatchNotificationServiceTest {
 
   private static Notification pendingNotification() {
     return Notification.accept(
-        TenantId.of("tenant-1"),
-        ExternalId.of("order-42"),
-        ChannelType.of("EMAIL"),
-        RecipientId.of("recipient-1"),
-        Recipient.of("alice@example.com"),
-        NotificationContent.of("Body"),
-        Priority.NORMAL);
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
   }
 
   private static Notification pendingNotificationWithRecoverableAttempts(final int count) {
@@ -92,17 +95,16 @@ class DispatchNotificationServiceTest {
     }
     return Notification.reconstitute(
         id,
-        TenantId.of("tenant-1"),
-        ExternalId.of("order-42"),
-        ChannelType.of("EMAIL"),
-        RecipientId.of("recipient-1"),
-        Recipient.of("alice@example.com"),
-        NotificationContent.of("Body"),
-        Priority.NORMAL,
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
         NotificationStatus.PENDING,
-        now,
-        attempts,
-        1L);
+        new NotificationMetadata(now, 1L),
+        attempts);
   }
 
   private static ChannelRoute activeRoute() {

@@ -1,5 +1,8 @@
 package co.edu.uco.notification.core.domain;
 
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
 

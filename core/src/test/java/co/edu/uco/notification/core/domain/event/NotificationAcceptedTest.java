@@ -3,7 +3,7 @@ package co.edu.uco.notification.core.domain.event;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import co.edu.uco.notification.core.domain.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 

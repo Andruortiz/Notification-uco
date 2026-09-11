@@ -1,4 +1,4 @@
-package co.edu.uco.notification.core.domain;
+package co.edu.uco.notification.core.domain.policy;
 
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Duration;

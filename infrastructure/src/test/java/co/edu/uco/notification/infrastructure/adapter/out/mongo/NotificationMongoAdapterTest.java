@@ -48,7 +48,7 @@ class NotificationMongoAdapterTest {
     return Notification.accept(
         new NotificationRouting(
             TenantId.of("tenant-1"),
-            ExternalId.of("order-42"),
+            ExternalId.of(externalId),
             ChannelType.of("EMAIL"),
             RecipientId.of("recipient-1"),
             Recipient.of("alice@example.com")),

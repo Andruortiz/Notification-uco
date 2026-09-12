@@ -19,6 +19,9 @@ springdoc:
     url: /openapi/api-notificaciones.yaml
 
 notification:
+  scheduler:
+    requeue-interval-ms: ${NOTIFICATION_REQUEUE_INTERVAL_MS:30000}
+    pending-orphan-threshold-ms: ${NOTIFICATION_PENDING_ORPHAN_THRESHOLD_MS:60000}
   catalog:
     channels:
       EMAIL:

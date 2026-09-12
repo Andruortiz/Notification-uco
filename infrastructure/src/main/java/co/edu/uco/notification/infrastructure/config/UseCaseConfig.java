@@ -7,6 +7,8 @@ import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.usecase.*;
+import java.time.Duration;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -58,8 +60,13 @@ public class UseCaseConfig {
   RequeuePendingNotificationsUseCase requeuePendingNotificationsUseCase(
       final NotificationRepository notificationRepository,
       final NotificationEventPublisherPort eventPublisherPort,
-      final RetryPolicy retryPolicy) {
+      final RetryPolicy retryPolicy,
+      @Value("${notification.scheduler.pending-orphan-threshold-ms:60000}")
+          final long pendingOrphanThresholdMs) {
     return new RequeuePendingNotificationsService(
-        notificationRepository, eventPublisherPort, retryPolicy);
+        notificationRepository,
+        eventPublisherPort,
+        retryPolicy,
+        Duration.ofMillis(pendingOrphanThresholdMs));
   }
 }

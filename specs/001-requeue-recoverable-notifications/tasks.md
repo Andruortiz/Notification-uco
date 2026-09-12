@@ -49,8 +49,8 @@ description: "Task list for HU2-030 — Reencolar notificaciones recuperables ve
 
 ### Tests for User Story 1 ⚠️
 
-- [x] T007 [P] [US1] Prueba unitaria de `RequeuePendingNotificationsService` en `core/src/test/java/co/edu/uco/notification/core/usecase/RequeuePendingNotificationsServiceTest.java` — 4 casos: notificación vencida se reencola; notificación no vencida no se toca; sin notificaciones `RECOVERABLE` no hace nada; conflicto de versión en una no bloquea el resto del lote
-- [x] T008 [P] [US1] Prueba end-to-end contra Mongo real (Testcontainers), agregada a `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/mongo/NotificationMongoAdapterTest.java` — guarda notificaciones `RECOVERABLE` (una vencida, una no) directamente en Mongo, invoca `RequeuePendingNotificationsService` real (con el adaptador Mongo real, no un mock), confirma que solo la vencida vuelve a `PENDING`. **No verificada localmente** — requiere Docker (Testcontainers), no disponible en este entorno; queda pendiente de confirmación en CI
+- [x] T007 [P] [US1] Prueba unitaria de `RequeuePendingNotificationsService` en `core/src/test/java/co/edu/uco/notification/core/usecase/RequeuePendingNotificationsServiceTest.java` — 7 casos: notificación vencida se reencola; notificación no vencida no se toca; sin notificaciones `RECOVERABLE` no hace nada; conflicto de versión en una no bloquea el resto del lote; `PENDING` huérfana se reencola; `PENDING` reciente no se toca; `PENDING` con intento previo no se toca (T017-T019)
+- [x] T008 [P] [US1] Prueba end-to-end contra Mongo real (Testcontainers), agregada a `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/mongo/NotificationMongoAdapterTest.java` — 2 pruebas: `RECOVERABLE` (una vencida, una no) y `PENDING` huérfana vs. reciente (T020), ambas contra el adaptador Mongo real, no un mock. **No verificada localmente** — requiere Docker (Testcontainers), no disponible en este entorno; queda pendiente de confirmación en CI
 
 ### Implementation for User Story 1
 
@@ -61,6 +61,19 @@ description: "Task list for HU2-030 — Reencolar notificaciones recuperables ve
 - [x] T013 [US1] Confirmar cobertura ≥80%/≥70% (Principio IV) — `./mvnw -pl core verify` (incluye jacoco:check) en verde
 
 **Checkpoint**: User Story 1 completa. Única verificación pendiente: T008 en CI (Docker no disponible localmente).
+
+---
+
+## Phase 4: Convergencia — hallazgo del backlog (2026-08-29, resuelto 2026-09-11)
+
+**Origen**: la fila de HU2-030 en el backlog de Notion ya documentaba, desde antes de este spec, que la primera versión de esta historia (Fase 3, solo cubre `RECOVERABLE`) dejaba sin resolver un caso más grave: una notificación `PENDING` huérfana si el proceso cae entre `save()` y `enqueueForDispatch()` — violación directa de RNF-05. Se encontró al revisar el backlog antes de abrir el PR, con la implementación de solo-`RECOVERABLE` ya escrita.
+
+- [x] T017 Agregar `recoverOrphanedPending()` en `RequeuePendingNotificationsService` — consulta `PENDING` con cero intentos de entrega y `acceptedAt` más antiguo que un umbral corto; solo llama `enqueueForDispatch`, sin transicionar estado ni guardar (FR-008, FR-009, FR-010)
+- [x] T018 Agregar `notification.scheduler.pending-orphan-threshold-ms` (`infrastructure/src/main/resources/application.yml`, default 60000) y el parámetro `Duration` correspondiente en el constructor de `RequeuePendingNotificationsService` y en `UseCaseConfig`
+- [x] T019 [P] Pruebas unitarias del caso huérfano en `RequeuePendingNotificationsServiceTest.java`: se reencola sin cambiar estado; no se toca si es reciente; no se toca si ya tiene un intento (llegó a `PENDING` por un reencolado exitoso, no está huérfana)
+- [x] T020 [P] Prueba E2E del caso huérfano en `NotificationMongoAdapterTest.java` contra Mongo real — misma limitación de Docker que T008
+
+**Checkpoint**: el hallazgo del 2026-08-29 queda resuelto antes de abrir el PR — la historia ya no se cierra con la brecha conocida.
 
 ---
 

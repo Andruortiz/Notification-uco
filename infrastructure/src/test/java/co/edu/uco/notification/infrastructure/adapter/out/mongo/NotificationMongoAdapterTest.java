@@ -3,6 +3,8 @@ package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
@@ -12,6 +14,7 @@ import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.usecase.RequeuePendingNotificationsService;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.bson.Document;
@@ -142,7 +145,8 @@ class NotificationMongoAdapterTest {
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
     when(eventPublisherPort.enqueueForDispatch(any())).thenReturn(Mono.empty());
     final RequeuePendingNotificationsService service =
-        new RequeuePendingNotificationsService(adapter, eventPublisherPort, new RetryPolicy());
+        new RequeuePendingNotificationsService(
+            adapter, eventPublisherPort, new RetryPolicy(), Duration.ofSeconds(60));
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
@@ -152,6 +156,43 @@ class NotificationMongoAdapterTest {
     StepVerifier.create(adapter.findById(notDue.notificationId()))
         .assertNext(found -> assertEquals(NotificationStatus.RECOVERABLE, found.status()))
         .verifyComplete();
+  }
+
+  @Test
+  void requeuePendingReenqueuesOrphanedPendingNotificationsWithoutAnyAttempt() {
+    final Notification orphaned =
+        adapter.save(pendingOrphanNotification("order-8", Instant.now().minusSeconds(120))).block();
+    final Notification recentlyAccepted =
+        adapter.save(pendingOrphanNotification("order-9", Instant.now())).block();
+
+    final NotificationEventPublisherPort eventPublisherPort =
+        Mockito.mock(NotificationEventPublisherPort.class);
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any())).thenReturn(Mono.empty());
+    final RequeuePendingNotificationsService service =
+        new RequeuePendingNotificationsService(
+            adapter, eventPublisherPort, new RetryPolicy(), Duration.ofSeconds(60));
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(eventPublisherPort).enqueueForDispatch(orphaned);
+    verify(eventPublisherPort, never()).enqueueForDispatch(recentlyAccepted);
+  }
+
+  private static Notification pendingOrphanNotification(
+      final String externalId, final Instant acceptedAt) {
+    return Notification.reconstitute(
+        NotificationId.newId(),
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of(externalId),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+        NotificationStatus.PENDING,
+        new NotificationMetadata(acceptedAt, null),
+        List.of());
   }
 
   private static Notification recoverableNotification(

@@ -27,8 +27,10 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import reactor.core.publisher.Flux;
@@ -45,7 +47,14 @@ class RequeuePendingNotificationsServiceTest {
 
   private final RequeuePendingNotificationsService service =
       new RequeuePendingNotificationsService(
-          notificationRepository, eventPublisherPort, retryPolicy);
+          notificationRepository, eventPublisherPort, retryPolicy, Duration.ofSeconds(60));
+
+  @BeforeEach
+  void stubEmptyByDefault() {
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.empty());
+    when(notificationRepository.findByStatus(NotificationStatus.PENDING)).thenReturn(Flux.empty());
+  }
 
   @Test
   void requeuesNotificationsWhoseBackoffAlreadyElapsed() {
@@ -79,9 +88,6 @@ class RequeuePendingNotificationsServiceTest {
 
   @Test
   void completesWithoutErrorWhenThereIsNothingToRequeue() {
-    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
-        .thenReturn(Flux.empty());
-
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
     verify(notificationRepository, never()).save(any());
@@ -108,6 +114,45 @@ class RequeuePendingNotificationsServiceTest {
     verify(eventPublisherPort).enqueueForDispatch(healthy);
   }
 
+  @Test
+  void reenqueuesPendingNotificationsOrphanedBeforeTheThresholdWithoutChangingState() {
+    final Notification orphaned =
+        pendingNotificationWithoutAttempts(Instant.now().minusSeconds(120));
+    when(notificationRepository.findByStatus(NotificationStatus.PENDING))
+        .thenReturn(Flux.just(orphaned));
+    when(eventPublisherPort.enqueueForDispatch(orphaned)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    assertEquals(NotificationStatus.PENDING, orphaned.status());
+    verify(notificationRepository, never()).save(any());
+    verify(eventPublisherPort).enqueueForDispatch(orphaned);
+  }
+
+  @Test
+  void doesNotTouchPendingNotificationsAcceptedMoreRecentlyThanTheThreshold() {
+    final Notification recentlyAccepted = pendingNotificationWithoutAttempts(Instant.now());
+    when(notificationRepository.findByStatus(NotificationStatus.PENDING))
+        .thenReturn(Flux.just(recentlyAccepted));
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(eventPublisherPort, never()).enqueueForDispatch(any());
+  }
+
+  @Test
+  void doesNotTouchPendingNotificationsThatAlreadyHaveADeliveryAttempt() {
+    final Notification requeuedFromRecoverable =
+        recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
+    requeuedFromRecoverable.requeue();
+    when(notificationRepository.findByStatus(NotificationStatus.PENDING))
+        .thenReturn(Flux.just(requeuedFromRecoverable));
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(eventPublisherPort, never()).enqueueForDispatch(any());
+  }
+
   private static Notification recoverableNotification(
       final NotificationId id, final Instant lastAttemptAt) {
     final List<DeliveryAttempt> attempts =
@@ -129,5 +174,20 @@ class RequeuePendingNotificationsServiceTest {
         NotificationStatus.RECOVERABLE,
         new NotificationMetadata(Instant.now().minusSeconds(300), 1L),
         attempts);
+  }
+
+  private static Notification pendingNotificationWithoutAttempts(final Instant acceptedAt) {
+    return Notification.reconstitute(
+        NotificationId.newId(),
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-2"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+        NotificationStatus.PENDING,
+        new NotificationMetadata(acceptedAt, null),
+        List.of());
   }
 }

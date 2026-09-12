@@ -23,6 +23,7 @@ notification:
     requeue-interval-ms: ${NOTIFICATION_REQUEUE_INTERVAL_MS:30000}
     pending-orphan-threshold-ms: ${NOTIFICATION_PENDING_ORPHAN_THRESHOLD_MS:60000}
   catalog:
+    refresh-interval-ms: ${NOTIFICATION_CATALOG_REFRESH_INTERVAL_MS:30000}
     channels:
       EMAIL:
         providers:

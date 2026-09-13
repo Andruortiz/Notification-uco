@@ -38,3 +38,5 @@ notification:
       routing-key: notification.dispatch
       queue: notification.dispatch.queue
     events-exchange: notification.events.exchange
+  cors:
+    allowed-origins: ${NOTIFICATION_CORS_ALLOWED_ORIGINS:http://localhost:5173}

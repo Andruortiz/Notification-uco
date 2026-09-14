@@ -14,6 +14,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
     name = "tenant_external_unique",
     def = "{'tenantId': 1, 'externalId': 1}",
     unique = true)
+@CompoundIndex(name = "tenant_acceptedAt", def = "{'tenantId': 1, 'acceptedAt': -1}")
 public record NotificationDocument(
     @Id String id,
     String tenantId,

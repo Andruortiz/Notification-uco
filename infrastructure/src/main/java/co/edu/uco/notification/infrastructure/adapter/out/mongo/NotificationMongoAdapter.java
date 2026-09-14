@@ -7,8 +7,12 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
 import co.edu.uco.notification.utils.Preconditions;
+import java.util.ArrayList;
+import java.util.List;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
@@ -65,6 +69,36 @@ public class NotificationMongoAdapter implements NotificationRepository {
   public Flux<Notification> findByStatus(final NotificationStatus status) {
     Preconditions.requireNonNull(status, "status must not be null");
     final Query query = Query.query(Criteria.where("status").is(status));
+    return mongoTemplate
+        .find(query, NotificationDocument.class)
+        .map(NotificationDocumentMapper::toDomain);
+  }
+
+  @Override
+  public Flux<Notification> search(final NotificationSearchCriteria criteria) {
+    Preconditions.requireNonNull(criteria, "criteria must not be null");
+    final List<Criteria> conditions = new ArrayList<>();
+    conditions.add(Criteria.where("tenantId").is(criteria.tenantId().value()));
+    if (criteria.recipientId() != null) {
+      conditions.add(Criteria.where("recipientId").is(criteria.recipientId().value()));
+    }
+    if (criteria.channelType() != null) {
+      conditions.add(Criteria.where("channelType").is(criteria.channelType().value()));
+    }
+    if (criteria.status() != null) {
+      conditions.add(Criteria.where("status").is(criteria.status()));
+    }
+    if (criteria.from() != null) {
+      conditions.add(Criteria.where("acceptedAt").gte(criteria.from()));
+    }
+    if (criteria.to() != null) {
+      conditions.add(Criteria.where("acceptedAt").lte(criteria.to()));
+    }
+    final Query query =
+        Query.query(new Criteria().andOperator(conditions.toArray(new Criteria[0])))
+            .with(Sort.by(Sort.Direction.DESC, "acceptedAt"))
+            .skip(criteria.offset())
+            .limit(criteria.limit() + 1);
     return mongoTemplate
         .find(query, NotificationDocument.class)
         .map(NotificationDocumentMapper::toDomain);

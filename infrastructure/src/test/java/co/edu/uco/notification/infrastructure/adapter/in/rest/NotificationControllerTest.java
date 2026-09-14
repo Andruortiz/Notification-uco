@@ -11,10 +11,13 @@ import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusUseCase;
+import co.edu.uco.notification.core.port.in.NotificationSearchPage;
 import co.edu.uco.notification.core.port.in.NotificationStatusView;
+import co.edu.uco.notification.core.port.in.SearchNotificationsUseCase;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
@@ -32,6 +35,8 @@ class NotificationControllerTest {
   @MockBean private SendNotificationUseCase sendNotificationUseCase;
 
   @MockBean private GetNotificationStatusUseCase getNotificationStatusUseCase;
+
+  @MockBean private SearchNotificationsUseCase searchNotificationsUseCase;
 
   private static final String REQUEST_BODY =
       """
@@ -144,5 +149,37 @@ class NotificationControllerTest {
         .exchange()
         .expectStatus()
         .isNotFound();
+  }
+
+  @Test
+  void searchReturnsAPageOfResults() {
+    when(searchNotificationsUseCase.search(any()))
+        .thenReturn(Mono.just(new NotificationSearchPage(List.of(), 50, 0, false)));
+
+    webTestClient
+        .get()
+        .uri("/notifications")
+        .header("X-Tenant-Id", "tenant-1")
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.items")
+        .isEmpty()
+        .jsonPath("$.limit")
+        .isEqualTo(50)
+        .jsonPath("$.hasNext")
+        .isEqualTo(false);
+  }
+
+  @Test
+  void searchReturnsBadRequestForAnInvalidStatus() {
+    webTestClient
+        .get()
+        .uri("/notifications?status=NOT_A_REAL_STATUS")
+        .header("X-Tenant-Id", "tenant-1")
+        .exchange()
+        .expectStatus()
+        .isBadRequest();
   }
 }

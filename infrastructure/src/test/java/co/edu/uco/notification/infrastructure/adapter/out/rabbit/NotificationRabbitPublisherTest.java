@@ -1,5 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.out.rabbit;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
@@ -18,6 +19,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessagePostProcessor;
+import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import reactor.test.StepVerifier;
 
@@ -29,6 +34,10 @@ class NotificationRabbitPublisherTest {
               "notification.dispatch.exchange",
               "notification.dispatch",
               "notification.dispatch.queue"),
+          new RabbitTopologyProperties.Dlq(
+              "notification.dispatch.dlq.exchange",
+              "notification.dispatch.dlq",
+              "notification.dispatch.dlq.queue"),
           "notification.events.exchange");
 
   private static ObjectMapper objectMapper() {
@@ -55,11 +64,19 @@ class NotificationRabbitPublisherTest {
 
     StepVerifier.create(publisher.enqueueForDispatch(notification)).verifyComplete();
 
+    final ArgumentCaptor<MessagePostProcessor> postProcessor =
+        ArgumentCaptor.forClass(MessagePostProcessor.class);
     verify(rabbitTemplate)
         .convertAndSend(
-            "notification.dispatch.exchange",
-            "notification.dispatch",
-            notification.notificationId().value());
+            eq("notification.dispatch.exchange"),
+            eq("notification.dispatch"),
+            eq(notification.notificationId().value()),
+            postProcessor.capture());
+
+    final Message message = new Message(new byte[0], new MessageProperties());
+    postProcessor.getValue().postProcessMessage(message);
+    assertEquals(
+        notification.notificationId().value(), message.getMessageProperties().getMessageId());
   }
 
   @Test

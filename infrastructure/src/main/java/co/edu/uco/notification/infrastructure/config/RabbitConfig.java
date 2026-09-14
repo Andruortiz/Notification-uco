@@ -5,6 +5,7 @@ import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.FanoutExchange;
 import org.springframework.amqp.core.Queue;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -23,8 +24,8 @@ public class RabbitConfig {
 
   @Bean
   Binding notificationDispatchBinding(
-      final Queue notificationDispatchQueue,
-      final DirectExchange notificationDispatchExchange,
+      @Qualifier("notificationDispatchQueue") final Queue notificationDispatchQueue,
+      @Qualifier("notificationDispatchExchange") final DirectExchange notificationDispatchExchange,
       final RabbitTopologyProperties properties) {
     return BindingBuilder.bind(notificationDispatchQueue)
         .to(notificationDispatchExchange)
@@ -34,5 +35,26 @@ public class RabbitConfig {
   @Bean
   FanoutExchange notificationEventsExchange(final RabbitTopologyProperties properties) {
     return new FanoutExchange(properties.eventsExchange());
+  }
+
+  @Bean
+  DirectExchange notificationDispatchDlqExchange(final RabbitTopologyProperties properties) {
+    return new DirectExchange(properties.dlq().exchange());
+  }
+
+  @Bean
+  Queue notificationDispatchDlqQueue(final RabbitTopologyProperties properties) {
+    return new Queue(properties.dlq().queue());
+  }
+
+  @Bean
+  Binding notificationDispatchDlqBinding(
+      @Qualifier("notificationDispatchDlqQueue") final Queue notificationDispatchDlqQueue,
+      @Qualifier("notificationDispatchDlqExchange")
+          final DirectExchange notificationDispatchDlqExchange,
+      final RabbitTopologyProperties properties) {
+    return BindingBuilder.bind(notificationDispatchDlqQueue)
+        .to(notificationDispatchDlqExchange)
+        .with(properties.dlq().routingKey());
   }
 }

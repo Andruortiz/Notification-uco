@@ -37,6 +37,11 @@ notification:
       exchange: notification.dispatch.exchange
       routing-key: notification.dispatch
       queue: notification.dispatch.queue
+      max-attempts: ${NOTIFICATION_DISPATCH_MAX_ATTEMPTS:3}
+    dlq:
+      exchange: notification.dispatch.dlq.exchange
+      routing-key: notification.dispatch.dlq
+      queue: notification.dispatch.dlq.queue
     events-exchange: notification.events.exchange
   cors:
     allowed-origins: ${NOTIFICATION_CORS_ALLOWED_ORIGINS:http://localhost:5173}

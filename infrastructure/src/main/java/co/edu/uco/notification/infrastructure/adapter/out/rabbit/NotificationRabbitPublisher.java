@@ -40,7 +40,13 @@ public class NotificationRabbitPublisher implements NotificationEventPublisherPo
                 rabbitTemplate.convertAndSend(
                     properties.dispatch().exchange(),
                     properties.dispatch().routingKey(),
-                    notification.notificationId().value()))
+                    notification.notificationId().value(),
+                    message -> {
+                      message
+                          .getMessageProperties()
+                          .setMessageId(notification.notificationId().value());
+                      return message;
+                    }))
         .subscribeOn(Schedulers.boundedElastic());
   }
 

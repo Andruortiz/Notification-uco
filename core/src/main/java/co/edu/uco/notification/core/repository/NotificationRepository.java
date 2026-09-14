@@ -17,4 +17,6 @@ public interface NotificationRepository {
   Mono<Notification> findByTenantAndExternalId(TenantId tenantId, ExternalId externalId);
 
   Flux<Notification> findByStatus(NotificationStatus status);
+
+  Flux<Notification> search(NotificationSearchCriteria criteria);
 }

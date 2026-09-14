@@ -1,0 +1,65 @@
+# Phase 1 Contract: extensión de GET /notifications en api-notificaciones.yaml
+#
+# Este archivo NO es el contrato real del componente — es el diseño de lo que
+# /speckit-implement debe aplicar a infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml,
+# siguiendo el Principio II (el contrato se actualiza primero, antes del controller).
+#
+# El path GET /notifications ya existe (CU-05, operationId: searchNotifications). Este fragmento
+# documenta únicamente lo que cambia: los parámetros de paginación nuevos y el response 200
+# (reemplaza el array plano actual por un envoltorio paginado).
+
+paths:
+  /notifications:
+    get:
+      operationId: searchNotifications
+      parameters:
+        - name: limit
+          in: query
+          description: Tamaño de página. Default 50, máximo 200.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          description: Posición inicial dentro del conjunto de resultados. Default 0.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: Página de notificaciones que cumplen el criterio (items vacío si no hay resultados).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationSearchResponse'
+        '400':
+          description: >
+            Parámetros inválidos — `from` posterior a `to`, o `limit`/`offset` fuera de su rango
+            válido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    NotificationSearchResponse:
+      type: object
+      required: [items, limit, offset, hasNext]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationHistoryItem'
+        limit:
+          type: integer
+          description: Tamaño de página efectivamente aplicado.
+        offset:
+          type: integer
+          description: Offset efectivamente aplicado.
+        hasNext:
+          type: boolean
+          description: true si existen más resultados después de esta página.

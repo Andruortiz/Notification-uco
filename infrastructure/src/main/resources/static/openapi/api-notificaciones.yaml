@@ -88,15 +88,35 @@ paths:
           schema:
             type: string
             format: date-time
+        - name: limit
+          in: query
+          description: Tamaño de página. Default 50, máximo 200.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          description: Posición inicial dentro del conjunto de resultados. Default 0.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
       responses:
         '200':
-          description: Lista de notificaciones que cumplen el criterio (vacía si no hay resultados).
+          description: Página de notificaciones que cumplen el criterio (items vacío si no hay resultados).
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/NotificationHistoryItem'
+                $ref: '#/components/schemas/NotificationSearchResponse'
+        '400':
+          description: >
+            Parámetros inválidos -- from posterior a to, o limit/offset fuera de su rango válido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /notifications:sendBatch:
     post:
@@ -420,6 +440,24 @@ components:
         lastUpdatedAt:
           type: string
           format: date-time
+
+    NotificationSearchResponse:
+      type: object
+      required: [items, limit, offset, hasNext]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NotificationHistoryItem'
+        limit:
+          type: integer
+          description: Tamaño de página efectivamente aplicado.
+        offset:
+          type: integer
+          description: Offset efectivamente aplicado.
+        hasNext:
+          type: boolean
+          description: true si existen más resultados después de esta página.
 
     NotificationHistoryItem:
       type: object

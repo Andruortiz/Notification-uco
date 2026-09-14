@@ -51,6 +51,12 @@ public class UseCaseConfig {
   }
 
   @Bean
+  SearchNotificationsUseCase searchNotificationsUseCase(
+      final NotificationRepository notificationRepository) {
+    return new SearchNotificationsService(notificationRepository);
+  }
+
+  @Bean
   SendNotificationBatchUseCase sendNotificationBatchUseCase(
       final SendNotificationUseCase sendNotificationUseCase) {
     return new SendNotificationBatchService(sendNotificationUseCase);

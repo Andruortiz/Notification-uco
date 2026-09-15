@@ -1,6 +1,6 @@
 # Implementation Plan: Ver notificaciones en tiempo real en el dashboard
 
-**Branch**: `006-dashboard-tiempo-real` | **Date**: 2026-09-15 | **Spec**: [spec.md](./spec.md)
+**Branch**: `feature/HU2-072-live-dashboard-updates` | **Date**: 2026-09-15 | **Spec**: [spec.md](./spec.md)
 
 **Input**: Feature specification from `/specs/006-dashboard-tiempo-real/spec.md`
 
@@ -90,8 +90,8 @@ reutilización de tipos ya existentes (`NotificationSearchResult`, `Notification
 - **IV. Calidad verificada, no declarada** — PASS condicionado: requiere la prueba E2E real descrita
   en Testing arriba, no solo pruebas unitarias del caso de uso y de los eventos de dominio nuevos.
   Cobertura ≥80 %/≥70 % para los archivos nuevos.
-- **V. Trazabilidad en git** — rama `006-dashboard-tiempo-real` (o `feature/HU2-XXX-...` si se le
-  asigna número de historia antes de implementar), commits de una sola línea.
+- **V. Trazabilidad en git** — rama `feature/HU2-072-live-dashboard-updates` (HU2-072, "Panel en
+  vivo: notificaciones aparecen en tiempo real"), commits de una sola línea.
 - **VI. Desarrollo asistido por IA, gobernado por spec-kit** — PASS. `spec.md` clarificado (2
   preguntas resueltas) y validado (checklist 100 %), este plan es el siguiente artefacto.
 - **VII. Sin atajos** — atención explícita, no oculta: el estado `IN_PROCESS` no se persiste de forma

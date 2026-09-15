@@ -349,8 +349,7 @@ el previo a la desconexión.
 - [Story] mapea la tarea a su historia de usuario para trazabilidad
 - Verificar que las pruebas fallan antes de implementar
 - Commit por tarea o grupo lógico, una sola rama para toda la historia
-  (`006-dashboard-tiempo-real`, o el nombre de rama por historia que se le asigne, ADR-0015) —
-  commits de una sola línea (Principio V)
+  (`feature/HU2-072-live-dashboard-updates`, ADR-0015) — commits de una sola línea (Principio V)
 - Detenerse en cada checkpoint para validar la historia de forma independiente
 - Evitar: tareas vagas, conflictos de archivo simultáneos, dependencias cruzadas entre historias que
   rompan su independencia

@@ -1,5 +1,6 @@
 package co.edu.uco.notification.core.repository;
 
+import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
@@ -23,5 +24,15 @@ public record NotificationSearchCriteria(
     Preconditions.requireTrue(offset >= 0, "offset must not be negative");
     Preconditions.requireTrue(
         from == null || to == null || !from.isAfter(to), "from must not be after to");
+  }
+
+  public boolean matches(final Notification notification) {
+    Preconditions.requireNonNull(notification, "notification must not be null");
+    return tenantId.equals(notification.tenantId())
+        && (recipientId == null || recipientId.equals(notification.recipientId()))
+        && (channelType == null || channelType.equals(notification.channelType()))
+        && (status == null || status == notification.status())
+        && (from == null || !notification.acceptedAt().isBefore(from))
+        && (to == null || !notification.acceptedAt().isAfter(to));
   }
 }

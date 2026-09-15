@@ -4,7 +4,13 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import java.time.Instant;
 
 public sealed interface DomainEvent
-    permits NotificationAccepted, NotificationQueued, NotificationDelivered, NotificationFailed {
+    permits NotificationAccepted,
+        NotificationQueued,
+        NotificationDelivered,
+        NotificationFailed,
+        NotificationRecoverable,
+        NotificationRequeued,
+        NotificationDiscarded {
 
   NotificationId notificationId();
 

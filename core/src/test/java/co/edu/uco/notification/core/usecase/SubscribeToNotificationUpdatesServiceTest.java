@@ -14,10 +14,12 @@ import co.edu.uco.notification.core.port.in.LiveUpdateAction;
 import co.edu.uco.notification.core.port.in.SubscribeToNotificationUpdatesQuery;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import java.time.Duration;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.Sinks;
 import reactor.test.StepVerifier;
 
 class SubscribeToNotificationUpdatesServiceTest {
@@ -98,7 +100,7 @@ class SubscribeToNotificationUpdatesServiceTest {
   }
 
   @Test
-  void subscribeEmitsRemoveWhenTheLiveUpdateBelongsToAnotherTenant() {
+  void subscribeNeverEmitsALiveUpdateThatBelongsToAnotherTenant() {
     final Notification otherTenantNotification = notification(TenantId.of("tenant-2"));
     when(notificationRepository.search(any())).thenReturn(Flux.empty());
     when(notificationUpdatesPort.updates())
@@ -106,9 +108,29 @@ class SubscribeToNotificationUpdatesServiceTest {
     when(notificationRepository.findById(otherTenantNotification.notificationId()))
         .thenReturn(Mono.just(otherTenantNotification));
 
+    StepVerifier.create(service.subscribe(aQuery())).verifyComplete();
+  }
+
+  @Test
+  void subscribeKeepsALiveUpdateThatArrivesWhileTheSnapshotIsStillLoading() {
+    final Notification notification = notification(TENANT_ID);
+    final Sinks.Many<NotificationId> updates = Sinks.many().multicast().directBestEffort();
+    when(notificationUpdatesPort.updates()).thenReturn(updates.asFlux());
+    when(notificationRepository.search(any()))
+        .thenReturn(
+            Flux.defer(
+                () -> {
+                  updates.tryEmitNext(notification.notificationId());
+                  return Flux.just(notification);
+                }));
+    when(notificationRepository.findById(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
+
     StepVerifier.create(service.subscribe(aQuery()))
-        .assertNext(update -> assertEquals(LiveUpdateAction.REMOVE, update.action()))
-        .verifyComplete();
+        .assertNext(snapshot -> assertEquals(LiveUpdateAction.UPSERT, snapshot.action()))
+        .assertNext(live -> assertEquals(LiveUpdateAction.UPSERT, live.action()))
+        .thenCancel()
+        .verify(Duration.ofSeconds(5));
   }
 
   @Test

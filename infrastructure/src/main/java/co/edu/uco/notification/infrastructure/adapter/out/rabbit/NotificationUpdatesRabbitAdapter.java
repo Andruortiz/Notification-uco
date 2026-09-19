@@ -20,7 +20,7 @@ public class NotificationUpdatesRabbitAdapter implements NotificationUpdatesPort
       LoggerFactory.getLogger(NotificationUpdatesRabbitAdapter.class);
 
   private final ObjectMapper objectMapper;
-  private final Sinks.Many<NotificationId> sink = Sinks.many().multicast().onBackpressureBuffer();
+  private final Sinks.Many<NotificationId> sink = Sinks.many().multicast().directBestEffort();
 
   public NotificationUpdatesRabbitAdapter(final ObjectMapper objectMapper) {
     this.objectMapper = Preconditions.requireNonNull(objectMapper, "objectMapper must not be null");
@@ -31,7 +31,7 @@ public class NotificationUpdatesRabbitAdapter implements NotificationUpdatesPort
     try {
       final DomainEventEnvelope envelope =
           objectMapper.readValue(payload, DomainEventEnvelope.class);
-      final NotificationId notificationId = NotificationId.of(envelope.notificationId());
+      final NotificationId notificationId = envelope.notificationId();
       sink.tryEmitNext(notificationId);
       LOGGER.debug("Received notification update event for notificationId={}", notificationId);
     } catch (final RuntimeException | IOException e) {
@@ -45,5 +45,5 @@ public class NotificationUpdatesRabbitAdapter implements NotificationUpdatesPort
   }
 
   @JsonIgnoreProperties(ignoreUnknown = true)
-  private record DomainEventEnvelope(String notificationId) {}
+  private record DomainEventEnvelope(NotificationId notificationId) {}
 }

@@ -1,13 +1,12 @@
 package co.edu.uco.notification.infrastructure.adapter.out.rabbit;
 
+import co.edu.uco.notification.core.domain.event.NotificationAccepted;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
-import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
+import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -27,24 +26,41 @@ class NotificationUpdatesRabbitAdapterTest {
   @Container @ServiceConnection
   static final RabbitMQContainer RABBIT = new RabbitMQContainer("rabbitmq:3-management");
 
-  @Autowired private RabbitTemplate rabbitTemplate;
-
-  @Autowired private RabbitTopologyProperties topologyProperties;
-
-  @Autowired private ObjectMapper objectMapper;
+  @Autowired private NotificationEventPublisherPort eventPublisherPort;
 
   @Autowired private NotificationUpdatesRabbitAdapter adapter;
 
+  private void publishAcceptedEvent(final NotificationId notificationId) {
+    eventPublisherPort
+        .publish(List.of(new NotificationAccepted(notificationId, Instant.now())))
+        .block();
+  }
+
   @Test
-  void emitsNotificationIdWhenAnEventIsPublishedToTheFanoutExchange() throws Exception {
+  void emitsNotificationIdWhenARealDomainEventIsPublishedToTheFanoutExchange() {
     final NotificationId notificationId = NotificationId.newId();
-    final String payload =
-        objectMapper.writeValueAsString(
-            Map.of("notificationId", notificationId.value(), "occurredOn", Instant.now()));
 
     StepVerifier.create(adapter.updates())
-        .then(() -> rabbitTemplate.convertAndSend(topologyProperties.eventsExchange(), "", payload))
+        .then(() -> publishAcceptedEvent(notificationId))
         .expectNext(notificationId)
+        .thenCancel()
+        .verify(Duration.ofSeconds(10));
+  }
+
+  @Test
+  void keepsEmittingToNewSubscribersAfterThePreviousSubscriberCancels() {
+    final NotificationId first = NotificationId.newId();
+    final NotificationId second = NotificationId.newId();
+
+    StepVerifier.create(adapter.updates())
+        .then(() -> publishAcceptedEvent(first))
+        .expectNext(first)
+        .thenCancel()
+        .verify(Duration.ofSeconds(10));
+
+    StepVerifier.create(adapter.updates())
+        .then(() -> publishAcceptedEvent(second))
+        .expectNext(second)
         .thenCancel()
         .verify(Duration.ofSeconds(10));
   }

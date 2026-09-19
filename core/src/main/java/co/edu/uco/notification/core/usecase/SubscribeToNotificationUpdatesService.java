@@ -10,12 +10,15 @@ import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
 import co.edu.uco.notification.utils.Preconditions;
+import reactor.core.Disposable;
+import reactor.core.publisher.ConnectableFlux;
 import reactor.core.publisher.Flux;
 
 public final class SubscribeToNotificationUpdatesService
     implements SubscribeToNotificationUpdatesUseCase {
 
   private static final int INITIAL_SNAPSHOT_LIMIT = 200;
+  private static final int LIVE_UPDATE_BUFFER_LIMIT = 256;
 
   private final NotificationRepository notificationRepository;
   private final NotificationUpdatesPort notificationUpdatesPort;
@@ -36,18 +39,25 @@ public final class SubscribeToNotificationUpdatesService
     Preconditions.requireNonNull(query, "query must not be null");
     final NotificationSearchCriteria criteria = toCriteria(query);
 
-    final Flux<NotificationLiveUpdate> snapshot =
-        notificationRepository
-            .search(criteria)
-            .map(SubscribeToNotificationUpdatesService::toUpsert);
+    return Flux.defer(
+        () -> {
+          final ConnectableFlux<NotificationLiveUpdate> liveUpdates =
+              notificationUpdatesPort
+                  .updates()
+                  .flatMap(notificationRepository::findById)
+                  .filter(notification -> query.tenantId().equals(notification.tenantId()))
+                  .map(notification -> toLiveUpdate(notification, criteria))
+                  .replay(LIVE_UPDATE_BUFFER_LIMIT);
+          final Disposable connection = liveUpdates.connect();
+          return Flux.concat(snapshot(criteria), liveUpdates)
+              .doFinally(signal -> connection.dispose());
+        });
+  }
 
-    final Flux<NotificationLiveUpdate> liveUpdates =
-        notificationUpdatesPort
-            .updates()
-            .flatMap(notificationRepository::findById)
-            .map(notification -> toLiveUpdate(notification, criteria));
-
-    return Flux.concat(snapshot, liveUpdates);
+  private Flux<NotificationLiveUpdate> snapshot(final NotificationSearchCriteria criteria) {
+    return notificationRepository
+        .search(criteria)
+        .map(SubscribeToNotificationUpdatesService::toUpsert);
   }
 
   private static NotificationSearchCriteria toCriteria(

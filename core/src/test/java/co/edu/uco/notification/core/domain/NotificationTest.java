@@ -11,8 +11,11 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.event.NotificationAccepted;
 import co.edu.uco.notification.core.domain.event.NotificationDelivered;
+import co.edu.uco.notification.core.domain.event.NotificationDiscarded;
 import co.edu.uco.notification.core.domain.event.NotificationFailed;
 import co.edu.uco.notification.core.domain.event.NotificationQueued;
+import co.edu.uco.notification.core.domain.event.NotificationRecoverable;
+import co.edu.uco.notification.core.domain.event.NotificationRequeued;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
 import java.time.Instant;
@@ -138,7 +141,7 @@ class NotificationTest {
   }
 
   @Test
-  void markRecoverableTransitionsAndRecordsAttemptWithoutEvent() {
+  void markRecoverableTransitionsRecordsAttemptAndFiresEvent() {
     final Notification notification = accepted();
     notification.markQueued();
     notification.pullEvents();
@@ -149,7 +152,7 @@ class NotificationTest {
     assertEquals(
         AttemptResult.RECOVERABLE_FAILURE, notification.deliveryAttempts().get(0).result());
     assertEquals(ProviderId.of("brevo"), notification.deliveryAttempts().get(0).providerId());
-    assertTrue(notification.pullEvents().isEmpty());
+    assertInstanceOf(NotificationRecoverable.class, notification.pullEvents().get(0));
   }
 
   @Test
@@ -195,10 +198,12 @@ class NotificationTest {
     final Notification notification = accepted();
     notification.markQueued();
     notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.pullEvents();
 
     notification.requeue();
 
     assertEquals(NotificationStatus.PENDING, notification.status());
+    assertInstanceOf(NotificationRequeued.class, notification.pullEvents().get(0));
   }
 
   @Test
@@ -211,6 +216,7 @@ class NotificationTest {
     notification.requeue();
 
     assertEquals(NotificationStatus.PENDING, notification.status());
+    assertInstanceOf(NotificationRequeued.class, notification.pullEvents().get(0));
   }
 
   @Test
@@ -222,10 +228,12 @@ class NotificationTest {
   @Test
   void discardFromPendingGoesToDiscarded() {
     final Notification notification = accepted();
+    notification.pullEvents();
 
     notification.discard();
 
     assertEquals(NotificationStatus.DISCARDED, notification.status());
+    assertInstanceOf(NotificationDiscarded.class, notification.pullEvents().get(0));
   }
 
   @Test

@@ -1,11 +1,6 @@
 package co.edu.uco.notification.core.domain;
 
-import co.edu.uco.notification.core.domain.event.DomainEvent;
-import co.edu.uco.notification.core.domain.event.DomainEventRecorder;
-import co.edu.uco.notification.core.domain.event.NotificationAccepted;
-import co.edu.uco.notification.core.domain.event.NotificationDelivered;
-import co.edu.uco.notification.core.domain.event.NotificationFailed;
-import co.edu.uco.notification.core.domain.event.NotificationQueued;
+import co.edu.uco.notification.core.domain.event.*;
 import co.edu.uco.notification.core.domain.policy.StatusTransitionPolicy;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
@@ -98,8 +93,10 @@ public final class Notification {
 
   public void markRecoverable(final AttemptOrigin origin, final ProviderId providerId) {
     transitionTo(NotificationStatus.RECOVERABLE);
+    final Instant now = Instant.now();
     deliveryAttempts.add(
-        DeliveryAttempt.of(Instant.now(), AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
+        DeliveryAttempt.of(now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
+    eventRecorder.registerEvent(new NotificationRecoverable(notificationId, now));
   }
 
   public void markRetriesExhausted(final AttemptOrigin origin, final ProviderId providerId) {
@@ -120,10 +117,12 @@ public final class Notification {
 
   public void requeue() {
     transitionTo(NotificationStatus.PENDING);
+    eventRecorder.registerEvent(new NotificationRequeued(notificationId, Instant.now()));
   }
 
   public void discard() {
     transitionTo(NotificationStatus.DISCARDED);
+    eventRecorder.registerEvent(new NotificationDiscarded(notificationId, Instant.now()));
   }
 
   private void transitionTo(final NotificationStatus target) {

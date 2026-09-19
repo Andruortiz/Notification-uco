@@ -1,5 +1,6 @@
 package co.edu.uco.notification.infrastructure.config;
 
+import org.springframework.amqp.core.AnonymousQueue;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
@@ -56,5 +57,17 @@ public class RabbitConfig {
     return BindingBuilder.bind(notificationDispatchDlqQueue)
         .to(notificationDispatchDlqExchange)
         .with(properties.dlq().routingKey());
+  }
+
+  @Bean
+  AnonymousQueue notificationUpdatesQueue() {
+    return new AnonymousQueue();
+  }
+
+  @Bean
+  Binding notificationUpdatesBinding(
+      @Qualifier("notificationUpdatesQueue") final AnonymousQueue notificationUpdatesQueue,
+      @Qualifier("notificationEventsExchange") final FanoutExchange notificationEventsExchange) {
+    return BindingBuilder.bind(notificationUpdatesQueue).to(notificationEventsExchange);
   }
 }

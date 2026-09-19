@@ -101,10 +101,11 @@ sin importar qué tan bien funcione el resto del mecanismo
 - [x] T016 Implementar `NotificationUpdatesRabbitAdapter` en
       `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/rabbit/NotificationUpdatesRabbitAdapter.java`:
       implementa `NotificationUpdatesPort`; `@RabbitListener` sobre la cola anónima de T015;
-      deserializa únicamente el campo `notificationId` del mensaje JSON (ignorando el resto, sin
-      necesitar distinguir el tipo concreto del evento); emite a un `Sinks.Many<NotificationId>`
-      (multicast, `onBackpressureBuffer`); expone `updates()` como `sink.asFlux()` (depende de T012,
-      T015)
+      deserializa únicamente el campo `notificationId` del mensaje JSON tal como lo serializa el
+      publisher real (objeto `{"value": "..."}`, ignorando el resto, sin necesitar distinguir el tipo
+      concreto del evento); emite a un `Sinks.Many<NotificationId>` (multicast, `directBestEffort`:
+      sobrevive a la cancelación del último suscriptor y aísla a los suscriptores lentos); expone
+      `updates()` como `sink.asFlux()` (depende de T012, T015)
 - [x] T017 [P] Añadir prueba de integración
       `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/rabbit/NotificationUpdatesRabbitAdapterTest.java`
       contra RabbitMQ real (Testcontainers, mismo patrón que el resto del proyecto): publica un evento
@@ -169,8 +170,11 @@ como un evento SSE sin ninguna acción manual del lado del cliente.
       construye un `NotificationSearchCriteria` desde la query (tope de 200 para la foto inicial,
       research.md Decisión 6), emite la foto vigente como `UPSERT` vía `repository.search(...)`, y
       concatena el `Flux` en vivo mapeando cada `NotificationUpdatesPort.updates()` a través de
-      `repository.findById(...)` + `criteria.matches(...)` hacia `UPSERT`/`REMOVE` (depende de T012,
-      T013, T016, T024)
+      `repository.findById(...)` + `criteria.matches(...)` hacia `UPSERT`/`REMOVE`. Descarta antes de
+      decidir la acción toda notificación de otro tenant (FR-002: nunca se emite ni siquiera un
+      `REMOVE` con datos ajenos) y se suscribe al feed en vivo antes de cargar la foto inicial, con un
+      `replay` acotado, para no perder cambios ocurridos durante esa carga (depende de T012, T013,
+      T016, T024)
 - [x] T026 [US1] Añadir el bean `subscribeToNotificationUpdatesUseCase(...)` en
       `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/UseCaseConfig.java`
       (depende de T025)
@@ -223,7 +227,7 @@ cumplirlo (esperar `REMOVE`).
 
 ### Implementation for User Story 2
 
-- [x] T032 [US2] Confirmar que el método `subscribe(...)` de `NotificationController.java` (T028)
+- [x] T032 [US2] Confirmar que el método `subscribe(...)` de `NotificationLiveUpdatesController.java` (T028)
       propaga cada combinación de filtros sin perder ninguno — si algún filtro no llega correctamente
       al `SubscribeToNotificationUpdatesQuery`, corregirlo aquí
 - [ ] T033 [US2] Confirmar cobertura ≥80 % líneas / ≥70 % ramas para los archivos nuevos/modificados

@@ -9,6 +9,8 @@ import co.edu.uco.notification.core.port.in.SubscribeToNotificationUpdatesUseCas
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Duration;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -20,6 +22,8 @@ import reactor.core.publisher.Flux;
 @RestController
 public class NotificationLiveUpdatesController {
 
+  private static final Logger LOGGER =
+      LoggerFactory.getLogger(NotificationLiveUpdatesController.class);
   private static final Duration HEARTBEAT_INTERVAL = Duration.ofSeconds(15);
 
   private final SubscribeToNotificationUpdatesUseCase subscribeToNotificationUpdatesUseCase;
@@ -52,6 +56,13 @@ public class NotificationLiveUpdatesController {
     final Flux<ServerSentEvent<NotificationLiveUpdateResponse>> updates =
         subscribeToNotificationUpdatesUseCase
             .subscribe(query)
+            .doOnNext(
+                update ->
+                    LOGGER.debug(
+                        "Live update tenantId={} notificationId={} action={}",
+                        tenantId,
+                        update.notification().notificationId().value(),
+                        update.action()))
             .map(NotificationLiveUpdateResponse::from)
             .map(payload -> ServerSentEvent.builder(payload).event("update").build());
 

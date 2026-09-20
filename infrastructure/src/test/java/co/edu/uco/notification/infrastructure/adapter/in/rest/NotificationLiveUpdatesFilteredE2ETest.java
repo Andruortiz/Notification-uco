@@ -115,9 +115,6 @@ class NotificationLiveUpdatesFilteredE2ETest {
 
   @Test
   void aNotificationOutsideTheFilterEntersTheViewWhenItStartsMatching() {
-    // Ya en FAILED antes de suscribirse: aparece en la foto inicial, confirmando que la
-    // suscripción ya está activa antes de disparar la transición de outsideFilter — sin esto,
-    // publishTransition podría ejecutarse antes de que el servidor empiece a escuchar el fanout.
     persistInStatus("order-filter-0", NotificationStatus.FAILED, List.of());
     final Notification outsideFilter =
         persistInStatus("order-filter-1", NotificationStatus.IN_PROCESS, List.of());

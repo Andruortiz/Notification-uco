@@ -44,7 +44,7 @@ public final class SubscribeToNotificationUpdatesService
           final ConnectableFlux<NotificationLiveUpdate> liveUpdates =
               notificationUpdatesPort
                   .updates()
-                  .flatMap(notificationRepository::findById)
+                  .flatMapSequential(notificationRepository::findById)
                   .filter(notification -> query.tenantId().equals(notification.tenantId()))
                   .map(notification -> toLiveUpdate(notification, criteria))
                   .replay(LIVE_UPDATE_BUFFER_LIMIT);
@@ -57,6 +57,7 @@ public final class SubscribeToNotificationUpdatesService
   private Flux<NotificationLiveUpdate> snapshot(final NotificationSearchCriteria criteria) {
     return notificationRepository
         .search(criteria)
+        .take(INITIAL_SNAPSHOT_LIMIT)
         .map(SubscribeToNotificationUpdatesService::toUpsert);
   }
 

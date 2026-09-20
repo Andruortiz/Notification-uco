@@ -193,8 +193,9 @@ como un evento SSE sin ninguna acción manual del lado del cliente.
       `@RequestMapping("/notifications")` nunca puede producir la ruta exacta `/notifications:subscribe`
       (sin `/` antes de los dos puntos) — solo `/notifications/:subscribe`, que no coincide con el
       contrato. Una clase sin prefijo de clase no combina nada y expone la ruta literal.
-- [ ] T029 [US1] Confirmar cobertura ≥80 % líneas / ≥70 % ramas (Principio IV) para todos los archivos
-      nuevos de esta historia
+- [x] T029 [US1] Confirmar cobertura ≥80 % líneas / ≥70 % ramas (Principio IV) para todos los archivos
+      nuevos de esta historia — cumplida por la puerta JaCoCo del build (`mvnw verify` en verde, umbral
+      por bundle, no archivo por archivo)
 
 **Checkpoint**: User Story 1 completa y probable de forma independiente — MVP entregable
 
@@ -230,8 +231,8 @@ cumplirlo (esperar `REMOVE`).
 - [x] T032 [US2] Confirmar que el método `subscribe(...)` de `NotificationLiveUpdatesController.java` (T028)
       propaga cada combinación de filtros sin perder ninguno — si algún filtro no llega correctamente
       al `SubscribeToNotificationUpdatesQuery`, corregirlo aquí
-- [ ] T033 [US2] Confirmar cobertura ≥80 % líneas / ≥70 % ramas para los archivos nuevos/modificados
-      de esta historia
+- [x] T033 [US2] Confirmar cobertura ≥80 % líneas / ≥70 % ramas para los archivos nuevos/modificados
+      de esta historia — misma puerta JaCoCo por bundle que T029
 
 **Checkpoint**: User Story 1 y 2 funcionan de forma independiente
 
@@ -263,9 +264,10 @@ el previo a la desconexión.
 
 ### Implementation for User Story 3
 
-- [ ] T036 [US3] Confirmar cobertura ≥80 % líneas / ≥70 % ramas para los archivos nuevos/modificados
+- [x] T036 [US3] Confirmar cobertura ≥80 % líneas / ≥70 % ramas para los archivos nuevos/modificados
       de esta historia — se espera que no haga falta código de producción nuevo (research.md, Decisión
-      6: la resincronización es una consecuencia del diseño de US1, no un mecanismo aparte)
+      6: la resincronización es una consecuencia del diseño de US1, no un mecanismo aparte); misma
+      puerta JaCoCo por bundle que T029
 
 **Checkpoint**: Las tres historias de usuario funcionan de forma independiente
 
@@ -273,17 +275,21 @@ el previo a la desconexión.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T037 [P] Confirmar Spotless/SpotBugs/FindSecBugs sin hallazgos sobre todos los archivos nuevos o
-      modificados de esta historia
-- [ ] T038 [P] Confirmar que los logs de `NotificationUpdatesRabbitAdapter` y
-      `SubscribeToNotificationUpdatesService` incluyen `notificationId` y `tenantId` (Principio IX),
-      sin credenciales ni el contenido completo de la notificación
+- [x] T037 [P] Confirmar Spotless/SpotBugs/FindSecBugs sin hallazgos sobre todos los archivos nuevos o
+      modificados de esta historia — `mvnw verify` en verde: Spotless check y SpotBugs con 0 hallazgos
+- [x] T038 [P] Confirmar que el log de cada actualización entregada incluye `notificationId` y
+      `tenantId` (Principio IX), sin credenciales ni el contenido completo de la notificación — vive en
+      `NotificationLiveUpdatesController`, porque el adaptador RabbitMQ solo conoce `notificationId` y
+      `core` no tiene logging
 - [ ] T039 Ejecutar manualmente los escenarios de [quickstart.md](./quickstart.md) (ciclo de vida en
       vivo, vista filtrada, resincronización tras reconexión, aislamiento por tenant, multi-réplica)
-      contra el `docker compose` local
+      contra el `docker compose` local — pendiente explícito al 2026-09-19: no se ha ejecutado; falta
+      asignar dueño
 - [ ] T040 [P] Confirmar que `Front-Notification` (repositorio separado) podría consumir el nuevo
       endpoint SSE sin cambios adicionales del lado del backend — no es parte de esta historia, pero
-      vale la pena verificar que el contrato resultante es consumible sin sorpresas
+      vale la pena verificar que el contrato resultante es consumible sin sorpresas — reasignada a
+      HU2-079 (frontend): el `EventSource` nativo no envía cabeceras y el stream exige `X-Tenant-Id`,
+      por lo que no se puede dar por verificada (decisión abierta sobre cómo suscribirse)
 
 ---
 

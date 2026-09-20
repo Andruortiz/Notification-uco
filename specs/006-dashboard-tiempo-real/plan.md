@@ -52,8 +52,8 @@ compartido nuevo
 
 **Project Type**: hexagonal — nuevo puerto de entrada (`SubscribeToNotificationUpdatesUseCase`) y
 puerto de salida (`NotificationUpdatesPort`) en `core`; nuevo adaptador RabbitMQ de entrada
-(consumidor del fanout) y nuevo método SSE en el `NotificationController` existente, en
-`infrastructure`
+(consumidor del fanout) y un controller nuevo, `NotificationLiveUpdatesController`, con el
+endpoint SSE, en `infrastructure`
 
 **Performance Goals**: SC-001 (cambio de estado reflejado en ≤5 s), SC-003 (resincronización tras
 reconexión en ≤5 s), SC-005 (≥50 sesiones de dashboard concurrentes por tenant sin degradar la
@@ -79,8 +79,8 @@ reutilización de tipos ya existentes (`NotificationSearchResult`, `Notification
 - **I. Arquitectura hexagonal (NON-NEGOTIABLE)** — PASS. Todo lo nuevo es: un puerto de entrada +
   caso de uso en `core` (sin dependencias de Spring — `Flux`/`Mono` de Reactor ya son parte del
   vocabulario de `core` en los puertos existentes), un puerto de salida nuevo (`NotificationUpdatesPort`)
-  implementado por un adaptador RabbitMQ en `infrastructure`, y un método nuevo en el controller REST
-  ya existente. Ningún framework se filtra a `core`: los 3 eventos de dominio nuevos son records
+  implementado por un adaptador RabbitMQ en `infrastructure`, y un controller REST nuevo
+  (`NotificationLiveUpdatesController`). Ningún framework se filtra a `core`: los 3 eventos de dominio nuevos son records
   simples, igual que los 4 ya existentes.
 - **II. Contract-first, API orientada a acciones** — PASS condicionado a Phase 1: `GET
   /notifications:subscribe` es una operación nueva, no CRUD natural (abre un stream, no consulta ni
@@ -109,8 +109,9 @@ reutilización de tipos ya existentes (`NotificationSearchResult`, `Notification
 - **Restricciones técnicas** — reactivo/no bloqueante (PASS, todo `Flux`/`Mono`); multi-réplica (PASS,
   ver Decisión 2 de research.md — el fanout existente resuelve esto sin almacén compartido nuevo);
   ningún bloqueo optimista adicional (no se muta ningún agregado nuevo desde este flujo de lectura);
-  ninguna credencial nueva; los logs del nuevo consumidor incluyen `notificationId` y `tenantId`
-  (resuelto tras la rehidratación desde Mongo) siguiendo el Principio IX.
+  ninguna credencial nueva; el adaptador RabbitMQ solo conoce `notificationId` (no rehidrata) y el
+  log de cada actualización entregada vive en `NotificationLiveUpdatesController`, que conoce el
+  `tenantId` de la suscripción, e incluye ambos identificadores siguiendo el Principio IX.
 
 No violations requiring justification — Complexity Tracking section left empty.
 

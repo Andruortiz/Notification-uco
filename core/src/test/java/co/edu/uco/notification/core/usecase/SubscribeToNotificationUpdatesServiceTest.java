@@ -134,6 +134,36 @@ class SubscribeToNotificationUpdatesServiceTest {
   }
 
   @Test
+  void subscribeNeverEmitsMoreThanTheInitialSnapshotLimit() {
+    when(notificationRepository.search(any()))
+        .thenReturn(Flux.range(0, 201).map(index -> notification(TENANT_ID)));
+    when(notificationUpdatesPort.updates()).thenReturn(Flux.never());
+
+    StepVerifier.create(service.subscribe(aQuery()).take(Duration.ofMillis(300)))
+        .expectNextCount(200)
+        .verifyComplete();
+  }
+
+  @Test
+  void subscribePreservesTheEventOrderEvenWhenAnEarlierRehydrationIsSlower() {
+    final Notification first = notification(TENANT_ID);
+    final Notification second = notification(TENANT_ID);
+    when(notificationRepository.search(any())).thenReturn(Flux.empty());
+    when(notificationUpdatesPort.updates())
+        .thenReturn(Flux.just(first.notificationId(), second.notificationId()));
+    when(notificationRepository.findById(first.notificationId()))
+        .thenReturn(Mono.just(first).delayElement(Duration.ofMillis(150)));
+    when(notificationRepository.findById(second.notificationId())).thenReturn(Mono.just(second));
+
+    StepVerifier.create(service.subscribe(aQuery()))
+        .assertNext(
+            update -> assertEquals(first.notificationId(), update.notification().notificationId()))
+        .assertNext(
+            update -> assertEquals(second.notificationId(), update.notification().notificationId()))
+        .verifyComplete();
+  }
+
+  @Test
   void subscribeStartsWithAFreshSearchOnEveryInvocation() {
     when(notificationRepository.search(any())).thenReturn(Flux.empty());
     when(notificationUpdatesPort.updates()).thenReturn(Flux.empty());

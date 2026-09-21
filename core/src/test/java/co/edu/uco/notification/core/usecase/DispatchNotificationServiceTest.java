@@ -2,6 +2,7 @@ package co.edu.uco.notification.core.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -27,10 +28,12 @@ import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
+import co.edu.uco.notification.core.exception.ProviderNotAvailableException;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -53,15 +56,19 @@ class DispatchNotificationServiceTest {
 
   private DispatchNotificationService service;
 
+  private NotificationSenderRegistry senderRegistry;
+
   private final RetryPolicy retryPolicy = new RetryPolicy();
 
   @BeforeEach
   void setUp() {
+    when(notificationSenderPort.providerId()).thenReturn(ProviderId.of("brevo"));
+    senderRegistry = new NotificationSenderRegistry(List.of(notificationSenderPort));
     service =
         new DispatchNotificationService(
             notificationRepository,
             channelCatalogPort,
-            notificationSenderPort,
+            senderRegistry,
             eventPublisherPort,
             retryPolicy);
   }
@@ -222,6 +229,60 @@ class DispatchNotificationServiceTest {
   }
 
   @Test
+  void dispatchSendsThroughTheAdapterOfThePreferredProviderOnly() {
+    final NotificationSenderPort otherSender = Mockito.mock(NotificationSenderPort.class);
+    when(otherSender.providerId()).thenReturn(ProviderId.of("otro"));
+    final DispatchNotificationService serviceWithTwoSenders =
+        new DispatchNotificationService(
+            notificationRepository,
+            channelCatalogPort,
+            new NotificationSenderRegistry(List.of(otherSender, notificationSenderPort)),
+            eventPublisherPort,
+            retryPolicy);
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(serviceWithTwoSenders.dispatch(notification.notificationId()))
+        .verifyComplete();
+
+    verify(notificationSenderPort).send(notification);
+    verify(otherSender, never()).send(any(Notification.class));
+    assertEquals(ProviderId.of("brevo"), notification.deliveryAttempts().get(0).providerId());
+  }
+
+  @Test
+  void
+      dispatchFailsWithProviderNotAvailableAndLeavesTheNotificationUntouchedWhenNoAdapterMatches() {
+    final NotificationSenderPort otherSender = Mockito.mock(NotificationSenderPort.class);
+    when(otherSender.providerId()).thenReturn(ProviderId.of("otro"));
+    final DispatchNotificationService serviceWithoutThePreferredProvider =
+        new DispatchNotificationService(
+            notificationRepository,
+            channelCatalogPort,
+            new NotificationSenderRegistry(List.of(otherSender)),
+            eventPublisherPort,
+            retryPolicy);
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    when(notificationRepository.findById(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
+    when(channelCatalogPort.findActiveRoute(notification.channelType(), notification.tenantId()))
+        .thenReturn(Mono.just(activeRoute()));
+
+    StepVerifier.create(serviceWithoutThePreferredProvider.dispatch(notification.notificationId()))
+        .expectError(ProviderNotAvailableException.class)
+        .verify();
+
+    assertEquals(NotificationStatus.PENDING, notification.status());
+    assertTrue(notification.deliveryAttempts().isEmpty());
+    verify(otherSender, never()).send(any(Notification.class));
+    verify(notificationRepository, never()).save(any(Notification.class));
+    verify(eventPublisherPort, never()).publish(any());
+  }
+
+  @Test
   void dispatchRejectsNullNotificationId() {
     assertThrows(NullPointerException.class, () -> service.dispatch(null));
   }
@@ -232,7 +293,7 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                null, channelCatalogPort, notificationSenderPort, eventPublisherPort, retryPolicy));
+                null, channelCatalogPort, senderRegistry, eventPublisherPort, retryPolicy));
   }
 
   @Test
@@ -241,15 +302,11 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                notificationRepository,
-                null,
-                notificationSenderPort,
-                eventPublisherPort,
-                retryPolicy));
+                notificationRepository, null, senderRegistry, eventPublisherPort, retryPolicy));
   }
 
   @Test
-  void constructorRejectsNullNotificationSenderPort() {
+  void constructorRejectsNullNotificationSenderRegistry() {
     assertThrows(
         NullPointerException.class,
         () ->
@@ -263,11 +320,7 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                notificationRepository,
-                channelCatalogPort,
-                notificationSenderPort,
-                null,
-                retryPolicy));
+                notificationRepository, channelCatalogPort, senderRegistry, null, retryPolicy));
   }
 
   @Test
@@ -278,7 +331,7 @@ class DispatchNotificationServiceTest {
             new DispatchNotificationService(
                 notificationRepository,
                 channelCatalogPort,
-                notificationSenderPort,
+                senderRegistry,
                 eventPublisherPort,
                 null));
   }

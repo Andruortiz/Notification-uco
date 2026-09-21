@@ -1,5 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import co.edu.uco.notification.core.domain.Notification;
@@ -47,6 +48,14 @@ class SimulatedNotificationProviderTest {
         new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
 
     assertThrows(NullPointerException.class, () -> provider.send(null));
+  }
+
+  @Test
+  void declaresTheSimulatedProviderId() {
+    final SimulatedNotificationProvider provider =
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
+
+    assertEquals(ProviderId.of("simulated"), provider.providerId());
   }
 
   @Test

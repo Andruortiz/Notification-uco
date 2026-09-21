@@ -14,26 +14,23 @@ registrado sea el que de verdad envía."
 
 ### Session 2026-09-21
 
-Las tres preguntas siguientes se identificaron en la revisión de ambigüedad. No hubo respuesta del
-usuario en esta sesión, así que cada una quedó resuelta con el valor por defecto argumentado que se
-indica y está marcada como **pendiente de confirmación**. Si el usuario elige otra opción, cambian los
-requisitos citados en cada línea.
+Las tres preguntas siguientes se identificaron en la revisión de ambigüedad y quedaron **confirmadas
+por el usuario** al aprobar el plan.
 
 - Q: ¿Qué le pasa a una notificación cuyo proveedor preferente no corresponde a ningún proveedor
-  disponible? → A (por defecto, pendiente de confirmación): se trata como error de configuración, no
-  de entrega: el despacho falla, no se registra intento, la notificación conserva su estado y el
-  mensaje termina en la cola de mensajes muertos con la causa. Alternativa descartada: marcarla como
-  fallida definitivamente, que la haría indistinguible de un rechazo permanente del proveedor.
-  Afecta a FR-004, FR-005, FR-006 y a la User Story 2.
-- Q: ¿Cuándo debe fallar el sistema si dos proveedores disponibles declaran el mismo `providerId`? → A
-  (por defecto, pendiente de confirmación): al arrancar, no al despachar — un arranque que falla es
-  visible de inmediato, mientras que un fallo en el despacho aparecería solo cuando llegue una
-  notificación de ese canal. Afecta a FR-009.
+  disponible? → A: se trata como error de configuración, no de entrega: el despacho falla, no se
+  registra intento, la notificación conserva su estado y el mensaje termina en la cola de mensajes
+  muertos con la causa. Alternativa descartada: marcarla como fallida definitivamente, que la haría
+  indistinguible de un rechazo permanente del proveedor. Afecta a FR-004, FR-005, FR-006 y a la User
+  Story 2.
+- Q: ¿Cuándo debe fallar el sistema si dos proveedores disponibles declaran el mismo `providerId`? → A:
+  al arrancar, no al despachar — un arranque que falla es visible de inmediato, mientras que un fallo
+  en el despacho aparecería solo cuando llegue una notificación de ese canal. Afecta a FR-009.
 - Q: ¿El `providerId` de cada proveedor de envío es una constante que el propio proveedor declara, o
-  un valor configurable por entorno? → A (por defecto, pendiente de confirmación): una constante que
-  el propio proveedor declara; el catálogo es el único punto de configuración. Un identificador
-  configurable permitiría que el mismo despliegue cambiara de destino sin tocar el catálogo, que es
-  justo la indirección que esta historia busca eliminar. Afecta a FR-001 y a las Assumptions.
+  un valor configurable por entorno? → A: una constante que el propio proveedor declara; el catálogo es
+  el único punto de configuración. Un identificador configurable permitiría que el mismo despliegue
+  cambiara de destino sin tocar el catálogo, que es justo la indirección que esta historia busca
+  eliminar. Afecta a FR-001 y a las Assumptions.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -234,7 +231,7 @@ despacho.
   valor. El proveedor simulado declara el identificador `simulated`, que es el valor que la
   configuración de canales ya siembra hoy para el canal `EMAIL`.
 - El tratamiento del `providerId` sin proveedor disponible y el momento del fallo por identificadores
-  duplicados están resueltos con valores por defecto pendientes de confirmación — ver Clarifications.
+  duplicados están resueltos y confirmados por el usuario — ver Clarifications.
 - Una notificación que queda pendiente tras un fallo por proveedor no resuelto será reintentada por el
   mecanismo de recuperación de pendientes ya existente. Eso implica que un error de configuración
   persistente genera intentos repetidos (y entradas repetidas en la cola de mensajes muertos) hasta que

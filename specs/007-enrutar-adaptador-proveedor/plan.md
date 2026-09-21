@@ -82,11 +82,10 @@ modificados en `core`, 3 modificados en `infrastructure`, 1 clase E2E nueva. Sin
   `./mvnw -B -ntp verify`.
 - **V. Trazabilidad en git** — rama `feature/HU2-088-enrutar-adaptador-por-proveedor`, commits de una
   sola línea; los artefactos de spec-kit se commitean en esta misma rama.
-- **VI. Desarrollo asistido por IA, gobernado por spec-kit** — PASS con salvedad explícita: `spec.md`
-  quedó con tres decisiones marcadas como *pendientes de confirmación* en su sección
-  `## Clarifications` porque no hubo interacción con el usuario en la sesión. El plan implementa el
-  valor por defecto de cada una; la aprobación del usuario sobre este plan es también la confirmación
-  de esas tres decisiones.
+- **VI. Desarrollo asistido por IA, gobernado por spec-kit** — PASS. `spec.md` registra tres
+  decisiones en su sección `## Clarifications`, confirmadas por el usuario al aprobar este plan
+  (2026-09-21): proveedor sin adaptador = error de configuración con DLQ, sin intento ni cambio de
+  estado; identificadores duplicados = fallo al arrancar; `providerId` = constante del adaptador.
 - **VII. Sin atajos** — el reencolado repetido de una notificación `PENDING` cuyo proveedor no existe
   (y sus entradas repetidas en la DLQ) queda documentado como limitación conocida con dueño y fecha
   en research.md, Decisión 3 — no se tapa ni se resuelve con un parche dentro de esta historia.

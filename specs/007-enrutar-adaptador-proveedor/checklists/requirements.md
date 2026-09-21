@@ -32,9 +32,6 @@
 ## Notes
 
 - El spec no deja marcadores `[NEEDS CLARIFICATION]`: las tres decisiones abiertas están registradas en
-  `## Clarifications` con su valor por defecto y marcadas como pendientes de confirmación del usuario.
-  La primera (tratamiento del `providerId` sin proveedor disponible) es la única que cambia
-  comportamiento observable: si se confirma la alternativa, cambian FR-004, FR-005, FR-006 y el
-  escenario 2 de la User Story 2.
+  `## Clarifications` y confirmadas por el usuario al aprobar el plan.
 - `ADR-0009` se cita como referencia de la restricción de extensibilidad tal como la nombra la
   constitución del proyecto.

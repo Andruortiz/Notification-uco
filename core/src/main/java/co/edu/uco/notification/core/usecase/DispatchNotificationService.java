@@ -14,6 +14,7 @@ import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.List;
@@ -23,14 +24,14 @@ public final class DispatchNotificationService implements DispatchNotificationUs
 
   private final NotificationRepository notificationRepository;
   private final ChannelCatalogPort channelCatalogPort;
-  private final NotificationSenderPort notificationSenderPort;
+  private final NotificationSenderRegistry notificationSenderRegistry;
   private final NotificationEventPublisherPort eventPublisherPort;
   private final RetryPolicy retryPolicy;
 
   public DispatchNotificationService(
       final NotificationRepository notificationRepository,
       final ChannelCatalogPort channelCatalogPort,
-      final NotificationSenderPort notificationSenderPort,
+      final NotificationSenderRegistry notificationSenderRegistry,
       final NotificationEventPublisherPort eventPublisherPort,
       final RetryPolicy retryPolicy) {
     this.notificationRepository =
@@ -38,9 +39,9 @@ public final class DispatchNotificationService implements DispatchNotificationUs
             notificationRepository, "notificationRepository must not be null");
     this.channelCatalogPort =
         Preconditions.requireNonNull(channelCatalogPort, "channelCatalogPort must not be null");
-    this.notificationSenderPort =
+    this.notificationSenderRegistry =
         Preconditions.requireNonNull(
-            notificationSenderPort, "notificationSenderPort must not be null");
+            notificationSenderRegistry, "notificationSenderRegistry must not be null");
     this.eventPublisherPort =
         Preconditions.requireNonNull(eventPublisherPort, "eventPublisherPort must not be null");
     this.retryPolicy = Preconditions.requireNonNull(retryPolicy, "retryPolicy must not be null");
@@ -64,14 +65,21 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   }
 
   private Mono<Void> attemptSend(final Notification notification, final ChannelRoute route) {
+    return Mono.fromCallable(() -> notificationSenderRegistry.resolve(route.preferredProvider()))
+        .flatMap(sender -> sendThrough(sender, notification, route.preferredProvider()));
+  }
+
+  private Mono<Void> sendThrough(
+      final NotificationSenderPort sender,
+      final Notification notification,
+      final ProviderId providerId) {
     notification.markQueued();
 
-    return notificationSenderPort
+    return sender
         .send(notification)
         .flatMap(
             outcome ->
-                saveAndPublish(
-                    applyOutcome(notification, outcome, route.preferredProvider(), retryPolicy)));
+                saveAndPublish(applyOutcome(notification, outcome, providerId, retryPolicy)));
   }
 
   private Mono<Void> saveAndPublish(final Notification notification) {

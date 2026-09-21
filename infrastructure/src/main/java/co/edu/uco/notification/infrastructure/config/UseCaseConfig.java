@@ -5,10 +5,12 @@ import co.edu.uco.notification.core.port.in.*;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.usecase.*;
 import java.time.Duration;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -31,16 +33,22 @@ public class UseCaseConfig {
   }
 
   @Bean
+  NotificationSenderRegistry notificationSenderRegistry(
+      final List<NotificationSenderPort> notificationSenderPorts) {
+    return new NotificationSenderRegistry(notificationSenderPorts);
+  }
+
+  @Bean
   DispatchNotificationUseCase dispatchNotificationUseCase(
       final NotificationRepository notificationRepository,
       final ChannelCatalogPort channelCatalogPort,
-      final NotificationSenderPort notificationSenderPort,
+      final NotificationSenderRegistry notificationSenderRegistry,
       final NotificationEventPublisherPort eventPublisherPort,
       final RetryPolicy retryPolicy) {
     return new DispatchNotificationService(
         notificationRepository,
         channelCatalogPort,
-        notificationSenderPort,
+        notificationSenderRegistry,
         eventPublisherPort,
         retryPolicy);
   }

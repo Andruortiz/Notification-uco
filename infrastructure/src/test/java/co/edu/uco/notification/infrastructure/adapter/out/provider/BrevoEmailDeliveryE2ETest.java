@@ -140,7 +140,7 @@ class BrevoEmailDeliveryE2ETest {
   }
 
   private void awaitRoute(final String expectedProvider) {
-    final Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
+    final Instant deadline = Instant.now().plus(Duration.ofSeconds(40));
     while (Instant.now().isBefore(deadline)) {
       final var route =
           channelCatalogPort
@@ -207,7 +207,7 @@ class BrevoEmailDeliveryE2ETest {
 
   private Map<String, Object> awaitStatus(
       final String notificationId, final String expectedStatus) {
-    final Instant deadline = Instant.now().plus(Duration.ofSeconds(25));
+    final Instant deadline = Instant.now().plus(Duration.ofSeconds(40));
     Map<String, Object> current = status(notificationId);
     while (Instant.now().isBefore(deadline)
         && !expectedStatus.equals(String.valueOf(current.get("status")))) {

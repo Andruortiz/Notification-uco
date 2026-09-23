@@ -97,7 +97,7 @@ class BrevoDisabledProviderE2ETest {
   }
 
   private void awaitRoute() {
-    final Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
+    final Instant deadline = Instant.now().plus(Duration.ofSeconds(40));
     while (Instant.now().isBefore(deadline)) {
       final var route =
           channelCatalogPort

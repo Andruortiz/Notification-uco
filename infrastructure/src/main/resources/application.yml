@@ -26,12 +26,18 @@ notification:
     refresh-interval-ms: ${NOTIFICATION_CATALOG_REFRESH_INTERVAL_MS:30000}
     channels:
       EMAIL:
-        providers:
-          - simulated
+        providers: ${NOTIFICATION_EMAIL_PROVIDERS:simulated,brevo}
         content-schema:
   provider:
     simulated:
       result: ${SIMULATED_PROVIDER_RESULT:ACCEPTED}
+    brevo:
+      api-key: ${BREVO_API_KEY:}
+      sender-email: ${BREVO_SENDER_EMAIL:}
+      sender-name: ${BREVO_SENDER_NAME:}
+      base-url: ${BREVO_BASE_URL:https://api.brevo.com}
+      timeout-ms: ${BREVO_TIMEOUT_MS:10000}
+      connect-timeout-ms: ${BREVO_CONNECT_TIMEOUT_MS:5000}
   rabbit:
     dispatch:
       exchange: notification.dispatch.exchange

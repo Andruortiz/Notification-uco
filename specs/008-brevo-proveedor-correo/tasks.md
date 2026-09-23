@@ -29,14 +29,14 @@ historias necesitan).
 **Purpose**: la pieza de `core` y las clases de transporte/configuración que todas las historias
 de usuario necesitan. Ninguna historia puede probarse sin esto.
 
-- [ ] T001 Crear `ProviderDisabledException` en `core/src/main/java/co/edu/uco/notification/core/exception/ProviderDisabledException.java` (hermana de `ProviderNotAvailableException`; recibe `ProviderId` + motivo)
-- [ ] T002 [P] Prueba de `ProviderDisabledException` en `core/src/test/java/co/edu/uco/notification/core/exception/ProviderDisabledExceptionTest.java`
-- [ ] T003 [P] Crear `BrevoResponseClassifier` en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoResponseClassifier.java` (función pura y total, research.md Decisión 4, quince filas)
-- [ ] T004 [P] Prueba de `BrevoResponseClassifier` en `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoResponseClassifierTest.java` (las quince filas)
-- [ ] T005 [P] Crear `BrevoProviderProperties` en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoProviderProperties.java` (`@ConfigurationProperties("notification.provider.brevo")`: api-key, sender-email, sender-name, base-url, timeout-ms, connect-timeout-ms)
-- [ ] T006 [P] Crear `BrevoEmailRequest` en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoEmailRequest.java` (record del cuerpo JSON, contracts/brevo-transactional-email.md)
-- [ ] T007 Crear `BrevoWebClientConfig` en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/BrevoWebClientConfig.java` (`@Bean WebClient` sobre `ReactorClientHttpConnector`, `responseTimeout`/`CONNECT_TIMEOUT_MILLIS` desde `BrevoProviderProperties`, sin wiretap)
-- [ ] T008 [P] Crear ayuda de pruebas `FakeBrevoServer` en `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/provider/FakeBrevoServer.java` (`com.sun.net.httpserver.HttpServer`, sin dependencias nuevas)
+- [x] T001 Crear `ProviderDisabledException` en `core/src/main/java/co/edu/uco/notification/core/exception/ProviderDisabledException.java` (hermana de `ProviderNotAvailableException`; recibe `ProviderId` + motivo)
+- [x] T002 [P] Prueba de `ProviderDisabledException` en `core/src/test/java/co/edu/uco/notification/core/exception/ProviderDisabledExceptionTest.java`
+- [x] T003 [P] Crear `BrevoResponseClassifier` en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoResponseClassifier.java` (función pura y total, research.md Decisión 4, quince filas)
+- [x] T004 [P] Prueba de `BrevoResponseClassifier` en `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoResponseClassifierTest.java` (las quince filas)
+- [x] T005 [P] Crear `BrevoProviderProperties` — **desviación**: vive en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/BrevoProviderProperties.java`, no en `adapter/out/provider`, porque `BrevoWebClientConfig` (módulo `config`) la consume y dejarla en `adapter` producía un ciclo `adapter -> config -> adapter` detectado por `ModularityTests` (mismo patrón ya resuelto antes para `RabbitTopologyProperties`)
+- [x] T006 [P] Crear `BrevoEmailRequest` en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoEmailRequest.java` (record del cuerpo JSON, contracts/brevo-transactional-email.md)
+- [x] T007 Crear `BrevoWebClientConfig` en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/BrevoWebClientConfig.java` (`@Bean WebClient` sobre `ReactorClientHttpConnector`, `responseTimeout`/`CONNECT_TIMEOUT_MILLIS` desde `BrevoProviderProperties`, sin wiretap)
+- [x] T008 [P] Crear ayuda de pruebas `FakeBrevoServer` en `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/provider/FakeBrevoServer.java` (`com.sun.net.httpserver.HttpServer`, sin dependencias nuevas)
 
 **Checkpoint**: con esto listo, todas las historias de usuario pueden implementarse.
 
@@ -49,12 +49,12 @@ petición real y queda `DELIVERED` con el `providerId` del proveedor real.
 
 **Independent Test**: ver spec.md, User Story 1, Acceptance Scenarios 1–4.
 
-- [ ] T009 [US1] Implementar `BrevoNotificationProvider.send(...)` (camino feliz) en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoNotificationProvider.java`: construir `BrevoEmailRequest` desde `Notification` + `BrevoProviderProperties` (research.md Decisión 5), llamar con `WebClient`, clasificar con `BrevoResponseClassifier`
-- [ ] T010 [US1] `providerId()` = `ProviderId.of("brevo")` en `BrevoNotificationProvider`
-- [ ] T011 [US1] Modificar `infrastructure/src/main/resources/application.yml`: canal `EMAIL` lista `${NOTIFICATION_EMAIL_PROVIDERS:simulated,brevo}` + bloque `notification.provider.brevo` sin valores de credencial (research.md Decisión 3 y 12 — seguir el procedimiento de stash antes de tocar este archivo)
-- [ ] T012 [US1] Modificar `ChannelCatalogSeederTest` en `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/catalog/ChannelCatalogSeederTest.java` si hace falta reflejar el nuevo valor sembrado
-- [ ] T013 [P] [US1] Pruebas de `BrevoNotificationProvider` (camino feliz) en `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoNotificationProviderTest.java`: petición construida contra `FakeBrevoServer`, remitente desde configuración, único destinatario
-- [ ] T014 [US1] `BrevoEmailDeliveryE2ETest` en `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoEmailDeliveryE2ETest.java`: escenario de entrega completa contra `FakeBrevoServer` + Testcontainers (Mongo, RabbitMQ) + `WebTestClient` (Acceptance Scenarios 1, 2, 4); escenario con `simulated` preferente sin llamar a Brevo (Scenario 3)
+- [x] T009 [US1] Implementar `BrevoNotificationProvider.send(...)` (camino feliz) en `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoNotificationProvider.java`: construir `BrevoEmailRequest` desde `Notification` + `BrevoProviderProperties` (research.md Decisión 5), llamar con `WebClient`, clasificar con `BrevoResponseClassifier`
+- [x] T010 [US1] `providerId()` = `ProviderId.of("brevo")` en `BrevoNotificationProvider`
+- [x] T011 [US1] Modificar `infrastructure/src/main/resources/application.yml`: canal `EMAIL` lista `${NOTIFICATION_EMAIL_PROVIDERS:simulated,brevo}` + bloque `notification.provider.brevo` sin valores de credencial (research.md Decisión 3 y 12 — stash aplicado antes de editar)
+- [x] T012 [US1] Verificado: `ChannelCatalogSeederTest` no depende del `application.yml` real (construye `ChannelCatalogProperties` en memoria) — sin cambios necesarios
+- [x] T013 [P] [US1] Pruebas de `BrevoNotificationProvider` (camino feliz) en `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoNotificationProviderTest.java`: petición construida contra `FakeBrevoServer`, remitente desde configuración, único destinatario — verde
+- [x] T014 [US1] `BrevoEmailDeliveryE2ETest` en `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/provider/BrevoEmailDeliveryE2ETest.java`: 6/6 verde con Testcontainers reales (Mongo+RabbitMQ) — entrega, salto del simulado, clasificación 400/500, no-filtración
 
 **Checkpoint**: MVP funcional e independientemente probable.
 
@@ -67,10 +67,10 @@ una vez al arrancar, y `send(...)` falla sin registrar intento ni cambiar el est
 
 **Independent Test**: ver spec.md, User Story 2, Acceptance Scenarios 1–5.
 
-- [ ] T015 [US2] Decisión de habilitación en el constructor de `BrevoNotificationProvider` (una vez, a partir de `BrevoProviderProperties`) + log `WARN` único con `providerId` y motivo, sin valores de credencial (research.md Decisión 2)
-- [ ] T016 [US2] `send(...)` de un adaptador deshabilitado devuelve `Mono.error(new ProviderDisabledException(...))` **antes** de construir cualquier petición
-- [ ] T017 [P] [US2] Pruebas del camino deshabilitado en `BrevoNotificationProviderTest.java`: sin api-key, sin sender-email, con ambas presentes (no emite aviso)
-- [ ] T018 [US2] Escenario de proveedor deshabilitado en `BrevoEmailDeliveryE2ETest.java`: arranque sin credenciales, notificación no entregada, no marcada fallida, sin intento, estado intacto, mensaje trazable (mismo patrón que `ProviderRoutingE2ETest.leavesATraceableFailureWhenThePreferredProviderHasNoAdapter`)
+- [x] T015 [US2] Decisión de habilitación en el constructor de `BrevoNotificationProvider` (una vez, a partir de `BrevoProviderProperties`) + log `WARN` único con `providerId` y motivo, sin valores de credencial (research.md Decisión 2)
+- [x] T016 [US2] `send(...)` de un adaptador deshabilitado devuelve `Mono.error(new ProviderDisabledException(...))` **antes** de construir cualquier petición
+- [x] T017 [P] [US2] Pruebas del camino deshabilitado en `BrevoNotificationProviderTest.java`: sin api-key, sin sender-email, y prueba dedicada del aviso único de arranque con `ListAppender` (nombra `brevo`/`sender-email`, nunca la clave) — verde
+- [x] T018 [US2] Escenario de proveedor deshabilitado — **desviación**: en un archivo separado, `BrevoDisabledProviderE2ETest.java`, no dentro de `BrevoEmailDeliveryE2ETest.java`, porque requiere un `@SpringBootTest` sin las credenciales que la clase de US1 sí necesita (contextos Spring distintos). 2/2 verde con Testcontainers reales
 
 **Checkpoint**: US1 + US2 funcionan de forma independiente.
 
@@ -83,10 +83,10 @@ sin asunto falla sin llamar al proveedor.
 
 **Independent Test**: ver spec.md, User Story 3, Acceptance Scenarios 1–6.
 
-- [ ] T019 [US3] Verificar que `BrevoResponseClassifierTest` (T004) cubre las quince filas de research.md Decisión 4, incluidos timeout y error de conexión
-- [ ] T020 [US3] Camino de asunto vacío en `BrevoNotificationProvider.send(...)`: si `content().subject()` es nulo o en blanco, `Mono.just(PERMANENT_FAILURE)` sin llamar al proveedor (research.md Decisión 6, Q1 confirmada)
-- [ ] T021 [P] [US3] Prueba de asunto vacío en `BrevoNotificationProviderTest.java`: cero peticiones a `FakeBrevoServer`, resultado `PERMANENT_FAILURE`
-- [ ] T022 [P] [US3] Prueba de tiempo de espera en `BrevoNotificationProviderTest.java` con aserción explícita de `Duration` (SC-006), usando el retardo programable de `FakeBrevoServer`
+- [x] T019 [US3] Verificado: `BrevoResponseClassifierTest` (T004) cubre las quince filas de research.md Decisión 4, incluidos timeout y error de conexión — 18 pruebas, verde
+- [x] T020 [US3] Camino de asunto vacío en `BrevoNotificationProvider.send(...)`: si `content().subject()` es nulo o en blanco, `Mono.just(PERMANENT_FAILURE)` sin llamar al proveedor (research.md Decisión 6, Q1 confirmada)
+- [x] T021 [P] [US3] Prueba de asunto vacío en `BrevoNotificationProviderTest.java`: cero peticiones a `FakeBrevoServer`, resultado `PERMANENT_FAILURE` (nulo y en blanco) — verde
+- [x] T022 [P] [US3] Prueba de tiempo de espera en `BrevoNotificationProviderTest.java` con aserción explícita de `Duration` (SC-006), usando el retardo programable de `FakeBrevoServer` — verde
 
 **Checkpoint**: US1 + US2 + US3 funcionan de forma independiente.
 
@@ -99,9 +99,9 @@ mensajes internos.
 
 **Independent Test**: ver spec.md, User Story 4, Acceptance Scenarios 1–4.
 
-- [ ] T023 [US4] Confirmar que `BrevoNotificationProvider` solo registra `notificationId`, `tenantId`, `providerId`, categoría y código de estado (nunca credencial/asunto/cuerpo/dirección) — research.md Decisión 9
-- [ ] T024 [US4] Prueba de no filtración en `BrevoEmailDeliveryE2ETest.java`: `ListAppender` de Logback enganchado al logger raíz durante un despacho completo, más una cola temporal en el exchange de eventos; afirmar ausencia del valor de la api-key, el asunto, el cuerpo y la dirección (SC-004)
-- [ ] T025 [US4] Prueba equivalente para el despacho que falla (deshabilitado): el registro del fallo contiene notificationId/tenant/provider/categoría y nada prohibido
+- [x] T023 [US4] Confirmado por lectura del código: `BrevoNotificationProvider` solo registra `notificationId`, `tenantId`, `providerId`, categoría y código/tipo de error (nunca credencial/asunto/cuerpo/dirección) — research.md Decisión 9
+- [x] T024 [US4] Prueba de no filtración en `BrevoEmailDeliveryE2ETest.java`: `ListAppender` + cola temporal en el exchange de eventos + cola de despacho — verde
+- [x] T025 [US4] Prueba equivalente para el despacho que falla (deshabilitado) en `BrevoDisabledProviderE2ETest.java`: logs sin asunto/cuerpo/dirección — verde
 
 **Checkpoint**: US1–US4 funcionan de forma independiente.
 
@@ -114,8 +114,8 @@ notificaciones (deduplicación real: riesgo residual documentado, no resuelto po
 
 **Independent Test**: ver spec.md, User Story 5, Acceptance Scenarios 1–3.
 
-- [ ] T026 [US5] `headers["Idempotency-Key"] = notificationId` en la construcción de `BrevoEmailRequest` (research.md Decisión 8)
-- [ ] T027 [P] [US5] Prueba en `BrevoNotificationProviderTest.java`: dos despachos de la misma notificación llevan la misma clave; dos notificaciones distintas llevan claves distintas (SC-009)
+- [x] T026 [US5] `headers["Idempotency-Key"] = notificationId` en la construcción de `BrevoEmailRequest` (research.md Decisión 8)
+- [x] T027 [P] [US5] Prueba en `BrevoNotificationProviderTest.java`: dos despachos de la misma notificación llevan la misma clave; dos notificaciones distintas llevan claves distintas (SC-009) — verde
 
 **Checkpoint**: las cinco historias de usuario son independientemente funcionales.
 
@@ -123,12 +123,12 @@ notificaciones (deduplicación real: riesgo residual documentado, no resuelto po
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T028 Ejecutar `spotless:apply` tras cada clase nueva o modificada
-- [ ] T029 Confirmar `HexagonalArchitectureTest` y `ModularityTests` en verde
-- [ ] T030 Confirmar cobertura ≥80 % líneas / ≥70 % ramas de los archivos nuevos (`./mvnw -B -ntp verify`)
-- [ ] T031 `./mvnw -B -ntp verify` completo; si únicamente fallan `DeadLetterQueueE2ETest` y `RabbitRetryConfigCustomAttemptsTest`, repetir excluyéndolas y reportarlo explícitamente (plan.md, paso 7)
-- [ ] T032 `git stash pop` del cambio ajeno de `application.yml` (research.md Decisión 12); si hay conflicto, no resolverlo aquí — reportar el comando exacto
-- [ ] T033 Ejecutar la validación automatizada de `quickstart.md` (sección previa a la prueba manual de humo)
+- [x] T028 Ejecutar `spotless:apply` tras cada clase nueva o modificada
+- [x] T029 Confirmar `HexagonalArchitectureTest` y `ModularityTests` en verde — verde (incluye la reubicación de `BrevoProviderProperties` a `config` para no crear un ciclo de módulos)
+- [x] T030 Confirmar cobertura ≥80 % líneas / ≥70 % ramas de los archivos nuevos — "All coverage checks have been met" en `core` e `infrastructure`
+- [x] T031 `./mvnw -B -ntp verify` completo; las únicas dos pruebas que fallan en la corrida sin exclusiones son `DeadLetterQueueE2ETest` y `RabbitRetryConfigCustomAttemptsTest` (broker local en `localhost:5673`, no Testcontainers, fallo preexistente y conocido de este entorno). Excluyéndolas: **BUILD SUCCESS**, 4/4 módulos, 0 bugs SpotBugs, cobertura cumplida. Nota: `BrevoDisabledProviderE2ETest` falló una vez por temporización bajo carga (mismo patrón de espera de DLQ) corriendo junto a toda la suite; confirmado 3 veces en aislamiento que pasa de forma consistente, y se amplió su margen de espera de 25s a 45s
+- [x] T032 `git stash pop` del cambio ajeno de `application.yml` — sin conflicto
+- [ ] T033 Validación automatizada de `quickstart.md`: pendiente, no ejecutada en esta sesión
 
 ---
 

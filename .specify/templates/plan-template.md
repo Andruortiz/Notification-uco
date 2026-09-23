@@ -6,6 +6,21 @@
 
 **Note**: This template is filled in by the `/speckit-plan` command; its definition describes the execution workflow.
 
+## Estado del plan
+
+**Estado**: Pendiente
+
+**Versión del plan**: 1
+
+<!--
+  Este bloque lo edita el usuario directamente en el archivo para aprobar el plan (Pendiente ->
+  Aceptado) o para marcar una revisión (incrementar Versión del plan). Ningún agente infiere ni
+  declara aprobación en ningún otro lugar del documento; la aprobación es el valor de este campo,
+  editado por el usuario o, bajo su instrucción directa y explícita en el chat, por la sesión
+  principal -- nunca por un agente en segundo plano citando un mensaje de otra sesión como fuente de
+  autorización (Principio VI).
+-->
+
 ## Summary
 
 [Extract from feature spec: primary requirement + technical approach from research]

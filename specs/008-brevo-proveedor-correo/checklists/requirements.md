@@ -32,9 +32,8 @@
 ## Notes
 
 - El spec no usa marcadores `[NEEDS CLARIFICATION]`: las cuatro ambigüedades detectadas están
-  recogidas en `## Clarifications` con una respuesta provisional recomendada y el alcance de lo que
-  cambia si el usuario decide otra cosa. Quedan **pendientes de confirmación explícita del usuario**;
-  esa confirmación es parte de la aprobación del plan (Principio VI).
+  recogidas en `## Clarifications` y quedaron **confirmadas por el usuario (2026-09-23)** al aprobar el
+  plan (Principio VI).
 - El spec nombra "el proveedor real de correo" en lugar del producto concreto en los requisitos y
   criterios de éxito, para que la redacción siga siendo verificable sin conocimiento de la
   implementación. El nombre del producto aparece en el título y en el plan, donde sí corresponde.

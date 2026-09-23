@@ -4,24 +4,23 @@
 
 **Created**: 2026-09-21
 
-**Status**: Draft — pendiente de aprobación del usuario
+**Status**: Aprobado por el usuario (2026-09-23)
 
 **Input**: User description: "Como sistema cliente, quiero que mis notificaciones por correo se entreguen
 de verdad a través de Brevo, para que el componente deje de depender del proveedor simulado."
 
 ## Clarifications
 
-### Session 2026-09-21 — PENDIENTES DE CONFIRMACIÓN
+### Session 2026-09-21 — confirmadas (2026-09-23)
 
 Las cuatro preguntas siguientes se identificaron durante la redacción del spec y en la revisión de
-ambigüedad, y **no pudieron formularse al usuario** durante esta sesión. Cada una lleva la respuesta
-provisional con la que se redactó el resto del documento; el usuario debe confirmarlas o corregirlas al
-aprobar el plan. Si alguna cambia, cambian los requisitos que se indican.
+ambigüedad. Se redactaron con una respuesta recomendada, y esa respuesta queda confirmada tal cual
+(ver `plan.md § Estado del plan`).
 
 - **Q1 — ¿Qué hace el sistema con una notificación de correo que no trae asunto?** El contrato público
   declara el asunto como opcional ("algunos canales no lo usan"), pero el proveedor real lo exige para
   un correo transaccional sin plantilla.
-  - **Respuesta provisional (recomendada)**: se trata como **fallo permanente explícito y sin llamar al
+  - **Respuesta confirmada por el usuario**: se trata como **fallo permanente explícito y sin llamar al
     proveedor**. La notificación queda en estado terminal con un intento registrado y un motivo que
     nombra el campo faltante; no se consume cuota del proveedor ni se envía un correo sin asunto.
   - Alternativas descartadas: (a) un asunto por defecto configurable — entrega un correo que el cliente
@@ -31,7 +30,7 @@ aprobar el plan. Si alguna cambia, cambian los requisitos que se indican.
 - **Q2 — ¿Cuál es el orden de proveedores del canal de correo por defecto, y cómo se elige por
   entorno?** El catálogo usa el primer proveedor de la lista como preferente; hoy la configuración
   siembra un solo proveedor simulado.
-  - **Respuesta provisional (recomendada)**: la lista de proveedores del canal de correo se vuelve
+  - **Respuesta confirmada por el usuario**: la lista de proveedores del canal de correo se vuelve
     **configurable por entorno**, con valor por defecto `simulado, real` — es decir, en desarrollo y en
     integración continua sigue enviando el simulado (que es lo que hoy hace que las pruebas pasen sin
     credenciales) y el proveedor real queda **listado** en el catálogo, que es lo que pide el criterio de
@@ -46,7 +45,7 @@ aprobar el plan. Si alguna cambia, cambian los requisitos que se indican.
   tiempo agotado, fallo del servidor y límite de tasa como recuperables, y destinatario o credenciales
   inválidas y petición rechazada como permanentes; una cuenta sin crédito no encaja limpiamente en
   ninguno de los dos grupos.
-  - **Respuesta provisional (recomendada)**: **fallo recuperable**. La condición se resuelve sin tocar
+  - **Respuesta confirmada por el usuario**: **fallo recuperable**. La condición se resuelve sin tocar
     la notificación (recargando la cuenta) y marcarla como definitivamente fallida destruiría todas las
     notificaciones en vuelo por una causa administrativa ajena a ellas.
   - Alternativa descartada: fallo permanente — cada notificación afectada quedaría en estado terminal y
@@ -55,13 +54,13 @@ aprobar el plan. Si alguna cambia, cambian los requisitos que se indican.
 - **Q4 — ¿El cuerpo de la notificación se entrega al destinatario como texto plano o como documento
   enriquecido?** El contrato público acepta un único campo de cuerpo sin declarar su tipo, y el
   proveedor real distingue ambos formatos con campos distintos.
-  - **Respuesta provisional (recomendada)**: **texto plano**. El contrato no declara tipo de contenido y
+  - **Respuesta confirmada por el usuario**: **texto plano**. El contrato no declara tipo de contenido y
     entregar texto arbitrario como documento enriquecido rompe los saltos de línea y abre una vía de
     inyección de marcado desde el sistema cliente.
   - Alternativas descartadas: (a) entregar siempre como documento enriquecido — cambia lo que ve el
     destinatario según lo que el cliente escriba y exige sanear el cuerpo, que es una historia aparte;
     (b) deducir el formato del cuerpo — comportamiento implícito e imposible de predecir para el cliente.
-  - Consecuencia si el usuario elige documento enriquecido: hace falta decidir el saneamiento del cuerpo
+  - Consecuencia de haber elegido documento enriquecido (descartada): habría que decidir el saneamiento del cuerpo
     y ampliar el contrato público con un tipo de contenido, lo que excede esta historia.
   - Afecta a: FR-015, Assumptions.
 
@@ -232,7 +231,7 @@ estable entre intentos.
   credenciales?** La notificación no se entrega, no se marca como fallida por el proveedor y conserva su
   historial; el despacho falla de forma trazable con el motivo de deshabilitación, igual que un
   proveedor sin adaptador. Es un error de configuración, no de entrega.
-- **¿Qué pasa si la notificación no trae asunto?** Ver Q1 en Clarifications: respuesta provisional,
+- **¿Qué pasa si la notificación no trae asunto?** Ver Q1 en Clarifications (confirmada):
   fallo permanente explícito sin llamar al proveedor.
 - **¿Qué pasa si el proveedor acepta el envío pero el componente cae antes de registrar el resultado?**
   El mensaje se reentrega y la notificación se vuelve a despachar. La clave de idempotencia es el único
@@ -244,8 +243,8 @@ estable entre intentos.
 - **¿Qué pasa si el proveedor responde algo que no encaja en ninguna familia conocida?** Se clasifica de
   forma conservadora: si es un rechazo atribuible a la petición, fallo permanente; en cualquier otro
   caso, fallo recuperable, porque reintentar es menos dañino que descartar.
-- **¿Qué pasa si la cuenta del proveedor se queda sin crédito?** Ver Q3 en Clarifications: respuesta
-  provisional, fallo recuperable.
+- **¿Qué pasa si la cuenta del proveedor se queda sin crédito?** Ver Q3 en Clarifications (confirmada):
+  fallo recuperable.
 - **¿Qué pasa en un entorno que ya tiene el catálogo sembrado?** La siembra de configuración solo actúa
   sobre un catálogo vacío, así que listar el proveedor real en la configuración **no** actualiza por sí
   sola un catálogo ya existente. Ese entorno requiere un paso explícito de actualización del catálogo

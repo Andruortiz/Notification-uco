@@ -3,8 +3,8 @@
 **Feature**: 008-brevo-proveedor-correo | **Date**: 2026-09-21
 
 Cada decisión se numera y se referencia desde `plan.md`. Las cuatro preguntas Q1–Q4 de
-`spec.md § Clarifications` siguen **pendientes de confirmación del usuario**; las decisiones que
-dependen de ellas lo dicen explícitamente.
+`spec.md § Clarifications` quedaron **confirmadas por el usuario (2026-09-23)** con la respuesta
+recomendada; las decisiones que se apoyan en ellas lo indican.
 
 ---
 
@@ -153,7 +153,7 @@ justo lo que HU2-025/HU2-088 asumen posible) y merece su propia historia.
 | `3xx` | `RECOVERABLE_FAILURE` | No se siguen redirecciones; es una respuesta inesperada. Si es permanente, los reintentos se agotan y la notificación termina en fallo trazable. |
 | `400 Bad Request` | `PERMANENT_FAILURE` | Petición malformada o destinatario inválido: reintentar da el mismo resultado. |
 | `401 Unauthorized`, `403 Forbidden` | `PERMANENT_FAILURE` | Criterio de aceptación explícito ("credenciales inválidas"). Ver riesgo abajo. |
-| `402 Payment Required` | `RECOVERABLE_FAILURE` | Condición de cuenta, no de la notificación (**depende de Q3**). |
+| `402 Payment Required` | `RECOVERABLE_FAILURE` | Condición de cuenta, no de la notificación (Q3, confirmada). |
 | `404 Not Found` | `PERMANENT_FAILURE` | Ruta o recurso inexistente: error de integración, no transitorio. |
 | `408 Request Timeout` | `RECOVERABLE_FAILURE` | Fallo temporal. |
 | `429 Too Many Requests` | `RECOVERABLE_FAILURE` | Límite de tasa alcanzado. |
@@ -198,7 +198,7 @@ parsear el cuerpo de error, que es precisamente el dato que no queremos registra
 | `sender.name` | variable de entorno `BREVO_SENDER_NAME` | opcional; se omite si está vacía |
 | `to[0].email` | `notification.recipient().address()` | un único destinatario por notificación |
 | `subject` | `notification.content().subject()` | si está vacío → fallo permanente sin llamar (Decisión 6) |
-| `textContent` | `notification.content().body()` | texto plano (**depende de Q4**) |
+| `textContent` | `notification.content().body()` | texto plano (Q4, confirmada) |
 | `headers["Idempotency-Key"]` | `notification.notificationId().value()` | Decisión 8 |
 
 **Campos que NO se envían**: `tenantId`, `externalId`, `recipientId`, `priority`, `tags`, `params`,
@@ -212,7 +212,7 @@ la siembra actual y esta historia no lo usa.
 
 ## Decisión 6 — Notificación sin asunto
 
-**Decision** (**depende de Q1**): si el asunto es nulo o está en blanco, el adaptador **no llama al
+**Decision** (Q1, confirmada): si el asunto es nulo o está en blanco, el adaptador **no llama al
 proveedor** y devuelve `Mono.just(AttemptResult.PERMANENT_FAILURE)`, registrando un motivo que nombra
 el campo faltante (no su valor).
 
@@ -357,14 +357,18 @@ prueba automatizada llama al proveedor real (SC-010).
 necesita editar ese mismo `application.yml` (Decisión 3 y propiedades del proveedor), y `git add <ruta>`
 prepara el archivo entero, incluidos los hunks ajenos.
 
-**Decision**, por orden de preferencia:
+**Decision** (tomada por el usuario al aprobar el plan, 2026-09-23):
 
-1. **Antes** de la tarea que edita `application.yml`, el usuario commitea o guarda aparte su cambio de
-   `spring.application.name`. Con el árbol limpio en ese archivo, el commit de la historia contiene solo
-   sus hunks. Es la única opción que produce un historial correcto sin maniobras.
-2. Si el cambio ajeno sigue presente cuando llegue esa tarea: el archivo **no se incluye en ningún
-   commit**. La edición se deja en el árbol de trabajo y se reporta como paso manual pendiente, con su
-   dueño y su fecha, en lugar de arrastrar un cambio ajeno al commit de la historia.
+1. Antes de la tarea que edita `application.yml`, apartar el cambio ajeno con
+   `git stash push -- infrastructure/src/main/resources/application.yml`.
+2. Editar el archivo con normalidad y commitear solo los hunks de esta historia.
+3. Al terminar toda la historia, `git stash pop` para restaurar el cambio ajeno encima.
+4. Si el `pop` entra en conflicto con las líneas de esta historia, **no** se resuelve dentro de la
+   historia: el stash queda sin aplicar, nada del conflicto se commitea y se reporta el comando exacto
+   para que se resuelva a mano.
+
+Opciones anteriores de este mismo plan, reemplazadas por la decisión del usuario: que el usuario
+commiteara su cambio antes, o dejar `application.yml` fuera de todo commit.
 
 **Descartado**: `git add -p` (los flags interactivos no están disponibles en este entorno) y mover las
 propiedades a un archivo o perfil aparte (`application-brevo.yml`) — no sirve, porque la lista de

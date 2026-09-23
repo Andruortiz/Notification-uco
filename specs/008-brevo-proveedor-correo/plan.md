@@ -4,6 +4,12 @@
 
 **Input**: Feature specification from `/specs/008-brevo-proveedor-correo/spec.md`
 
+## Estado del plan
+
+**Estado**: Aceptado
+
+**Versión del plan**: 1
+
 ## Summary
 
 Hoy el componente entrega de punta a punta pero **nadie recibe nada**: el único adaptador de envío es
@@ -38,9 +44,8 @@ configuración de RabbitMQ y `api-notificaciones.yaml` **no se tocan**.
 adaptadores (HU2-038), gestión de secretos por plataforma (HU2-052), límite de tasa por proveedor
 (HU2-039), conmutación al siguiente proveedor (HU2-048), plantillas/adjuntos/webhooks del proveedor.
 
-**Cuatro puntos siguen pendientes de confirmación del usuario** (spec.md § Clarifications, Q1–Q4). Están
-resueltos de forma provisional en todo el plan; cada uno indica qué cambia si el usuario decide otra
-cosa, y ninguno cambia la arquitectura del adaptador.
+**Las cuatro preguntas del spec (Q1–Q4) quedan confirmadas** con la respuesta recomendada en cada caso
+(spec.md § Clarifications); el plan se aplica tal cual quedó.
 
 ## Technical Context
 
@@ -113,10 +118,9 @@ Re-evaluado después de Phase 1: sin cambios, sigue en PASS.
   cambios ajenos presentes en el árbol (`Recipient.java`, `spring.application.name`) no entran en ningún
   commit de esta historia — ver research.md, Decisión 12, que es una restricción **operativa** de la
   implementación, no una sugerencia.
-- **VI. Desarrollo asistido por IA, gobernado por spec-kit** — **GATE ABIERTO**. El spec registra cuatro
-  preguntas (Q1–Q4) que **no pudieron formularse al usuario** en esta sesión y quedan pendientes de
-  confirmación. La aprobación del usuario a este plan es también la confirmación (o corrección) de esas
-  cuatro respuestas provisionales. No se implementa una sola línea antes de esa aprobación.
+- **VI. Desarrollo asistido por IA, gobernado por spec-kit** — PASS. Spec y plan quedan en Estado:
+  Aceptado (ver `## Estado del plan` arriba), con las cuatro respuestas recomendadas de
+  `spec.md § Clarifications` (Q1–Q4) confirmadas tal cual.
 - **VII. Sin atajos** — PASS, con cinco pendientes documentados con dueño y fecha, ninguno tapado con un
   parche: riesgo de correo duplicado por idempotencia no garantizada (Decisión 8, revisión 2026-10-31);
   siembra del catálogo que no actualiza entornos ya sembrados (Decisión 3, revisión 2026-10-31, con el
@@ -224,7 +228,7 @@ Orden dentro de `send(notification)`, con el porqué de cada paso:
    tomó una sola vez al construirse, así que esto es una lectura de un `boolean` por despacho.
 2. **Si el asunto está vacío** → `Mono.just(PERMANENT_FAILURE)`. Sin llamar al proveedor: sabemos que lo
    rechazaría. A diferencia del paso 1, **sí** produce un intento y un estado terminal, porque es un dato
-   inválido de esa notificación y no un problema del despliegue (research.md, Decisión 6; pendiente Q1).
+   inválido de esa notificación y no un problema del despliegue (research.md, Decisión 6; Q1 confirmada).
 3. **Construir el cuerpo** a partir de `recipient`, `content` y el remitente configurado, con
    `headers["Idempotency-Key"] = notificationId` (research.md, Decisiones 5 y 8).
 4. **Llamar** con el `WebClient` del proveedor: `POST {base-url}/v3/smtp/email`, cabecera `api-key`. El
@@ -252,9 +256,9 @@ implementar, ejecutar la clase de prueba, `spotless:apply`.
 3. `BrevoProviderProperties`, `BrevoEmailRequest`, `BrevoWebClientConfig`.
 4. `FakeBrevoServer` + `BrevoNotificationProviderTest` + `BrevoNotificationProvider`.
 5. `BrevoEmailDeliveryE2ETest` — tarea E2E explícita del Principio IV.
-6. `application.yml` y `ChannelCatalogSeederTest`. **Último**, y sujeto a research.md, Decisión 12: si
-   el cambio ajeno de `spring.application.name` sigue sin commitear, el archivo no entra en ningún commit
-   y queda reportado como paso manual.
+6. `application.yml` y `ChannelCatalogSeederTest`, siguiendo research.md, Decisión 12: `git stash push`
+   del cambio ajeno antes de editar, commit solo de los hunks de la historia, y `git stash pop` al final
+   de toda la historia; un conflicto en el `pop` no se resuelve aquí, se reporta.
 7. `./mvnw -B -ntp verify` completo y en verde. Si las dos únicas pruebas que fallan son
    `DeadLetterQueueE2ETest` y `RabbitRetryConfigCustomAttemptsTest`, repetir excluyéndolas y decirlo
    explícitamente en el informe: sobre esas dos decide CI.

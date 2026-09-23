@@ -46,7 +46,7 @@ Reglas:
 - `to` lleva **exactamente un** destinatario: una notificación del componente tiene un destinatario.
 - `subject` nunca viaja vacío: si la notificación no trae asunto, el adaptador no llega a construir la
   petición (ver `research.md`, Decisión 6).
-- El cuerpo va como `textContent` (texto plano), no como `htmlContent` — pendiente de Q4.
+- El cuerpo va como `textContent` (texto plano), no como `htmlContent` — Q4, confirmada por el usuario.
 - `headers` es el mapa de cabeceras que el proveedor propaga; la documentación del proveedor usa
   `Idempotency-Key` como ejemplo pero **no define su semántica**. Ver la advertencia de abajo.
 - No se envían `templateId`, `params`, `tags`, `attachment`, `cc`, `bcc`, `replyTo` ni
@@ -61,7 +61,7 @@ es la especificación de `BrevoResponseClassifier`. Resumen:
 |---|---|
 | `201`, `202`, resto de `2xx` | `ACCEPTED` |
 | `400`, `401`, `403`, `404`, resto de `4xx` salvo `408` y `429` | `PERMANENT_FAILURE` |
-| `402` | `RECOVERABLE_FAILURE` (pendiente de Q3) |
+| `402` | `RECOVERABLE_FAILURE` (Q3, confirmada) |
 | `408`, `429`, `3xx`, `5xx` | `RECOVERABLE_FAILURE` |
 | Tiempo de espera agotado, error de conexión, cualquier otra excepción | `RECOVERABLE_FAILURE` |
 

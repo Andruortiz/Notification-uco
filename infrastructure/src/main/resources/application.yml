@@ -28,6 +28,9 @@ notification:
       EMAIL:
         providers: ${NOTIFICATION_EMAIL_PROVIDERS:simulated,brevo}
         content-schema:
+      SMS:
+        providers: ${NOTIFICATION_SMS_PROVIDERS:simulated,twilio}
+        content-schema: '{"type":"object","required":["body"],"properties":{"body":{"type":"string","maxLength":160}}}'
   provider:
     simulated:
       result: ${SIMULATED_PROVIDER_RESULT:ACCEPTED}
@@ -38,6 +41,13 @@ notification:
       base-url: ${BREVO_BASE_URL:https://api.brevo.com}
       timeout-ms: ${BREVO_TIMEOUT_MS:10000}
       connect-timeout-ms: ${BREVO_CONNECT_TIMEOUT_MS:5000}
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID:}
+      auth-token: ${TWILIO_AUTH_TOKEN:}
+      from-number: ${TWILIO_FROM_NUMBER:}
+      base-url: ${TWILIO_BASE_URL:https://api.twilio.com}
+      timeout-ms: ${TWILIO_TIMEOUT_MS:10000}
+      connect-timeout-ms: ${TWILIO_CONNECT_TIMEOUT_MS:5000}
   rabbit:
     dispatch:
       exchange: notification.dispatch.exchange

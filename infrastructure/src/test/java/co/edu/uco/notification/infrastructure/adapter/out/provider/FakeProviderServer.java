@@ -14,7 +14,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-public final class FakeBrevoServer {
+public final class FakeProviderServer {
 
   public record RecordedRequest(String path, Map<String, List<String>> headers, String body) {
 
@@ -34,22 +34,22 @@ public final class FakeBrevoServer {
   private final AtomicReference<String> nextResponseBody = new AtomicReference<>("{}");
   private final AtomicLong nextDelayMillis = new AtomicLong(0);
 
-  private FakeBrevoServer(final HttpServer server, final ExecutorService executor) {
+  private FakeProviderServer(final HttpServer server, final ExecutorService executor) {
     this.server = server;
     this.executor = executor;
   }
 
-  public static FakeBrevoServer start() {
+  public static FakeProviderServer start() {
     try {
       final HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
       final ExecutorService executor = Executors.newCachedThreadPool();
-      final FakeBrevoServer fake = new FakeBrevoServer(server, executor);
+      final FakeProviderServer fake = new FakeProviderServer(server, executor);
       server.setExecutor(executor);
       server.createContext("/", fake::handle);
       server.start();
       return fake;
     } catch (final IOException e) {
-      throw new IllegalStateException("Could not start FakeBrevoServer", e);
+      throw new IllegalStateException("Could not start FakeProviderServer", e);
     }
   }
 

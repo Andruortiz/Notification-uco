@@ -31,12 +31,12 @@ class BrevoNotificationProviderTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  private static FakeBrevoServer fakeServer;
+  private static FakeProviderServer fakeServer;
   private static WebClient webClient;
 
   @BeforeAll
   static void startServer() {
-    fakeServer = FakeBrevoServer.start();
+    fakeServer = FakeProviderServer.start();
     webClient = WebClient.builder().baseUrl(fakeServer.baseUrl()).build();
   }
 
@@ -99,7 +99,7 @@ class BrevoNotificationProviderTest {
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());
-    final FakeBrevoServer.RecordedRequest request = fakeServer.requests().get(0);
+    final FakeProviderServer.RecordedRequest request = fakeServer.requests().get(0);
     assertEquals("/v3/smtp/email", request.path());
     assertEquals("test-api-key", request.header("api-key"));
 

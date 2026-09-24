@@ -64,11 +64,11 @@ class BrevoEmailDeliveryE2ETest {
   @Container @ServiceConnection
   static final RabbitMQContainer RABBIT = new RabbitMQContainer("rabbitmq:3-management");
 
-  static FakeBrevoServer FAKE_BREVO;
+  static FakeProviderServer FAKE_BREVO;
 
   @DynamicPropertySource
   static void brevoBaseUrl(final DynamicPropertyRegistry registry) {
-    FAKE_BREVO = FakeBrevoServer.start();
+    FAKE_BREVO = FakeProviderServer.start();
     registry.add("notification.provider.brevo.base-url", () -> FAKE_BREVO.baseUrl());
   }
 

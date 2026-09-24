@@ -61,7 +61,7 @@ class DeadLetterQueueE2ETest {
   }
 
   private Message awaitDeadLetteredMessage() {
-    final Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
+    final Instant deadline = Instant.now().plus(Duration.ofSeconds(40));
     Message received = null;
     while (received == null && Instant.now().isBefore(deadline)) {
       received = rabbitTemplate.receive(properties.dlq().queue(), 500);

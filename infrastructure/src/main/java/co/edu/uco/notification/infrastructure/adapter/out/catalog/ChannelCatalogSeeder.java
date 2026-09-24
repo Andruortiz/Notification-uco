@@ -49,6 +49,6 @@ public class ChannelCatalogSeeder implements ApplicationRunner {
 
   @Override
   public void run(final ApplicationArguments args) {
-    seed().subscribe();
+    seed().onErrorResume(error -> Mono.empty()).block();
   }
 }

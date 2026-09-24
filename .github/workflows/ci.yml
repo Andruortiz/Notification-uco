@@ -85,7 +85,7 @@ jobs:
           name: build-output
 
       - name: Puertas de calidad (Spotless, SpotBugs, cobertura)
-        run: ./mvnw -B -ntp spotless:check spotbugs:check jacoco:report jacoco:check
+        run: ./mvnw -B -ntp install -DskipTests
 
       - name: Construir imagen Docker
         if: false

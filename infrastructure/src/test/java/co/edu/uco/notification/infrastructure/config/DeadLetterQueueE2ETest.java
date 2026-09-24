@@ -22,7 +22,16 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.annotation.DirtiesContext;
 import reactor.core.publisher.Mono;
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.NONE)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.NONE,
+    properties = {
+      "notification.rabbit.dispatch.exchange=notification.dispatch.exchange.dlq-e2e",
+      "notification.rabbit.dispatch.queue=notification.dispatch.queue.dlq-e2e",
+      "notification.rabbit.dispatch.routing-key=notification.dispatch.dlq-e2e",
+      "notification.rabbit.dlq.exchange=notification.dispatch.dlq.exchange.dlq-e2e",
+      "notification.rabbit.dlq.queue=notification.dispatch.dlq.queue.dlq-e2e",
+      "notification.rabbit.dlq.routing-key=notification.dispatch.dlq.dlq-e2e"
+    })
 @DirtiesContext
 class DeadLetterQueueE2ETest {
 

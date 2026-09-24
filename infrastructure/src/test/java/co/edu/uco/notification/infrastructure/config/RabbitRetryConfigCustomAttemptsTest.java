@@ -20,7 +20,15 @@ import reactor.core.publisher.Mono;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.NONE,
-    properties = "notification.rabbit.dispatch.max-attempts=1")
+    properties = {
+      "notification.rabbit.dispatch.max-attempts=1",
+      "notification.rabbit.dispatch.exchange=notification.dispatch.exchange.retry-custom",
+      "notification.rabbit.dispatch.queue=notification.dispatch.queue.retry-custom",
+      "notification.rabbit.dispatch.routing-key=notification.dispatch.retry-custom",
+      "notification.rabbit.dlq.exchange=notification.dispatch.dlq.exchange.retry-custom",
+      "notification.rabbit.dlq.queue=notification.dispatch.dlq.queue.retry-custom",
+      "notification.rabbit.dlq.routing-key=notification.dispatch.dlq.retry-custom"
+    })
 @DirtiesContext
 class RabbitRetryConfigCustomAttemptsTest {
 

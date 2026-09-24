@@ -8,6 +8,24 @@ on:
 
 jobs:
   build:
+    name: "Build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Compilar
+        run: ./mvnw -B -ntp clean compile
+
+  test:
+    name: "Test"
+    needs: build
     runs-on: ubuntu-latest
     services:
       rabbitmq:
@@ -32,11 +50,42 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Compilar
-        run: ./mvnw -B -ntp clean compile
+      - name: Pruebas (unitarias, integracion, E2E con Testcontainers)
+        run: ./mvnw -B -ntp test
 
-      - name: Pruebas y puertas de calidad (cobertura, Spotless, SpotBugs)
-        run: ./mvnw -B -ntp verify
+      - name: Subir clases compiladas y datos de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: |
+            **/target/classes/**
+            **/target/test-classes/**
+            **/target/*.exec
+          retention-days: 1
+          if-no-files-found: error
+
+  quality:
+    name: "Code Quality"
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Descargar clases compiladas y datos de cobertura del job Test
+        uses: actions/download-artifact@v4
+        with:
+          name: build-output
+
+      - name: Puertas de calidad (Spotless, SpotBugs, cobertura)
+        run: ./mvnw -B -ntp spotless:check spotbugs:check jacoco:report jacoco:check
 
       - name: Construir imagen Docker
         if: false
@@ -44,8 +93,8 @@ jobs:
 
       - name: Publicar imagen
         if: false
-        run: echo "pendiente de HU2-056"
+        run: echo "pendiente del Dockerfile (HU2-063, Fase 10)"
 
       - name: Desplegar
         if: false
-        run: echo "pendiente de HU2-057/HU2-061"
+        run: echo "pendiente de Fase 10 completa (HU2-064, HU2-066, HU2-068, HU2-069)"

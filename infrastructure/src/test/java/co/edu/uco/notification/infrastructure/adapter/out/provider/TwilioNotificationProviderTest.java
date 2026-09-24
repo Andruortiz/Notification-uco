@@ -195,7 +195,10 @@ class TwilioNotificationProviderTest {
         Arguments.of(ACCOUNT_SID, "", FROM_NUMBER, "TWILIO_AUTH_TOKEN"),
         Arguments.of(ACCOUNT_SID, AUTH_TOKEN, null, "TWILIO_FROM_NUMBER"),
         Arguments.of(
-            "SK" + "0123456789abcdef0123456789abcdef", AUTH_TOKEN, FROM_NUMBER, "TWILIO_ACCOUNT_SID"),
+            "SK" + "0123456789abcdef0123456789abcdef",
+            AUTH_TOKEN,
+            FROM_NUMBER,
+            "TWILIO_ACCOUNT_SID"),
         Arguments.of("AC-not-hex", AUTH_TOKEN, FROM_NUMBER, "TWILIO_ACCOUNT_SID"),
         Arguments.of(ACCOUNT_SID, AUTH_TOKEN, "5005550006", "TWILIO_FROM_NUMBER"));
   }

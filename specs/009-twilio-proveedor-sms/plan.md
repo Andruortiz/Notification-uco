@@ -6,22 +6,9 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente
+**Estado**: Aceptado
 
 **Versión del plan**: 1
-
-<!--
-  Este bloque lo edita el usuario directamente en el archivo para aprobar el plan (Pendiente ->
-  Aceptado) o para marcar una revisión (incrementar Versión del plan). Ningún agente infiere ni
-  declara aprobación en ningún otro lugar del documento; la aprobación es el valor de este campo,
-  editado por el usuario o, bajo su instrucción directa y explícita en el chat, por la sesión
-  principal -- nunca por un agente en segundo plano citando un mensaje de otra sesión como fuente de
-  autorización (Principio VI).
--->
-
-**Pendiente de confirmar junto con la aprobación**: las respuestas recomendadas Q1–Q4 de
-`spec.md § Clarifications` (este plan se construye sobre ellas) y el procedimiento de `git stash` de
-`research.md`, Decisión 13.
 
 ## Summary
 
@@ -222,7 +209,9 @@ Orden dentro de `send(notification)`:
 1. **Deshabilitado** → `Mono.error(ProviderDisabledException)`. Sin llamada, sin intento, sin cambio de
    estado. Decidido una sola vez al construirse.
 2. **Destinatario sin formato internacional** → `Mono.just(PERMANENT_FAILURE)` sin llamar, con
-   `reason=invalid-recipient-format` en el registro y sin el valor (Q3).
+   `reason=invalid-recipient-format` en el registro y sin el valor (Q3). Verificado con un hecho
+   observable: la prueba afirma `FakeProviderServer.requests().isEmpty()`, no solo el resultado
+   (research.md, Decisión 6).
 3. **Construir el formulario** `To`, `From`, `Body`. El asunto no se usa (Q1). El cuerpo llega ya
    validado contra la forma del canal (Q2).
 4. **Llamar** `POST /2010-04-01/Accounts/{accountSid}/Messages.json` con autenticación básica. Tiempos de
@@ -248,11 +237,14 @@ Orden por tarea: escribir la prueba, verla fallar por la razón correcta, implem
 5. **`TwilioProviderProperties`, `TwilioWebClientConfig`, `@Qualifier` en ambos adaptadores** — correr
    `BrevoEmailDeliveryE2ETest` inmediatamente: es la prueba que demuestra que el contexto sigue
    arrancando con dos `WebClient`.
-6. **`TwilioApiResponse`, `TwilioNotificationProviderTest`, `TwilioNotificationProvider`.**
+6. **`TwilioApiResponse`, `TwilioNotificationProviderTest`, `TwilioNotificationProvider`.** El caso de
+   destinatario mal formado afirma `FakeProviderServer.requests().isEmpty()` además del resultado
+   (research.md, Decisión 6).
 7. **`application.yml`** siguiendo research.md, Decisión 13 (`git stash push` del cambio ajeno antes de
    editar, commit solo de lo propio, `git stash pop` al final de la historia; conflicto → se reporta).
 8. **`TwilioSmsDeliveryE2ETest` y `TwilioDisabledProviderE2ETest`** — tareas E2E explícitas del
-   Principio IV.
+   Principio IV. `TwilioDisabledProviderE2ETest` afirma `FakeProviderServer.requests().isEmpty()`
+   además de que la notificación no se marca entregada ni fallida (research.md, Decisión 6).
 9. **Regresión**: `ProviderRoutingE2ETest` (guarda su propio documento SMS sobre el sembrado),
    `ChannelCatalogE2ETest`, pruebas del correo, `HexagonalArchitectureTest`, `ModularityTests`.
 10. **`./mvnw -B -ntp verify` completo y en verde.** Si las únicas que fallan son `DeadLetterQueueE2ETest`

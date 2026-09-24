@@ -246,6 +246,13 @@ intento permanente). La expresión es deliberadamente laxa (de 2 a 15 dígitos):
 lo que claramente no es un teléfono — un correo mandado al canal equivocado, un número local sin `+` —
 y dejar al proveedor la validación fina del plan de numeración de cada país.
 
+**Verificación de que no hubo llamada**: no basta con afirmar `PERMANENT_FAILURE` sin llamar al
+proveedor — se verifica con un hecho observable, no con la ausencia de un efecto secundario que la
+prueba no comprobó. `TwilioNotificationProviderTest` (destinatario mal formado) y
+`TwilioDisabledProviderE2ETest` (proveedor deshabilitado) afirman `FakeProviderServer.requests().isEmpty()`
+además del resultado, para que un adaptador que llamara igual y descartara la respuesta no pase la
+prueba por accidente.
+
 **Si Q3 cambia a "validar en la aceptación"**: exige que `core` valide el destinatario según el canal
 (hoy `Recipient` es texto libre y la forma de contenido solo ve asunto y cuerpo). Sería una historia
 propia; este adaptador conservaría su comprobación como defensa.
@@ -372,8 +379,7 @@ durante la del correo: `spring.application.name` en `infrastructure/src/main/res
 y el mensaje de validación de `core/.../valueobject/Recipient.java`. Esta historia edita el mismo
 `application.yml` (canal SMS y bloque del proveedor).
 
-**Decision propuesta** (la misma que el usuario aprobó para el correo; **pendiente de confirmación para
-esta historia**):
+**Decision** (la misma que el usuario aprobó para el correo, confirmada también para esta historia):
 
 1. Antes de la tarea que edita `application.yml`: `git stash push -- infrastructure/src/main/resources/application.yml`.
 2. Editar y commitear solo los cambios de esta historia.

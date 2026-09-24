@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-24
 
-**Status**: Borrador — Q1–Q4 de Clarifications pendientes de confirmación del usuario
+**Status**: Plan aceptado — Q1–Q4 de Clarifications confirmadas por el usuario (2026-09-24)
 
 **Input**: User description: "Como sistema cliente, quiero que mis notificaciones por SMS se entreguen a
 través de Twilio, para que el canal SMS esté disponible."
@@ -14,18 +14,18 @@ correo).
 
 ## Clarifications
 
-### Session 2026-09-24 — pendientes de confirmación
+### Session 2026-09-24 — confirmadas (2026-09-24)
 
 Las cuatro preguntas siguientes se identificaron en la revisión de ambigüedad. No fue posible
-consultarlas durante la redacción, así que cada una se registra con la **respuesta recomendada**, que
-es la que aplican el resto del spec y el plan. Quedan **pendientes de confirmación** por el usuario al
-aprobar el plan (ver `plan.md § Estado del plan`); si alguna cambia, se indica qué partes afecta.
+consultarlas durante la redacción, así que cada una se registró con una respuesta recomendada, y esa
+respuesta queda **confirmada** tal cual por el usuario al aprobar el plan (ver `plan.md § Estado del
+plan`); si alguna cambia en el futuro, se indica qué partes afecta.
 
 - **Q1 — ¿El canal SMS define su propia forma de contenido, y qué ocurre con un asunto que el cliente
   envía en una notificación SMS?** Un SMS no tiene asunto; el contrato público ya declara el asunto como
   opcional y dice que "algunos canales (ej. SMS) no lo usan". El canal de correo hoy no declara ninguna
   forma de contenido.
-  - **Respuesta recomendada**: el canal SMS declara **su propia forma de contenido** en el catálogo:
+  - **Respuesta confirmada por el usuario**: el canal SMS declara **su propia forma de contenido** en el catálogo:
     cuerpo obligatorio con longitud máxima (ver Q2) y asunto **admitido pero ignorado** — no se envía al
     proveedor ni se antepone al cuerpo. Es el comportamiento que el contrato público ya anuncia, así que
     no es un descarte silencioso.
@@ -40,7 +40,7 @@ aprobar el plan (ver `plan.md § Estado del plan`); si alguna cambia, se indica 
   caracteres del alfabeto básico de SMS, pero solo 70 si el texto trae caracteres fuera de él (en
   español, á, í, ó, ú; también emojis), y los mensajes de varios fragmentos pierden unos caracteres por
   fragmento en la cabecera de unión.
-  - **Respuesta recomendada**: **rechazar en la aceptación, nunca truncar**, con un límite de **160
+  - **Respuesta confirmada por el usuario**: **rechazar en la aceptación, nunca truncar**, con un límite de **160
     caracteres** declarado en la forma de contenido del canal SMS (editable por entorno en el catálogo,
     sin tocar código). El cliente recibe el rechazo de inmediato con un motivo que nombra el límite; nada
     se persiste ni llega al proveedor. Costo resultante documentado: 1 fragmento para texto del alfabeto
@@ -56,7 +56,7 @@ aprobar el plan (ver `plan.md § Estado del plan`); si alguna cambia, se indica 
 - **Q3 — ¿Dónde se valida que el destinatario de un SMS sea un número telefónico en formato
   internacional?** Hoy el destinatario es un texto libre sin validación por canal; el proveedor exige el
   formato internacional (signo `+`, código de país y número, hasta 15 dígitos).
-  - **Respuesta recomendada**: **en el despacho, antes de llamar al proveedor**. Si el número no tiene
+  - **Respuesta confirmada por el usuario**: **en el despacho, antes de llamar al proveedor**. Si el número no tiene
     formato internacional, el intento se registra como **fallo permanente sin llamar al proveedor**,
     con un motivo que nombra el dato (no su valor). Es el mismo patrón que el proveedor real de correo
     aplica a una notificación sin asunto.
@@ -70,7 +70,7 @@ aprobar el plan (ver `plan.md § Estado del plan`); si alguna cambia, se indica 
   rechazada" para causas muy distintas: número inválido, número dado de baja, número no verificado en
   una cuenta de prueba, y también alguna condición transitoria del número de origen (por ejemplo, cola
   de envío llena).
-  - **Respuesta recomendada**: **solo el código HTTP decide la categoría**, igual que con el proveedor
+  - **Respuesta confirmada por el usuario**: **solo el código HTTP decide la categoría**, igual que con el proveedor
     real de correo. El código de error numérico del proveedor se **registra** para el diagnóstico (y
     distingue baja de número inválido en los registros), pero no cambia la categoría. Consecuencia
     aceptada: una condición transitoria que el proveedor comunique como "petición rechazada" termina en

@@ -4,8 +4,7 @@
 
 **Created**: 2026-09-24
 
-**Status**: Draft — Q1–Q4 de Clarifications con respuesta recomendada, pendientes de confirmación del
-usuario
+**Status**: Plan aceptado — Q1–Q4 de Clarifications confirmadas por el usuario (2026-09-24)
 
 **Input**: User description: "Como sistema cliente, quiero que mis notificaciones push se entreguen de verdad
 a través de Firebase Cloud Messaging, para que el canal PUSH deje de depender de un proveedor simulado y
@@ -16,12 +15,12 @@ correo) y HU2-090 (proveedor real de SMS).
 
 ## Clarifications
 
-### Session 2026-09-24 — pendientes de confirmación
+### Session 2026-09-24 — confirmadas (2026-09-24)
 
 Las cuatro preguntas siguientes se identificaron en la revisión de ambigüedad. No fue posible consultarlas
-durante la redacción, así que cada una se registra con una **respuesta recomendada** que queda
-**pendiente de confirmación** por el usuario al aprobar el plan (ver `plan.md § Estado del plan`). Si
-alguna cambia, se indica qué partes afecta.
+durante la redacción, así que cada una se registró con una respuesta recomendada, y esa respuesta queda
+**confirmada** tal cual por el usuario al aprobar el plan (ver `plan.md § Estado del plan`); si alguna
+cambia en el futuro, se indica qué partes afecta.
 
 - **Q1 — ¿Qué hace el componente con el identificador de dispositivo que llega como dirección del
   destinatario: lo trata como un texto opaco que solo el proveedor valida, comprueba su forma antes de
@@ -30,7 +29,7 @@ alguna cambia, se indica qué partes afecta.
   vacío, sin longitud máxima, y no se expone en ninguna respuesta de consulta (solo el identificador
   estable del destinatario). Un identificador de dispositivo típico mide entre 150 y 200 caracteres y cabe
   sin cambios. El proveedor **no documenta ni garantiza** el formato del identificador: lo declara opaco.
-  - **Respuesta recomendada (pendiente de confirmación)**: **texto opaco, sin ajuste de dominio y sin
+  - **Respuesta confirmada por el usuario**: **texto opaco, sin ajuste de dominio y sin
     comprobación de forma**. La dirección del destinatario se usa tal cual; el proveedor es quien decide si
     es válida, y un identificador mal formado o de otra naturaleza (un correo enviado por error al canal
     PUSH) termina en fallo permanente tras una única llamada, por la respuesta "argumento inválido" o "no
@@ -52,7 +51,7 @@ alguna cambia, se indica qué partes afecta.
   que lo excede?** El proveedor admite como máximo 4096 bytes de contenido por mensaje y rechaza lo que lo
   supera como "argumento inválido". Si el componente no limita antes, una notificación demasiado grande se
   acepta y luego termina fallida.
-  - **Respuesta recomendada (pendiente de confirmación)**: **rechazar en la aceptación, nunca truncar**, con
+  - **Respuesta confirmada por el usuario**: **rechazar en la aceptación, nunca truncar**, con
     la forma de contenido del canal PUSH: asunto (título) opcional de **hasta 100 caracteres** y cuerpo
     obligatorio de **hasta 900 caracteres**, ambos editables por entorno sin tocar código. La suma, 1000
     caracteres, cabe en 4096 bytes aun si cada carácter ocupa el máximo de 4 bytes. El cliente recibe el
@@ -64,7 +63,7 @@ alguna cambia, se indica qué partes afecta.
 - **Q3 — ¿Un único proyecto del proveedor para todo el despliegue, o credenciales por tenant?** Un
   identificador de dispositivo solo es válido para el proyecto del proveedor al que pertenece la aplicación
   que lo emitió; con otras credenciales el proveedor lo rechaza por "remitente no coincidente".
-  - **Respuesta recomendada (pendiente de confirmación)**: **un único proyecto por despliegue** en esta
+  - **Respuesta confirmada por el usuario**: **un único proyecto por despliegue** en esta
     historia, igual que los proveedores de correo y SMS usan una sola cuenta. Solo las aplicaciones de ese
     proyecto reciben push; un identificador de otro proyecto termina en fallo permanente. Credenciales por
     tenant queda fuera de alcance y anotado como riesgo con dueño y fecha.
@@ -74,7 +73,7 @@ alguna cambia, se indica qué partes afecta.
 - **Q4 — ¿Por qué medio llega la credencial: el contenido de la cuenta de servicio en una variable de
   entorno, la ruta de un archivo montado como secreto, o ambos?** Los orquestadores montan secretos como
   archivos; en desarrollo y en integración continua es más cómodo una variable.
-  - **Respuesta recomendada (pendiente de confirmación)**: **ambos, excluyentes**. Se acepta el contenido
+  - **Respuesta confirmada por el usuario**: **ambos, excluyentes**. Se acepta el contenido
     por variable de entorno o la ruta de un archivo montado; si llegan los dos a la vez, el proveedor queda
     deshabilitado con un motivo explícito que lo dice, en lugar de elegir uno en silencio.
   - Alternativas descartadas: (a) solo variable de entorno — obliga a copiar una clave privada multilínea

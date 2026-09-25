@@ -36,6 +36,9 @@ target/
 # Environment
 .env
 
+# Credenciales de prueba (claves de cuenta de servicio, etc.) - nunca versionadas
+secrets/
+
 # spec-kit / Claude Code runtime state (local-only, not part of the versioned governance artifact)
 .claude/scheduled_tasks.lock
 .claude/settings.local.json

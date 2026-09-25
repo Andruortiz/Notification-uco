@@ -4,8 +4,7 @@
 
 **Created**: 2026-09-25
 
-**Status**: Draft — Q1–Q4 de Clarifications registradas con respuesta recomendada, pendientes de
-confirmación del usuario al aprobar el plan
+**Status**: Plan aceptado — Q1–Q4 de Clarifications confirmadas por el usuario (2026-09-25) al aprobar el plan
 
 **Input**: User description: "Como operador, quiero consultar los canales y proveedores registrados en el
 catálogo y su estado, para saber cómo se enrutan las notificaciones sin entrar a la base."
@@ -16,19 +15,19 @@ que ya existe (HU2-042); no depende de las historias de registro de canal y prov
 
 ## Clarifications
 
-### Session 2026-09-25 — respuestas recomendadas, pendientes de confirmación
+### Session 2026-09-25 — confirmadas (2026-09-25)
 
 Las preguntas siguientes se identificaron al redactar el spec. No fue posible consultarlas durante la
-redacción, así que cada una se registra con una respuesta recomendada que el resto del documento ya aplica.
-Quedan pendientes de confirmación: el usuario las confirma o las cambia al aprobar el plan
-(`plan.md § Estado del plan`). Para cada una se indica qué partes cambian si la respuesta es otra.
+redacción, así que cada una se registró con una respuesta recomendada, y esa respuesta queda **confirmada**
+tal cual por el usuario al aprobar el plan (`plan.md § Estado del plan`). Para cada una se indica qué partes
+cambiarían si la respuesta fuera otra en el futuro.
 
 - **Q1 — ¿La consulta del catálogo es por tenant o global? ¿Exige el identificador de tenant del
   solicitante?** Hoy el catálogo no tiene ningún concepto de tenant: es una tabla técnica de enrutamiento
   (canal → proveedores en orden de preferencia + forma de contenido) compartida por todo el despliegue. La
   resolución de ruta recibe el tenant pero no lo usa. Las demás operaciones de la API, incluidas las de
   registro de canal y proveedor ya descritas en el contrato, exigen el identificador de tenant.
-  - **Respuesta recomendada**: **contenido global, identificador de tenant exigido**. La consulta exige el
+  - **Respuesta confirmada por el usuario**: **contenido global, identificador de tenant exigido**. La consulta exige el
     identificador de tenant igual que toda la API (sin él, o vacío, se rechaza como solicitud inválida),
     pero la respuesta es la misma para cualquier tenant: el catálogo es del despliegue, no de un cliente.
     Esta historia no inventa datos de catálogo por tenant y nada en la respuesta identifica ni depende del
@@ -52,7 +51,7 @@ Quedan pendientes de confirmación: el usuario las confirma o las cambia al apro
   mal formada una credencial. Además, el catálogo puede nombrar un proveedor para el que el despliegue no
   tiene adaptador (por ejemplo, un error de escritura en la configuración); el despacho lo descubre recién
   al intentar enviar.
-  - **Respuesta recomendada**: **sí, se cruza**. Cada proveedor mostrado lleva uno de tres estados:
+  - **Respuesta confirmada por el usuario**: **sí, se cruza**. Cada proveedor mostrado lleva uno de tres estados:
     **habilitado**, **deshabilitado** (con el motivo que ya declara su adaptador, que nombra la
     configuración ausente o mal formada y nunca su valor) o **sin adaptador** (el catálogo lo nombra pero
     el despliegue no sabe enviar por él). No se inventa un estado para el canal: un canal existe en el
@@ -71,7 +70,7 @@ Quedan pendientes de confirmación: el usuario las confirma o las cambia al apro
   - Afecta a: User Stories 1–3, FR-002 a FR-005, FR-013, SC-002, SC-004, Key Entities.
 - **Q3 — ¿Qué proveedores lista la consulta de proveedores?** Hay dos fuentes: los que nombra el catálogo
   y los que tienen adaptador en el despliegue. No siempre coinciden.
-  - **Respuesta recomendada**: **la unión de ambas**. Un proveedor con adaptador que ningún canal usa
+  - **Respuesta confirmada por el usuario**: **la unión de ambas**. Un proveedor con adaptador que ningún canal usa
     aparece sin canales; un proveedor que el catálogo nombra sin adaptador aparece con estado "sin
     adaptador". Cada proveedor indica en qué canales aparece y en qué posición de preferencia.
   - Alternativas descartadas: (a) solo los del catálogo — oculta que un proveedor está disponible pero no
@@ -81,7 +80,7 @@ Quedan pendientes de confirmación: el usuario las confirma o las cambia al apro
 - **Q4 — ¿La consulta muestra lo guardado en la base o lo que el enrutamiento está usando en ese
   momento?** El enrutamiento no lee la base en cada envío: usa una vista del catálogo cargada en memoria
   que se refresca periódicamente (cada 30 s por defecto).
-  - **Respuesta recomendada**: **lo que usa el enrutamiento**. La consulta lee la misma vista que usa el
+  - **Respuesta confirmada por el usuario**: **lo que usa el enrutamiento**. La consulta lee la misma vista que usa el
     despacho: lo que el operador ve es exactamente cómo se está enrutando. Un cambio en la base aparece en
     la consulta en el mismo refresco en que el enrutamiento empieza a usarlo, no antes. Un canal guardado
     sin ningún proveedor no es enrutable y no aparece, igual que no existe para el envío.

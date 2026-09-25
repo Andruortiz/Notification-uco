@@ -117,4 +117,9 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
   public ProviderId providerId() {
     return PROVIDER_ID;
   }
+
+  @Override
+  public Optional<String> disabledReason() {
+    return disabledReason;
+  }
 }

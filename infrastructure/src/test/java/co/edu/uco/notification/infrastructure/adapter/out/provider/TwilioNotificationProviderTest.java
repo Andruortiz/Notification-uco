@@ -162,6 +162,22 @@ class TwilioNotificationProviderTest {
   }
 
   @Test
+  void exposesNoDisabledReasonWhenCredentialsAreComplete() {
+    assertTrue(enabledProvider().disabledReason().isEmpty());
+  }
+
+  @Test
+  void exposesTheDisabledReasonNamingTheMissingSettingWithoutOtherCredentialValues() {
+    final TwilioNotificationProvider provider =
+        new TwilioNotificationProvider(webClient, properties(null, AUTH_TOKEN, FROM_NUMBER));
+
+    final String reason = provider.disabledReason().orElseThrow();
+
+    assertEquals("missing notification.provider.twilio.account-sid (TWILIO_ACCOUNT_SID)", reason);
+    assertFalse(reason.contains(AUTH_TOKEN));
+  }
+
+  @Test
   void happyPathSendsTheFormWithBasicAuthAndReturnsAccepted() {
     fakeServer.nextResponse(201, "{\"sid\":\"SM0001\",\"status\":\"queued\"}");
 

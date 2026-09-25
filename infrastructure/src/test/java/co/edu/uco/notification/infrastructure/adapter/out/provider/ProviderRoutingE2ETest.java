@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -80,6 +81,11 @@ class ProviderRoutingE2ETest {
     @Override
     public ProviderId providerId() {
       return providerId;
+    }
+
+    @Override
+    public Optional<String> disabledReason() {
+      return Optional.empty();
     }
 
     List<NotificationId> received() {

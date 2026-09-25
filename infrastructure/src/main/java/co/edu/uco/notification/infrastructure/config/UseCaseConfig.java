@@ -54,6 +54,13 @@ public class UseCaseConfig {
   }
 
   @Bean
+  QueryChannelCatalogUseCase queryChannelCatalogUseCase(
+      final ChannelCatalogPort channelCatalogPort,
+      final NotificationSenderRegistry notificationSenderRegistry) {
+    return new QueryChannelCatalogService(channelCatalogPort, notificationSenderRegistry);
+  }
+
+  @Bean
   GetNotificationStatusUseCase getNotificationStatusUseCase(
       final NotificationRepository notificationRepository) {
     return new GetNotificationStatusService(notificationRepository);

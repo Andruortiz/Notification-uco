@@ -139,5 +139,10 @@ public class TwilioNotificationProvider implements NotificationSenderPort {
     return PROVIDER_ID;
   }
 
+  @Override
+  public Optional<String> disabledReason() {
+    return disabledReason;
+  }
+
   private record Outcome(int status, TwilioApiResponse body) {}
 }

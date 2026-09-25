@@ -188,5 +188,10 @@ public class FcmNotificationProvider implements NotificationSenderPort {
     return PROVIDER_ID;
   }
 
+  @Override
+  public Optional<String> disabledReason() {
+    return disabledReason;
+  }
+
   private record Outcome(int status, String messageId, String errorCode) {}
 }

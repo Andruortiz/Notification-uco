@@ -31,6 +31,9 @@ notification:
       SMS:
         providers: ${NOTIFICATION_SMS_PROVIDERS:simulated,twilio}
         content-schema: '{"type":"object","required":["body"],"properties":{"body":{"type":"string","maxLength":160}}}'
+      PUSH:
+        providers: ${NOTIFICATION_PUSH_PROVIDERS:simulated,fcm}
+        content-schema: '{"type":"object","required":["body"],"properties":{"subject":{"maxLength":100},"body":{"type":"string","maxLength":900}}}'
   provider:
     simulated:
       result: ${SIMULATED_PROVIDER_RESULT:ACCEPTED}
@@ -48,6 +51,13 @@ notification:
       base-url: ${TWILIO_BASE_URL:https://api.twilio.com}
       timeout-ms: ${TWILIO_TIMEOUT_MS:10000}
       connect-timeout-ms: ${TWILIO_CONNECT_TIMEOUT_MS:5000}
+    fcm:
+      credentials-json: ${FCM_CREDENTIALS_JSON:}
+      credentials-file: ${FCM_CREDENTIALS_FILE:}
+      base-url: ${FCM_BASE_URL:https://fcm.googleapis.com}
+      token-url: ${FCM_TOKEN_URL:https://oauth2.googleapis.com/token}
+      timeout-ms: ${FCM_TIMEOUT_MS:10000}
+      connect-timeout-ms: ${FCM_CONNECT_TIMEOUT_MS:5000}
   rabbit:
     dispatch:
       exchange: notification.dispatch.exchange

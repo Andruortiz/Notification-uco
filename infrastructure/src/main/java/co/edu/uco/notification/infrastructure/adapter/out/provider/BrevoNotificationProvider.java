@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -28,7 +29,8 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
   private final Optional<String> disabledReason;
 
   public BrevoNotificationProvider(
-      final WebClient brevoWebClient, final BrevoProviderProperties properties) {
+      @Qualifier("brevoWebClient") final WebClient brevoWebClient,
+      final BrevoProviderProperties properties) {
     this.webClient =
         Preconditions.requireNonNull(brevoWebClient, "brevoWebClient must not be null");
     this.properties = Preconditions.requireNonNull(properties, "properties must not be null");

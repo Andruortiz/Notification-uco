@@ -395,7 +395,8 @@ components:
           example: order-42
         channelType:
           type: string
-          description: Canal registrado en el catálogo (hoy solo EMAIL está configurado).
+          description: >
+            Canal registrado en el catálogo. La configuración por defecto declara EMAIL y SMS.
           example: EMAIL
         recipientId:
           type: string
@@ -403,15 +404,24 @@ components:
           example: recipient-1
         recipientAddress:
           type: string
-          description: Dirección concreta del canal usado en este envío (email, teléfono, etc.).
+          description: >
+            Dirección concreta del canal usado en este envío (email, teléfono, etc.). En SMS es un
+            número en formato internacional (signo +, código de país y número, ej. +573001234567); un
+            número sin ese formato termina en FAILED sin enviarse.
           example: alice@example.com
         subject:
           type: string
           nullable: true
-          description: Opcional -- algunos canales (ej. SMS) no lo usan.
+          description: >
+            Opcional -- algunos canales (ej. SMS) no lo usan. En SMS se admite y se ignora: no se
+            envía ni se antepone al cuerpo.
           example: Bienvenida
         body:
           type: string
+          description: >
+            Cuerpo de la notificación. La longitud máxima la fija la forma de contenido del canal en
+            el catálogo; en SMS son 160 caracteres por defecto. Un cuerpo más largo se rechaza con 400
+            y nunca se trunca.
           example: Hola Alice, tu pedido fue confirmado.
         priority:
           $ref: '#/components/schemas/Priority'

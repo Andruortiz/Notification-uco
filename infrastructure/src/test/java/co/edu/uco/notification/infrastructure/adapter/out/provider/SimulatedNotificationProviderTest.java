@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
@@ -56,6 +57,14 @@ class SimulatedNotificationProviderTest {
         new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
 
     assertEquals(ProviderId.of("simulated"), provider.providerId());
+  }
+
+  @Test
+  void isNeverDisabled() {
+    final SimulatedNotificationProvider provider =
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
+
+    assertTrue(provider.disabledReason().isEmpty());
   }
 
   @Test

@@ -6,6 +6,8 @@ import co.edu.uco.notification.utils.Preconditions;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 
 public final class NotificationSenderRegistry {
 
@@ -33,5 +35,14 @@ public final class NotificationSenderRegistry {
       throw new ProviderNotAvailableException(providerId);
     }
     return sender;
+  }
+
+  public Optional<NotificationSenderPort> find(final ProviderId providerId) {
+    Preconditions.requireNonNull(providerId, "providerId must not be null");
+    return Optional.ofNullable(sendersByProviderId.get(providerId));
+  }
+
+  public Set<ProviderId> providerIds() {
+    return sendersByProviderId.keySet();
   }
 }

@@ -202,10 +202,12 @@ paths:
       tags: [Notificaciones]
       summary: Enviar un lote de notificaciones
       description: >
-        CU-02. El lote es su propia unidad de seguimiento (RF-02), no un bucle sobre POST
+        Implementado. El lote es su propia unidad de seguimiento, no un bucle sobre POST
         /notifications -- cada elemento se valida e idempotiza por separado, y un elemento
         inválido no bloquea a los demás. Un elemento con un adjunto inválido, o que referencia una
-        subida todavía en PENDING_SCAN, se rechaza solo, con su motivo; los demás siguen.
+        subida todavía en PENDING_SCAN, o rechazado por el catálogo (canal inexistente o
+        deshabilitado, contenido que no cumple la forma del canal), se rechaza solo, con su motivo;
+        los demás siguen. Los resultados vienen en el mismo orden de los elementos de la solicitud.
       operationId: sendNotificationBatch
       parameters:
         - $ref: '#/components/parameters/TenantId'
@@ -222,6 +224,15 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BatchAcceptedResponse'
+        '400':
+          description: >
+            La solicitud no cumple el esquema (lista de elementos vacía o ausente, campo obligatorio
+            ausente o vacío en algún elemento, prioridad desconocida, batchId en blanco). Se rechaza
+            completa y no se acepta ningún elemento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /notifications/{id}:
     get:

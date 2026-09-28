@@ -6,6 +6,7 @@ import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.utils.Preconditions;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Component
@@ -21,5 +22,18 @@ public class MongoChannelCatalogAdapter implements ChannelCatalogPort {
   public Mono<ChannelRoute> findActiveRoute(final ChannelType channel, final TenantId tenantId) {
     Preconditions.requireNonNull(channel, "channel must not be null");
     return Mono.justOrEmpty(cache.snapshot().get(channel.value().toUpperCase()));
+  }
+
+  @Override
+  public Flux<ChannelRoute> findAllRoutes() {
+    return Flux.defer(
+        () ->
+            Flux.fromIterable(cache.snapshot().entrySet())
+                .map(
+                    entry ->
+                        new ChannelRoute(
+                            ChannelType.of(entry.getKey()),
+                            entry.getValue().providers(),
+                            entry.getValue().contentSchema())));
   }
 }

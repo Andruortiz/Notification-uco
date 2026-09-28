@@ -189,6 +189,23 @@ class FcmNotificationProviderTest {
   }
 
   @Test
+  void exposesNoDisabledReasonWhenCredentialsAreComplete() {
+    assertTrue(enabledProvider().disabledReason().isEmpty());
+  }
+
+  @ParameterizedTest
+  @MethodSource("disabledConfigurations")
+  void exposesTheSameDisabledReasonWithoutCredentialFragments(
+      final String json, final String file, final String expectedDetail) {
+    final FcmNotificationProvider provider = provider(webClient, properties(json, file));
+
+    final String reason = provider.disabledReason().orElseThrow();
+
+    assertTrue(reason.contains(expectedDetail), reason);
+    assertNoSecretsIn(reason);
+  }
+
+  @Test
   void happyPathSendsTheNotificationWithBearerAuthorizationAndReturnsAccepted() {
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, TITLE)))
         .expectNext(AttemptResult.ACCEPTED)

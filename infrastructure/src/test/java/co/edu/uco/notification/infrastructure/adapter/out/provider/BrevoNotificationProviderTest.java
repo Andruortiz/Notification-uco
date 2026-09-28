@@ -17,6 +17,7 @@ import io.netty.channel.ChannelOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -86,6 +87,26 @@ class BrevoNotificationProviderTest {
         new BrevoNotificationProvider(webClient, enabledProperties());
 
     assertEquals(ProviderId.of("brevo"), provider.providerId());
+  }
+
+  @Test
+  void exposesNoDisabledReasonWhenCredentialsAreComplete() {
+    final BrevoNotificationProvider provider =
+        new BrevoNotificationProvider(webClient, enabledProperties());
+
+    assertTrue(provider.disabledReason().isEmpty());
+  }
+
+  @Test
+  void exposesTheDisabledReasonNamingTheMissingApiKey() {
+    final BrevoProviderProperties properties =
+        new BrevoProviderProperties(
+            null, "sender@example.com", null, fakeServer.baseUrl(), 10_000L, 5_000L);
+    final BrevoNotificationProvider provider = new BrevoNotificationProvider(webClient, properties);
+
+    assertEquals(
+        Optional.of("missing notification.provider.brevo.api-key (BREVO_API_KEY)"),
+        provider.disabledReason());
   }
 
   @Test

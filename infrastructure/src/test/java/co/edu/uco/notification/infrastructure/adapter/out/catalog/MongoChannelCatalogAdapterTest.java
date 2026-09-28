@@ -9,6 +9,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
@@ -61,6 +62,27 @@ class MongoChannelCatalogAdapterTest {
         adapter.findActiveRoute(ChannelType.of("EMAIL"), TenantId.of("tenant-b")).block();
 
     assertEquals(forTenantA, forTenantB);
+  }
+
+  @Test
+  void findAllRoutesReturnsEveryRouteIdentifiedByItsRoutingKey() {
+    final ChannelRoute email =
+        new ChannelRoute(ChannelType.of("email"), List.of(ProviderId.of("brevo")), "{}");
+    final ChannelRoute sms =
+        new ChannelRoute(ChannelType.of("SMS"), List.of(ProviderId.of("twilio")), null);
+    cache.replace(Map.of("EMAIL", email, "SMS", sms));
+
+    final List<ChannelRoute> routes = adapter.findAllRoutes().collectList().block();
+
+    assertEquals(
+        Set.of(
+            new ChannelRoute(ChannelType.of("EMAIL"), List.of(ProviderId.of("brevo")), "{}"), sms),
+        Set.copyOf(routes));
+  }
+
+  @Test
+  void findAllRoutesIsEmptyWhenTheSnapshotIsEmpty() {
+    StepVerifier.create(adapter.findAllRoutes()).verifyComplete();
   }
 
   @Test

@@ -5,6 +5,7 @@ import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.utils.Preconditions;
+import java.util.Optional;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
@@ -30,5 +31,10 @@ public class SimulatedNotificationProvider implements NotificationSenderPort {
   @Override
   public ProviderId providerId() {
     return PROVIDER_ID;
+  }
+
+  @Override
+  public Optional<String> disabledReason() {
+    return Optional.empty();
   }
 }

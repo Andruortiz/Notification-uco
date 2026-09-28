@@ -2,9 +2,12 @@ package co.edu.uco.notification.core.port.out;
 
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 public interface ChannelCatalogPort {
 
   Mono<ChannelRoute> findActiveRoute(ChannelType channel, TenantId tenantId);
+
+  Flux<ChannelRoute> findAllRoutes();
 }

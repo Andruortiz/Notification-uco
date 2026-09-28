@@ -1,5 +1,6 @@
 package co.edu.uco.notification.core.port.out;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,6 +11,8 @@ import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderNotAvailableException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
 
@@ -33,6 +36,11 @@ class NotificationSenderRegistryTest {
     @Override
     public ProviderId providerId() {
       return providerId;
+    }
+
+    @Override
+    public Optional<String> disabledReason() {
+      return Optional.empty();
     }
   }
 
@@ -69,6 +77,42 @@ class NotificationSenderRegistryTest {
         new NotificationSenderRegistry(List.of(fake("fake-a")));
 
     assertThrows(NullPointerException.class, () -> registry.resolve(null));
+  }
+
+  @Test
+  void findReturnsTheAdapterThatDeclaresTheProviderId() {
+    final FakeSender fakeA = fake("fake-a");
+    final NotificationSenderRegistry registry = new NotificationSenderRegistry(List.of(fakeA));
+
+    assertEquals(Optional.of(fakeA), registry.find(ProviderId.of("fake-a")));
+  }
+
+  @Test
+  void findReturnsEmptyWhenNoAdapterDeclaresTheProviderId() {
+    final NotificationSenderRegistry registry =
+        new NotificationSenderRegistry(List.of(fake("fake-a")));
+
+    assertTrue(registry.find(ProviderId.of("fantasma")).isEmpty());
+  }
+
+  @Test
+  void findRejectsANullProviderId() {
+    final NotificationSenderRegistry registry =
+        new NotificationSenderRegistry(List.of(fake("fake-a")));
+
+    assertThrows(NullPointerException.class, () -> registry.find(null));
+  }
+
+  @Test
+  void providerIdsListsExactlyTheRegisteredProvidersAndCannotBeModified() {
+    final NotificationSenderRegistry registry =
+        new NotificationSenderRegistry(List.of(fake("fake-a"), fake("fake-b")));
+
+    final Set<ProviderId> providerIds = registry.providerIds();
+
+    assertEquals(Set.of(ProviderId.of("fake-a"), ProviderId.of("fake-b")), providerIds);
+    assertThrows(
+        UnsupportedOperationException.class, () -> providerIds.add(ProviderId.of("fake-c")));
   }
 
   @Test

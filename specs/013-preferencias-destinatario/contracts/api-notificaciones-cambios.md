@@ -1,6 +1,6 @@
 # Cambios en el contrato público — `api-notificaciones.yaml`
 
-**Feature**: 011-preferencias-destinatario | **Date**: 2026-09-26
+**Feature**: 013-preferencias-destinatario | **Date**: 2026-09-26
 
 Archivo: `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`. Se edita antes del
 controlador (Principio II). Las dos operaciones ya existen en el contrato; ningún path, `operationId`,

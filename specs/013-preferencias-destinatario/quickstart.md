@@ -1,6 +1,6 @@
 # Quickstart: Gestionar preferencias del destinatario y excluir bajas al despachar
 
-**Feature**: 011-preferencias-destinatario | **Date**: 2026-09-26
+**Feature**: 013-preferencias-destinatario | **Date**: 2026-09-26
 
 Las garantías medibles (SC-001 a SC-009) las verifican pruebas automatizadas; esta guía solo sirve para
 verlo funcionar a mano. Contrato: [contracts/api-notificaciones-cambios.md](./contracts/api-notificaciones-cambios.md).

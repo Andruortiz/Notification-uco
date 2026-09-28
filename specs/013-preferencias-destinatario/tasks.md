@@ -5,7 +5,7 @@ description: "Task list for HU2-029 + HU2-030 — preferencias del destinatario"
 
 # Tasks: Gestionar preferencias del destinatario y excluir bajas al despachar
 
-**Input**: Design documents from `/specs/011-preferencias-destinatario/`
+**Input**: Design documents from `/specs/013-preferencias-destinatario/`
 
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/api-notificaciones-cambios.md
 

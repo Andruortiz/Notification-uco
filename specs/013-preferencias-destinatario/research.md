@@ -1,6 +1,6 @@
 # Research: Gestionar preferencias del destinatario y excluir bajas al despachar
 
-**Feature**: 011-preferencias-destinatario | **Date**: 2026-09-26
+**Feature**: 013-preferencias-destinatario | **Date**: 2026-09-26
 
 ## Decisión 1 — Momento de la exclusión: en el despacho, antes de `markQueued()` (opción b)
 

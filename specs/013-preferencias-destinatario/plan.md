@@ -2,7 +2,7 @@
 
 **Branch**: `feature/HU2-029-preferencias-destinatario` | **Date**: 2026-09-26 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `/specs/011-preferencias-destinatario/spec.md`
+**Input**: Feature specification from `/specs/013-preferencias-destinatario/spec.md`
 
 **Note**: This template is filled in by the `/speckit-plan` command; its definition describes the execution workflow.
 
@@ -102,7 +102,7 @@ Re-check post-diseño: sin cambios; ninguna violación que justificar.
 ### Documentation (this feature)
 
 ```text
-specs/011-preferencias-destinatario/
+specs/013-preferencias-destinatario/
 ├── plan.md
 ├── research.md
 ├── data-model.md

@@ -5,7 +5,7 @@ description: "Task list for HU2-027 + HU2-028"
 
 # Tasks: Reintentar envío manualmente y distinguir el reintento manual del automático
 
-**Input**: Design documents from `/specs/011-reintentar-envio-manual/`
+**Input**: Design documents from `/specs/012-reintentar-envio-manual/`
 
 **Prerequisites**: plan.md, spec.md (Q1–Q4 con respuesta recomendada adoptada), research.md, data-model.md,
 contracts/api-notificaciones-cambios.md, quickstart.md.

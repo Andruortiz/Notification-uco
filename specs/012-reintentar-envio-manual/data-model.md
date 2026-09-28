@@ -1,6 +1,6 @@
 # Data Model: Reintentar envío manualmente (HU2-027 + HU2-028)
 
-**Feature**: 011-reintentar-envio-manual | **Date**: 2026-09-26
+**Feature**: 012-reintentar-envio-manual | **Date**: 2026-09-26
 
 **Sin cambios en el modelo persistido.** Ni `NotificationDocument` ni `DeliveryAttemptDocument` cambian;
 `DeliveryAttempt.origin` ya se guarda y se expone. Lo que cambia es quién produce `MANUAL` y por dónde viaja

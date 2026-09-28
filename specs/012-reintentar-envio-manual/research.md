@@ -1,6 +1,6 @@
 # Research: Reintentar envío manualmente (HU2-027 + HU2-028)
 
-**Feature**: 011-reintentar-envio-manual | **Date**: 2026-09-26
+**Feature**: 012-reintentar-envio-manual | **Date**: 2026-09-26
 
 ## Punto de partida verificado en el código
 

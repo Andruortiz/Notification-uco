@@ -1,6 +1,6 @@
 # Cambios en el contrato público — `api-notificaciones.yaml`
 
-**Feature**: 011-reintentar-envio-manual | **Date**: 2026-09-26
+**Feature**: 012-reintentar-envio-manual | **Date**: 2026-09-26
 
 Archivo: `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`.
 

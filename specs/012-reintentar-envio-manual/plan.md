@@ -2,7 +2,7 @@
 
 **Branch**: `feature/HU2-027-reintentar-envio-manual` | **Date**: 2026-09-26 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `/specs/011-reintentar-envio-manual/spec.md`
+**Input**: Feature specification from `/specs/012-reintentar-envio-manual/spec.md`
 
 ## Estado del plan
 
@@ -70,7 +70,7 @@ optimista (`version`), nunca pesimista.
 | II. Contract-first | La operación ya está en el contrato; solo se actualizan sus descripciones (contracts/api-notificaciones-cambios.md) y se commitean **antes** del controller. ✅ |
 | III. Cero comentarios | Ningún comentario en código nuevo. ✅ |
 | IV. Calidad verificada | Unitarias en `core`, prueba del consumidor y del publicador, y `NotificationRetryE2ETest` explícito con Mongo + RabbitMQ reales. Cada SC tiene prueba automatizada (research.md, Decisión 7), incluida la de tiempo con `Duration` y la de dos tenants con control positivo. `verify` completo al final. ✅ |
-| V. Trazabilidad en git | Commits de una línea en español; razonamiento en `specs/011-…`. ✅ |
+| V. Trazabilidad en git | Commits de una línea en español; razonamiento en `specs/012-…`. ✅ |
 | VI. spec-kit | specify → clarify → plan → tasks → implement. El campo **Estado** queda en `Pendiente` para que el usuario lo edite. ✅ |
 | VII. Sin atajos | Un hueco preexistente se documenta como pendiente explícito con dueño y fecha (abajo). ✅ |
 | VIII. Durabilidad | El reintento persiste `PENDING` antes de encolar y antes de responder 202; el despacho sigue pasando por la cola con reintento de mensaje y DLQ. ✅ |
@@ -106,7 +106,7 @@ research.md Decisión 1.
 ### Documentation (this feature)
 
 ```text
-specs/011-reintentar-envio-manual/
+specs/012-reintentar-envio-manual/
 ├── spec.md
 ├── plan.md
 ├── research.md

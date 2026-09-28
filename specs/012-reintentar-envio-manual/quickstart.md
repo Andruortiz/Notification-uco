@@ -1,6 +1,6 @@
 # Quickstart: Reintentar envío manualmente (HU2-027 + HU2-028)
 
-**Feature**: 011-reintentar-envio-manual | **Date**: 2026-09-26
+**Feature**: 012-reintentar-envio-manual | **Date**: 2026-09-26
 
 Guía de validación. Todas las promesas medibles del spec (SC-001 a SC-005) tienen prueba automatizada; los
 pasos manuales de abajo son solo una demostración.

@@ -2,11 +2,16 @@ package co.edu.uco.notification.infrastructure.config;
 
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.port.in.*;
+import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
+import co.edu.uco.notification.core.port.out.ContentTypeDetectorPort;
+import co.edu.uco.notification.core.port.out.MalwareScannerPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
+import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
+import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.usecase.*;
 import java.time.Duration;
@@ -24,12 +29,31 @@ public class UseCaseConfig {
   }
 
   @Bean
+  AttachmentInspector attachmentInspector(
+      final ContentTypeDetectorPort contentTypeDetectorPort,
+      final MalwareScannerPort malwareScannerPort,
+      final ScanVerdictCachePort scanVerdictCachePort) {
+    return new AttachmentInspector(
+        contentTypeDetectorPort, malwareScannerPort, scanVerdictCachePort);
+  }
+
+  @Bean
+  AttachmentResolver attachmentResolver(
+      final AttachmentInspector attachmentInspector,
+      final AttachmentUploadRepository attachmentUploadRepository,
+      final AttachmentStoragePort attachmentStoragePort) {
+    return new AttachmentResolver(
+        attachmentInspector, attachmentUploadRepository, attachmentStoragePort);
+  }
+
+  @Bean
   SendNotificationUseCase sendNotificationUseCase(
       final ChannelCatalogPort channelCatalogPort,
       final NotificationRepository notificationRepository,
-      final NotificationEventPublisherPort eventPublisherPort) {
+      final NotificationEventPublisherPort eventPublisherPort,
+      final AttachmentResolver attachmentResolver) {
     return new SendNotificationService(
-        channelCatalogPort, notificationRepository, eventPublisherPort);
+        channelCatalogPort, notificationRepository, eventPublisherPort, attachmentResolver);
   }
 
   @Bean

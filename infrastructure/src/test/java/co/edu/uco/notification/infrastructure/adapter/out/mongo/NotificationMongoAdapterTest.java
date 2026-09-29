@@ -1,6 +1,8 @@
 package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -13,12 +15,15 @@ import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
 import co.edu.uco.notification.core.usecase.RequeuePendingNotificationsService;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
 import java.util.List;
 import org.bson.Document;
+import org.bson.types.Binary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -219,28 +224,87 @@ class NotificationMongoAdapterTest {
         attempts);
   }
 
+  private static final byte[] INVOICE_BYTES = "%PDF-1.4 invoice".getBytes(StandardCharsets.UTF_8);
+  private static final Sha256Digest LARGE_SHA =
+      Sha256Digest.of("large".getBytes(StandardCharsets.UTF_8));
+
+  private static Attachment embeddedInvoice(final TenantId tenant) {
+    return new Attachment(
+        tenant,
+        "invoice.pdf",
+        "application/pdf",
+        INVOICE_BYTES.length,
+        Sha256Digest.of(INVOICE_BYTES),
+        new AttachmentSource.EmbeddedContent(INVOICE_BYTES));
+  }
+
+  private static Attachment storedContract(final TenantId tenant) {
+    return new Attachment(
+        tenant,
+        "contract.pdf",
+        "application/pdf",
+        2_000_000L,
+        LARGE_SHA,
+        new AttachmentSource.StoredObject(
+            UploadId.of("upload-1"), "tenants/" + tenant.value() + "/clean/upload-1"));
+  }
+
+  private static Notification withAttachments(
+      final String externalId, final List<Attachment> attachments) {
+    return Notification.accept(
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of(externalId),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(
+            NotificationContent.of("Subject", "Body", attachments), Priority.NORMAL));
+  }
+
   @Test
-  void saveThenFindByIdKeepsTheAttachmentsInOrder() {
-    final Attachment invoice =
-        Attachment.of("invoice.pdf", "application/pdf", 1024L, "https://files.example.test/i.pdf");
-    final Attachment receipt =
-        Attachment.of("receipt.png", "image/png", 2048L, "https://files.example.test/r.png");
-    final Notification notification =
-        Notification.accept(
-            new NotificationRouting(
-                TenantId.of("tenant-1"),
-                ExternalId.of("order-attachments"),
-                ChannelType.of("EMAIL"),
-                RecipientId.of("recipient-1"),
-                Recipient.of("alice@example.com")),
-            new NotificationDetails(
-                NotificationContent.of("Subject", "Body", List.of(invoice, receipt)),
-                Priority.NORMAL));
-    final Notification saved = adapter.save(notification).block();
+  void saveThenFindByIdKeepsEmbeddedAndStoredAttachmentsInOrder() {
+    final TenantId tenant = TenantId.of("tenant-1");
+    final List<Attachment> attachments = List.of(embeddedInvoice(tenant), storedContract(tenant));
+    final Notification saved =
+        adapter.save(withAttachments("order-attachments", attachments)).block();
 
     StepVerifier.create(adapter.findById(saved.notificationId()))
-        .assertNext(found -> assertEquals(List.of(invoice, receipt), found.content().attachments()))
+        .assertNext(found -> assertEquals(attachments, found.content().attachments()))
         .verifyComplete();
+  }
+
+  @Test
+  void embeddedContentIsStoredAsBinaryAndTheDocumentNeverKeepsAUrl() {
+    final Notification saved =
+        adapter
+            .save(
+                withAttachments(
+                    "order-binary",
+                    List.of(
+                        embeddedInvoice(TenantId.of("tenant-1")),
+                        storedContract(TenantId.of("tenant-1")))))
+            .block();
+
+    final Document raw =
+        mongoTemplate
+            .getCollection("notifications")
+            .flatMap(
+                collection ->
+                    Mono.from(
+                        collection
+                            .find(new Document("_id", saved.notificationId().value()))
+                            .first()))
+            .block();
+    final List<Document> stored = raw.getList("attachments", Document.class);
+    assertEquals("EMBEDDED", stored.get(0).getString("storage"));
+    assertInstanceOf(Binary.class, stored.get(0).get("content"));
+    assertEquals("tenant-1", stored.get(0).getString("tenantId"));
+    assertEquals(Sha256Digest.of(INVOICE_BYTES).hex(), stored.get(0).getString("sha256"));
+    assertEquals("OBJECT", stored.get(1).getString("storage"));
+    assertEquals("tenants/tenant-1/clean/upload-1", stored.get(1).getString("objectKey"));
+    assertFalse(stored.get(1).containsKey("content"), stored.get(1).toJson());
+    assertFalse(raw.toJson().contains("\"url\""), raw.toJson());
   }
 
   @Test
@@ -268,5 +332,87 @@ class NotificationMongoAdapterTest {
     StepVerifier.create(adapter.findById(NotificationId.of(id)))
         .assertNext(found -> assertEquals(List.of(), found.content().attachments()))
         .verifyComplete();
+  }
+
+  @Test
+  void anAttachmentOfAnotherTenantIsNeverWritten() {
+    StepVerifier.create(
+            adapter.save(
+                withAttachments(
+                    "order-foreign", List.of(embeddedInvoice(TenantId.of("tenant-2"))))))
+        .expectErrorSatisfies(
+            error -> {
+              assertInstanceOf(IllegalStateException.class, error);
+              assertFalse(error.getMessage().contains("tenant-2"), error.getMessage());
+            })
+        .verify();
+
+    assertEquals(
+        0L,
+        mongoTemplate
+            .count(
+                new org.springframework.data.mongodb.core.query.Query(), NotificationDocument.class)
+            .block());
+  }
+
+  @Test
+  void aStoredAttachmentOfAnotherTenantIsAnIntegrityErrorWhenReadBack() {
+    final String id = NotificationId.newId().value();
+    mongoTemplate
+        .save(
+            new NotificationDocument(
+                id,
+                "tenant-1",
+                "order-tampered",
+                "EMAIL",
+                "recipient-1",
+                "alice@example.com",
+                "Subject",
+                "Body",
+                List.of(
+                    new AttachmentDocument(
+                        "tenant-2",
+                        "invoice.pdf",
+                        "application/pdf",
+                        INVOICE_BYTES.length,
+                        Sha256Digest.of(INVOICE_BYTES).hex(),
+                        AttachmentDocument.EMBEDDED,
+                        INVOICE_BYTES,
+                        null,
+                        null)),
+                Priority.NORMAL,
+                NotificationStatus.PENDING,
+                Instant.now(),
+                List.of(),
+                null))
+        .block();
+
+    StepVerifier.create(adapter.findById(NotificationId.of(id)))
+        .expectError(IllegalStateException.class)
+        .verify();
+  }
+
+  @Test
+  void searchNeverLoadsTheAttachmentContentButFindByStatusKeepsItForTheRequeue() {
+    final Notification saved =
+        adapter
+            .save(
+                withAttachments("order-search", List.of(embeddedInvoice(TenantId.of("tenant-1")))))
+            .block();
+
+    final List<Notification> found =
+        adapter
+            .search(
+                new NotificationSearchCriteria(
+                    TenantId.of("tenant-1"), null, null, null, null, null, 10, 0))
+            .collectList()
+            .block();
+    assertEquals(1, found.size());
+    assertEquals(List.of(), found.getFirst().content().attachments());
+
+    final Notification pending = adapter.findByStatus(NotificationStatus.PENDING).blockFirst();
+    assertEquals(saved.notificationId(), pending.notificationId());
+    assertEquals(
+        List.of(embeddedInvoice(TenantId.of("tenant-1"))), pending.content().attachments());
   }
 }

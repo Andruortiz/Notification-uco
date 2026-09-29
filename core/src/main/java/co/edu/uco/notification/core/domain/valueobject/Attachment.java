@@ -1,25 +1,20 @@
 package co.edu.uco.notification.core.domain.valueobject;
 
-import java.util.Locale;
+import co.edu.uco.notification.utils.Preconditions;
 
-public record Attachment(String fileName, String contentType, Long sizeBytes, String url) {
+public record Attachment(
+    TenantId tenantId,
+    String fileName,
+    String contentType,
+    long sizeBytes,
+    Sha256Digest sha256,
+    AttachmentSource source) {
 
   public Attachment {
-    contentType = normalize(contentType);
-  }
-
-  public static Attachment of(
-      final String fileName, final String contentType, final Long sizeBytes, final String url) {
-    return new Attachment(fileName, contentType, sizeBytes, url);
-  }
-
-  private static String normalize(final String contentType) {
-    if (contentType == null) {
-      return null;
-    }
-    final int parameters = contentType.indexOf(';');
-    final String mediaType = parameters < 0 ? contentType : contentType.substring(0, parameters);
-    return mediaType.strip().toLowerCase(Locale.ROOT);
+    Preconditions.requireNonNull(tenantId, "tenantId must not be null");
+    Preconditions.requireNonNull(sha256, "sha256 must not be null");
+    Preconditions.requireNonNull(source, "source must not be null");
+    contentType = AttachmentSubmission.normalizeContentType(contentType);
   }
 
   @Override
@@ -30,6 +25,8 @@ public record Attachment(String fileName, String contentType, Long sizeBytes, St
         + contentType
         + ", sizeBytes="
         + sizeBytes
+        + ", sha256="
+        + sha256.hex()
         + "]";
   }
 }

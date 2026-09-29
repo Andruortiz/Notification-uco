@@ -7,7 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.valueobject.Attachment;
+import co.edu.uco.notification.core.domain.valueobject.AttachmentSource;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
+import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -57,10 +61,20 @@ class NotificationContentTest {
     assertThrows(IllegalArgumentException.class, () -> NotificationContent.of(subject, "b"));
   }
 
-  private static final Attachment FIRST =
-      Attachment.of("a.pdf", "application/pdf", 10L, "https://files.example.test/a.pdf");
-  private static final Attachment SECOND =
-      Attachment.of("b.png", "image/png", 20L, "https://files.example.test/b.png");
+  private static final Attachment FIRST = attachment("a.pdf", "application/pdf", "first");
+  private static final Attachment SECOND = attachment("b.png", "image/png", "second");
+
+  private static Attachment attachment(
+      final String fileName, final String contentType, final String text) {
+    final byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+    return new Attachment(
+        TenantId.of("tenant-1"),
+        fileName,
+        contentType,
+        bytes.length,
+        Sha256Digest.of(bytes),
+        new AttachmentSource.EmbeddedContent(bytes));
+  }
 
   @Test
   void contentWithoutAttachmentsHasAnEmptyList() {

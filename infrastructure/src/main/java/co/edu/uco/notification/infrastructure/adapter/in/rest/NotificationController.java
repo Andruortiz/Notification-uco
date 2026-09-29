@@ -101,10 +101,8 @@ public class NotificationController {
         ChannelType.of(request.channelType()),
         RecipientId.of(request.recipientId()),
         Recipient.of(request.recipientAddress()),
-        NotificationContent.of(
-            request.subject(),
-            request.body(),
-            request.attachments().stream().map(AttachmentRequest::toDomain).toList()),
-        Priority.valueOf(request.priority()));
+        NotificationContent.of(request.subject(), request.body()),
+        Priority.valueOf(request.priority()),
+        request.attachments().stream().map(AttachmentRequest::toSubmission).toList());
   }
 }

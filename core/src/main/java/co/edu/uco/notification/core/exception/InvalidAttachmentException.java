@@ -14,6 +14,19 @@ public class InvalidAttachmentException extends RuntimeException {
     this.position = position;
   }
 
+  private InvalidAttachmentException(final String message) {
+    super(message);
+    this.position = -1;
+  }
+
+  public static InvalidAttachmentException forUpload(final String rule) {
+    return new InvalidAttachmentException("upload: " + rule);
+  }
+
+  public static InvalidAttachmentException forUpload(final String rule, final String fileName) {
+    return new InvalidAttachmentException("upload: " + rule + " (" + fileName + ")");
+  }
+
   public int position() {
     return position;
   }

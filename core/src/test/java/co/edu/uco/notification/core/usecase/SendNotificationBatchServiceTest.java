@@ -1,10 +1,16 @@
 package co.edu.uco.notification.core.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
+import co.edu.uco.notification.core.domain.AttachmentUpload;
+import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.valueobject.AttachmentSubmission;
 import co.edu.uco.notification.core.domain.valueobject.BatchId;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
@@ -12,23 +18,42 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.Priority;
+import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
+import co.edu.uco.notification.core.domain.valueobject.ScanVerdict;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.UploadId;
+import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.port.in.BatchAcceptedResult;
 import co.edu.uco.notification.core.port.in.BatchItemOutcome;
+import co.edu.uco.notification.core.port.in.BatchItemResult;
 import co.edu.uco.notification.core.port.in.BatchNotificationItem;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
+import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
+import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
+import co.edu.uco.notification.core.port.out.ChannelRoute;
+import co.edu.uco.notification.core.port.out.ContentTypeDetectorPort;
+import co.edu.uco.notification.core.port.out.MalwareScannerPort;
+import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
+import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
+import co.edu.uco.notification.core.repository.NotificationRepository;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Base64;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
+import reactor.test.StepVerifier;
 
 class SendNotificationBatchServiceTest {
 
@@ -145,5 +170,154 @@ class SendNotificationBatchServiceTest {
   @Test
   void constructorRejectsNullSendNotificationUseCase() {
     assertThrows(NullPointerException.class, () -> new SendNotificationBatchService(null));
+  }
+
+  private static final String ATTACHMENTS_SCHEMA =
+      "{\"type\":\"object\",\"properties\":{\"attachments\":{\"type\":\"array\"}}}";
+  private static final byte[] PDF = "%PDF-1.4 batch".getBytes(StandardCharsets.UTF_8);
+  private static final String SIGNATURE = "X-Amz-Signature=secret-7788";
+  private static final UploadId PENDING_UPLOAD = UploadId.of("pending-upload");
+  private static final long LARGE = 2_000_000L;
+
+  @Test
+  void sendBatchRejectsOnlyTheItemsWithAnInvalidOrNotReadyAttachment() {
+    final RealPipeline pipeline = new RealPipeline();
+    pipeline.givenScannerVerdict(Mono.just(ScanVerdict.clean("1")));
+
+    final BatchAcceptedResult result =
+        pipeline
+            .service()
+            .sendBatch(
+                new SendNotificationBatchCommand(
+                    TENANT_ID,
+                    BatchId.of("batch-attachments"),
+                    List.of(
+                        itemWith("order-invalid", embeddedPdf(PDF.length + 1L)),
+                        itemWith("order-pending", pendingReference()),
+                        itemWith("order-valid", embeddedPdf(PDF.length)))))
+            .block();
+
+    assertNotNull(result);
+    final BatchItemResult invalid = result.results().get(0);
+    final BatchItemResult pending = result.results().get(1);
+    assertEquals(BatchItemOutcome.REJECTED, invalid.outcome());
+    assertTrue(
+        invalid.rejectionReason().startsWith("attachments[0]: sizeBytes does not match"),
+        invalid.rejectionReason());
+    assertEquals(BatchItemOutcome.REJECTED, pending.outcome());
+    assertTrue(
+        pending.rejectionReason().contains("still being scanned"), pending.rejectionReason());
+    assertFalse(pending.rejectionReason().contains("secret-7788"), pending.rejectionReason());
+    assertEquals(BatchItemOutcome.ACCEPTED, result.results().get(2).outcome());
+  }
+
+  @Test
+  void anUnavailableInspectionIsNotTurnedIntoAnItemRejection() {
+    final RealPipeline pipeline = new RealPipeline();
+    pipeline.givenScannerVerdict(Mono.error(new IllegalStateException("clamav down")));
+
+    StepVerifier.create(
+            pipeline
+                .service()
+                .sendBatch(
+                    new SendNotificationBatchCommand(
+                        TENANT_ID,
+                        BatchId.of("batch-scanner-down"),
+                        List.of(itemWith("order-1", embeddedPdf(PDF.length))))))
+        .expectError(AttachmentInspectionUnavailableException.class)
+        .verify();
+  }
+
+  private static AttachmentSubmission embeddedPdf(final long declaredSize) {
+    return AttachmentSubmission.embedded(
+        "invoice.pdf", "application/pdf", declaredSize, Base64.getEncoder().encodeToString(PDF));
+  }
+
+  private static AttachmentSubmission pendingReference() {
+    return AttachmentSubmission.reference(
+        "contract.pdf",
+        "application/pdf",
+        LARGE,
+        "http://minio.test/bucket/"
+            + AttachmentUpload.uploadKeyFor(TENANT_ID, PENDING_UPLOAD)
+            + "?"
+            + SIGNATURE);
+  }
+
+  private static BatchNotificationItem itemWith(
+      final String externalId, final AttachmentSubmission attachment) {
+    return new BatchNotificationItem(
+        ExternalId.of(externalId),
+        ChannelType.of("EMAIL"),
+        RecipientId.of("recipient-1"),
+        Recipient.of("alice@example.com"),
+        NotificationContent.of("Subject", "Body"),
+        Priority.NORMAL,
+        List.of(attachment));
+  }
+
+  private static final class RealPipeline {
+
+    private final ChannelCatalogPort channelCatalogPort = Mockito.mock(ChannelCatalogPort.class);
+    private final NotificationRepository notificationRepository =
+        Mockito.mock(NotificationRepository.class);
+    private final NotificationEventPublisherPort eventPublisherPort =
+        Mockito.mock(NotificationEventPublisherPort.class);
+    private final ContentTypeDetectorPort detector = Mockito.mock(ContentTypeDetectorPort.class);
+    private final MalwareScannerPort scanner = Mockito.mock(MalwareScannerPort.class);
+    private final ScanVerdictCachePort cache = Mockito.mock(ScanVerdictCachePort.class);
+    private final AttachmentUploadRepository uploads =
+        Mockito.mock(AttachmentUploadRepository.class);
+    private final AttachmentStoragePort storage = Mockito.mock(AttachmentStoragePort.class);
+
+    RealPipeline() {
+      when(channelCatalogPort.findActiveRoute(ChannelType.of("EMAIL"), TENANT_ID))
+          .thenReturn(
+              Mono.just(
+                  new ChannelRoute(
+                      ChannelType.of("EMAIL"),
+                      List.of(ProviderId.of("simulated")),
+                      ATTACHMENTS_SCHEMA)));
+      when(notificationRepository.findByTenantAndExternalId(any(), any())).thenReturn(Mono.empty());
+      when(notificationRepository.save(any(Notification.class)))
+          .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+      when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+      when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+      when(detector.detect(any(), any())).thenReturn(Mono.just("application/pdf"));
+      when(cache.find(any(), any())).thenReturn(Mono.empty());
+      when(cache.save(any(), any(), any())).thenReturn(Mono.empty());
+      when(storage.parseUploadUrl(any()))
+          .thenAnswer(
+              invocation ->
+                  Optional.of(
+                      ((String) invocation.getArgument(0))
+                          .substring("http://minio.test/bucket/".length())
+                          .split("\\?")[0]));
+      when(uploads.findByTenantAndId(TENANT_ID, PENDING_UPLOAD))
+          .thenReturn(
+              Mono.just(
+                  AttachmentUpload.issue(
+                      PENDING_UPLOAD,
+                      TENANT_ID,
+                      "contract.pdf",
+                      "application/pdf",
+                      LARGE,
+                      Instant.now(),
+                      Instant.now().plusSeconds(900))));
+    }
+
+    void givenScannerVerdict(final Mono<ScanVerdict> verdict) {
+      when(scanner.scan(any())).thenReturn(verdict);
+    }
+
+    SendNotificationBatchService service() {
+      return new SendNotificationBatchService(
+          new SendNotificationService(
+              channelCatalogPort,
+              notificationRepository,
+              eventPublisherPort,
+              new AttachmentResolver(
+                  new AttachmentInspector(detector, scanner, cache), uploads, storage)));
+    }
   }
 }

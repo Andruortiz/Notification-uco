@@ -1,17 +1,19 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import co.edu.uco.notification.core.domain.valueobject.Attachment;
+import co.edu.uco.notification.core.domain.valueobject.AttachmentSubmission;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusUseCase;
@@ -21,6 +23,7 @@ import co.edu.uco.notification.core.port.in.SearchNotificationsUseCase;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -189,8 +192,10 @@ class NotificationControllerTest {
         .isBadRequest();
   }
 
+  private static final String ATTACHMENT_CONTENT = "c2VjcmV0LWNvbnRlbnQtMzE0MQ==";
   private static final String ATTACHMENT_URL =
-      "https://files.example.test/secret-token-3141/invoice.pdf";
+      "http://minio.test/notification-attachments/tenants/tenant-1/uploads/u-1"
+          + "?X-Amz-Signature=secret-token-3141";
 
   private static final String REQUEST_WITH_ATTACHMENTS =
       """
@@ -206,19 +211,19 @@ class NotificationControllerTest {
           {
             "fileName": "invoice.pdf",
             "contentType": "Application/PDF",
-            "sizeBytes": 1024,
-            "url": "%s"
+            "sizeBytes": 20,
+            "content": "%s"
           },
           {
-            "fileName": "receipt.png",
-            "contentType": "image/png",
-            "sizeBytes": 2048,
-            "url": "https://files.example.test/receipt.png"
+            "fileName": "contract.pdf",
+            "contentType": "application/pdf",
+            "sizeBytes": 2000000,
+            "url": "%s"
           }
         ]
       }
       """
-          .formatted(ATTACHMENT_URL);
+          .formatted(ATTACHMENT_CONTENT, ATTACHMENT_URL);
 
   private SendNotificationCommand sentCommand(final String body) {
     when(sendNotificationUseCase.send(any()))
@@ -244,20 +249,23 @@ class NotificationControllerTest {
   }
 
   @Test
-  void sendMapsTheAttachmentsInOrderWithANormalizedType() {
+  void sendMapsTheAttachmentsInOrderAsSubmissionsWithANormalizedType() {
     final SendNotificationCommand command = sentCommand(REQUEST_WITH_ATTACHMENTS);
 
     assertEquals(
         List.of(
-            Attachment.of("invoice.pdf", "application/pdf", 1024L, ATTACHMENT_URL),
-            Attachment.of(
-                "receipt.png", "image/png", 2048L, "https://files.example.test/receipt.png")),
-        command.content().attachments());
+            AttachmentSubmission.embedded(
+                "invoice.pdf", "application/pdf", 20L, ATTACHMENT_CONTENT),
+            AttachmentSubmission.reference(
+                "contract.pdf", "application/pdf", 2_000_000L, ATTACHMENT_URL)),
+        command.attachments());
+    assertTrue(command.content().attachments().isEmpty());
+    assertEquals("Subject", command.content().subject());
   }
 
   @Test
   void sendWithoutAttachmentsMapsAnEmptyList() {
-    assertTrue(sentCommand(REQUEST_BODY).content().attachments().isEmpty());
+    assertTrue(sentCommand(REQUEST_BODY).attachments().isEmpty());
   }
 
   @Test
@@ -266,6 +274,47 @@ class NotificationControllerTest {
         REQUEST_BODY.replace(
             "\"priority\": \"NORMAL\"", "\"priority\": \"NORMAL\", \"attachments\": null");
 
-    assertTrue(sentCommand(body).content().attachments().isEmpty());
+    assertTrue(sentCommand(body).attachments().isEmpty());
+  }
+
+  @Test
+  void attachmentRequestToStringHidesTheContentAndTheUrl() {
+    final String text =
+        new AttachmentRequest(
+                "invoice.pdf", "application/pdf", 20L, ATTACHMENT_CONTENT, ATTACHMENT_URL)
+            .toString();
+
+    assertFalse(text.contains(ATTACHMENT_CONTENT), text);
+    assertFalse(text.contains("secret-token-3141"), text);
+    assertTrue(text.contains("invoice.pdf"), text);
+  }
+
+  @Test
+  void sendReturnsBadRequestNamingTheAttachmentWhenAnAttachmentIsInvalid() {
+    when(sendNotificationUseCase.send(any()))
+        .thenReturn(
+            Mono.error(
+                new InvalidAttachmentException(
+                    1, "sizeBytes must not exceed 10485760", "contract.pdf")));
+
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("X-Tenant-Id", "tenant-1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(REQUEST_WITH_ATTACHMENTS)
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.message")
+        .isEqualTo("attachments[1]: sizeBytes must not exceed 10485760 (contract.pdf)")
+        .consumeWith(
+            result -> {
+              final String responseBody =
+                  new String(result.getResponseBody(), StandardCharsets.UTF_8);
+              assertFalse(responseBody.contains("secret-token-3141"), responseBody);
+              assertFalse(responseBody.contains(ATTACHMENT_CONTENT), responseBody);
+            });
   }
 }

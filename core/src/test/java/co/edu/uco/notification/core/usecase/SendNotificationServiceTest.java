@@ -2,6 +2,7 @@ package co.edu.uco.notification.core.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -13,6 +14,8 @@ import static org.mockito.Mockito.when;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
+import co.edu.uco.notification.core.exception.AttachmentNotReadyException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
@@ -22,6 +25,8 @@ import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,6 +42,7 @@ class SendNotificationServiceTest {
       Mockito.mock(NotificationRepository.class);
   private final NotificationEventPublisherPort eventPublisherPort =
       Mockito.mock(NotificationEventPublisherPort.class);
+  private final AttachmentResolver attachmentResolver = Mockito.mock(AttachmentResolver.class);
 
   private SendNotificationService service;
 
@@ -47,7 +53,9 @@ class SendNotificationServiceTest {
   @BeforeEach
   void setUp() {
     service =
-        new SendNotificationService(channelCatalogPort, notificationRepository, eventPublisherPort);
+        new SendNotificationService(
+            channelCatalogPort, notificationRepository, eventPublisherPort, attachmentResolver);
+    when(attachmentResolver.resolve(any(), any())).thenReturn(Mono.just(List.of()));
   }
 
   private static SendNotificationCommand command() {
@@ -176,47 +184,102 @@ class SendNotificationServiceTest {
   void constructorRejectsNullChannelCatalogPort() {
     assertThrows(
         NullPointerException.class,
-        () -> new SendNotificationService(null, notificationRepository, eventPublisherPort));
+        () ->
+            new SendNotificationService(
+                null, notificationRepository, eventPublisherPort, attachmentResolver));
   }
 
   @Test
   void constructorRejectsNullNotificationRepository() {
     assertThrows(
         NullPointerException.class,
-        () -> new SendNotificationService(channelCatalogPort, null, eventPublisherPort));
+        () ->
+            new SendNotificationService(
+                channelCatalogPort, null, eventPublisherPort, attachmentResolver));
   }
 
   @Test
   void constructorRejectsNullEventPublisherPort() {
     assertThrows(
         NullPointerException.class,
-        () -> new SendNotificationService(channelCatalogPort, notificationRepository, null));
+        () ->
+            new SendNotificationService(
+                channelCatalogPort, notificationRepository, null, attachmentResolver));
+  }
+
+  @Test
+  void constructorRejectsNullAttachmentResolver() {
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            new SendNotificationService(
+                channelCatalogPort, notificationRepository, eventPublisherPort, null));
   }
 
   private static final String ATTACHMENTS_SCHEMA =
       "{\"type\":\"object\",\"properties\":{\"attachments\":{\"type\":\"array\",\"maxItems\":5,"
           + "\"items\":{\"properties\":{\"contentType\":{\"enum\":[\"application/pdf\",\"image/png\"]}}}}}}";
 
-  private static final Attachment INVOICE =
-      Attachment.of("invoice.pdf", "application/pdf", 1024L, "https://files.example.test/i.pdf");
-  private static final Attachment RECEIPT =
-      Attachment.of("receipt.png", "image/png", 2048L, "https://files.example.test/r.png");
+  private static final byte[] PDF_BYTES = "%PDF-1.4 invoice".getBytes(StandardCharsets.UTF_8);
+  private static final byte[] PNG_BYTES = "png-receipt".getBytes(StandardCharsets.UTF_8);
 
-  private static SendNotificationCommand commandWith(final Attachment... attachments) {
+  private static final AttachmentSubmission INVOICE_SUBMISSION =
+      AttachmentSubmission.embedded(
+          "invoice.pdf",
+          "application/pdf",
+          (long) PDF_BYTES.length,
+          Base64.getEncoder().encodeToString(PDF_BYTES));
+  private static final AttachmentSubmission RECEIPT_SUBMISSION =
+      AttachmentSubmission.embedded(
+          "receipt.png",
+          "image/png",
+          (long) PNG_BYTES.length,
+          Base64.getEncoder().encodeToString(PNG_BYTES));
+
+  private static final Attachment INVOICE = verified("invoice.pdf", "application/pdf", PDF_BYTES);
+  private static final Attachment RECEIPT = verified("receipt.png", "image/png", PNG_BYTES);
+
+  private static Attachment verified(
+      final String fileName, final String contentType, final byte[] bytes) {
+    return new Attachment(
+        TENANT_ID,
+        fileName,
+        contentType,
+        bytes.length,
+        Sha256Digest.of(bytes),
+        new AttachmentSource.EmbeddedContent(bytes));
+  }
+
+  private static SendNotificationCommand commandWith(final AttachmentSubmission... attachments) {
     return new SendNotificationCommand(
         TENANT_ID,
         EXTERNAL_ID,
         CHANNEL_TYPE,
         RecipientId.of("recipient-1"),
         Recipient.of("alice@example.com"),
-        NotificationContent.of("Subject", "Body", List.of(attachments)),
-        Priority.NORMAL);
+        NotificationContent.of("Subject", "Body"),
+        Priority.NORMAL,
+        List.of(attachments));
   }
 
   private void givenRouteWithSchema(final String schema) {
     when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID))
         .thenReturn(
             Mono.just(new ChannelRoute(CHANNEL_TYPE, List.of(ProviderId.of("simulated")), schema)));
+  }
+
+  private void givenResolved(final Attachment... attachments) {
+    when(attachmentResolver.resolve(eq(TENANT_ID), any()))
+        .thenReturn(Mono.just(List.of(attachments)));
+  }
+
+  private void givenAcceptancePipeline() {
+    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
+        .thenReturn(Mono.empty());
+    when(notificationRepository.save(any(Notification.class)))
+        .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
   }
 
   private void verifyNothingWasStored() {
@@ -228,22 +291,21 @@ class SendNotificationServiceTest {
   }
 
   @Test
-  void sendStoresTheAttachmentsInOrderWhenTheChannelDeclaresThem() {
+  void sendStoresTheVerifiedAttachmentsInOrderWhenTheChannelDeclaresThem() {
     givenRouteWithSchema(ATTACHMENTS_SCHEMA);
-    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
-        .thenReturn(Mono.empty());
-    when(notificationRepository.save(any(Notification.class)))
-        .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
-    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+    givenResolved(INVOICE, RECEIPT);
+    givenAcceptancePipeline();
 
-    StepVerifier.create(service.send(commandWith(INVOICE, RECEIPT)))
+    StepVerifier.create(service.send(commandWith(INVOICE_SUBMISSION, RECEIPT_SUBMISSION)))
         .assertNext(result -> assertFalse(result.duplicate()))
         .verifyComplete();
 
+    verify(attachmentResolver).resolve(TENANT_ID, List.of(INVOICE_SUBMISSION, RECEIPT_SUBMISSION));
     final ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
     verify(notificationRepository).save(saved.capture());
     assertEquals(List.of(INVOICE, RECEIPT), saved.getValue().content().attachments());
+    assertEquals("Subject", saved.getValue().content().subject());
+    assertEquals("Body", saved.getValue().content().body());
     verify(eventPublisherPort).enqueueForDispatch(any(Notification.class));
   }
 
@@ -261,10 +323,11 @@ class SendNotificationServiceTest {
                 NotificationContent.of("Subject", "Body", List.of(INVOICE)), Priority.NORMAL));
     existing.pullEvents();
     givenRouteWithSchema(ATTACHMENTS_SCHEMA);
+    givenResolved(RECEIPT);
     when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
         .thenReturn(Mono.just(existing));
 
-    StepVerifier.create(service.send(commandWith(RECEIPT)))
+    StepVerifier.create(service.send(commandWith(RECEIPT_SUBMISSION)))
         .assertNext(
             result -> {
               assertTrue(result.duplicate());
@@ -277,32 +340,39 @@ class SendNotificationServiceTest {
   }
 
   @Test
-  void sendRejectsAnAttachmentThatBreaksAGlobalRuleWithoutStoringAnything() {
-    givenRouteWithSchema(ATTACHMENTS_SCHEMA);
-    final Attachment tooLarge =
-        Attachment.of("big.pdf", "application/pdf", 10_485_761L, "https://files.example.test/b");
+  void theGlobalPolicyRunsBeforeTheChannelSchemaAndTheResolver() {
+    givenRouteWithSchema(null);
+    final AttachmentSubmission gif =
+        AttachmentSubmission.embedded("anim.gif", "image/gif", 3L, "cGRm");
 
-    StepVerifier.create(service.send(commandWith(INVOICE, tooLarge)))
+    StepVerifier.create(service.send(commandWith(INVOICE_SUBMISSION, gif)))
         .expectErrorSatisfies(
             error -> {
-              assertTrue(error instanceof InvalidAttachmentException, error.toString());
+              assertInstanceOf(InvalidAttachmentException.class, error);
               assertTrue(error.getMessage().startsWith("attachments[1]: "), error.getMessage());
             })
         .verify();
 
+    verify(attachmentResolver, never()).resolve(any(), any());
     verifyNothingWasStored();
   }
 
   @Test
-  void sendRejectsAnAttachmentThatBreaksTheChannelRuleWithoutStoringAnything() {
+  void theChannelSchemaRunsBeforeTheResolver() {
     givenRouteWithSchema(ATTACHMENTS_SCHEMA);
-    final Attachment gif =
-        Attachment.of("anim.gif", "image/gif", 10L, "https://files.example.test/a.gif");
+    final byte[] jpeg = "jpeg".getBytes(StandardCharsets.UTF_8);
+    final AttachmentSubmission photo =
+        AttachmentSubmission.embedded(
+            "photo.jpg",
+            "image/jpeg",
+            (long) jpeg.length,
+            Base64.getEncoder().encodeToString(jpeg));
 
-    StepVerifier.create(service.send(commandWith(gif)))
+    StepVerifier.create(service.send(commandWith(photo)))
         .expectError(InvalidContentException.class)
         .verify();
 
+    verify(attachmentResolver, never()).resolve(any(), any());
     verifyNothingWasStored();
   }
 
@@ -310,7 +380,7 @@ class SendNotificationServiceTest {
   void sendRejectsAttachmentsOnAChannelThatDoesNotDeclareThem() {
     givenRouteWithSchema(null);
 
-    StepVerifier.create(service.send(commandWith(INVOICE)))
+    StepVerifier.create(service.send(commandWith(INVOICE_SUBMISSION)))
         .expectErrorSatisfies(
             error ->
                 assertTrue(
@@ -322,13 +392,43 @@ class SendNotificationServiceTest {
   }
 
   @Test
-  void sendRejectsAnInvalidDuplicateBeforeLookingForTheOriginal() {
+  void aResolverRejectionHappensBeforeLookingForTheDuplicateAndStoresNothing() {
     givenRouteWithSchema(ATTACHMENTS_SCHEMA);
-    final Attachment unnamed =
-        Attachment.of(" ", "application/pdf", 10L, "https://files.example.test/u.pdf");
+    when(attachmentResolver.resolve(any(), any()))
+        .thenReturn(
+            Mono.error(
+                new InvalidAttachmentException(
+                    0, "the file contains malicious software", "invoice.pdf")));
 
-    StepVerifier.create(service.send(commandWith(unnamed)))
+    StepVerifier.create(service.send(commandWith(INVOICE_SUBMISSION)))
         .expectError(InvalidAttachmentException.class)
+        .verify();
+
+    verifyNothingWasStored();
+  }
+
+  @Test
+  void anUploadStillBeingScannedIsRejectedWithoutStoringAnything() {
+    givenRouteWithSchema(ATTACHMENTS_SCHEMA);
+    when(attachmentResolver.resolve(any(), any()))
+        .thenReturn(Mono.error(new AttachmentNotReadyException(0)));
+
+    StepVerifier.create(service.send(commandWith(INVOICE_SUBMISSION)))
+        .expectError(AttachmentNotReadyException.class)
+        .verify();
+
+    verifyNothingWasStored();
+  }
+
+  @Test
+  void anUnavailableInspectionPropagatesWithoutStoringAnything() {
+    givenRouteWithSchema(ATTACHMENTS_SCHEMA);
+    when(attachmentResolver.resolve(any(), any()))
+        .thenReturn(
+            Mono.error(new AttachmentInspectionUnavailableException("clamav is not reachable")));
+
+    StepVerifier.create(service.send(commandWith(INVOICE_SUBMISSION)))
+        .expectError(AttachmentInspectionUnavailableException.class)
         .verify();
 
     verifyNothingWasStored();

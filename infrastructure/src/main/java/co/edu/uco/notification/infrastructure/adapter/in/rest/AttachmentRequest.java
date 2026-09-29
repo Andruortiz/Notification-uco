@@ -1,11 +1,12 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
-import co.edu.uco.notification.core.domain.valueobject.Attachment;
+import co.edu.uco.notification.core.domain.valueobject.AttachmentSubmission;
 
-public record AttachmentRequest(String fileName, String contentType, Long sizeBytes, String url) {
+public record AttachmentRequest(
+    String fileName, String contentType, Long sizeBytes, String content, String url) {
 
-  Attachment toDomain() {
-    return Attachment.of(fileName, contentType, sizeBytes, url);
+  AttachmentSubmission toSubmission() {
+    return new AttachmentSubmission(fileName, contentType, sizeBytes, content, url);
   }
 
   @Override

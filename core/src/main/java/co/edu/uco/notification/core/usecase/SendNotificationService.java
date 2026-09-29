@@ -4,6 +4,8 @@ import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.policy.AttachmentPolicy;
 import co.edu.uco.notification.core.domain.policy.ContentSchemaValidator;
+import co.edu.uco.notification.core.domain.valueobject.Attachment;
+import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
@@ -23,11 +25,13 @@ public final class SendNotificationService implements SendNotificationUseCase {
   private final ChannelCatalogPort channelCatalogPort;
   private final NotificationRepository notificationRepository;
   private final NotificationEventPublisherPort eventPublisherPort;
+  private final AttachmentResolver attachmentResolver;
 
   public SendNotificationService(
       final ChannelCatalogPort channelCatalogPort,
       final NotificationRepository notificationRepository,
-      final NotificationEventPublisherPort eventPublisherPort) {
+      final NotificationEventPublisherPort eventPublisherPort,
+      final AttachmentResolver attachmentResolver) {
     this.channelCatalogPort =
         Preconditions.requireNonNull(channelCatalogPort, "channelCatalogPort must not be null");
     this.notificationRepository =
@@ -35,6 +39,8 @@ public final class SendNotificationService implements SendNotificationUseCase {
             notificationRepository, "notificationRepository must not be null");
     this.eventPublisherPort =
         Preconditions.requireNonNull(eventPublisherPort, "eventPublisherPort must not be null");
+    this.attachmentResolver =
+        Preconditions.requireNonNull(attachmentResolver, "attachmentResolver must not be null");
   }
 
   @Override
@@ -49,15 +55,21 @@ public final class SendNotificationService implements SendNotificationUseCase {
 
   private Mono<SendNotificationResult> validateAndProceed(
       final ChannelRoute route, final SendNotificationCommand command) {
-    AttachmentPolicy.validate(command.content().attachments());
-    ContentSchemaValidator.validate(route.channelType(), route.contentSchema(), command.content());
-    return notificationRepository
-        .findByTenantAndExternalId(command.tenantId(), command.externalId())
-        .map(existing -> toResult(existing, true))
-        .switchIfEmpty(Mono.defer(() -> acceptAndDispatch(command)));
+    AttachmentPolicy.validate(command.attachments());
+    ContentSchemaValidator.validate(
+        route.channelType(), route.contentSchema(), command.content(), command.attachments());
+    return attachmentResolver
+        .resolve(command.tenantId(), command.attachments())
+        .flatMap(
+            attachments ->
+                notificationRepository
+                    .findByTenantAndExternalId(command.tenantId(), command.externalId())
+                    .map(existing -> toResult(existing, true))
+                    .switchIfEmpty(Mono.defer(() -> acceptAndDispatch(command, attachments))));
   }
 
-  private Mono<SendNotificationResult> acceptAndDispatch(final SendNotificationCommand command) {
+  private Mono<SendNotificationResult> acceptAndDispatch(
+      final SendNotificationCommand command, final List<Attachment> attachments) {
     final Notification notification =
         Notification.accept(
             new NotificationRouting(
@@ -66,7 +78,10 @@ public final class SendNotificationService implements SendNotificationUseCase {
                 command.channelType(),
                 command.recipientId(),
                 command.recipient()),
-            new NotificationDetails(command.content(), command.priority()));
+            new NotificationDetails(
+                NotificationContent.of(
+                    command.content().subject(), command.content().body(), attachments),
+                command.priority()));
     final List<DomainEvent> events = notification.pullEvents();
 
     return notificationRepository

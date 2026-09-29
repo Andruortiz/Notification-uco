@@ -1,7 +1,9 @@
 package co.edu.uco.notification.core.usecase;
 
 import co.edu.uco.notification.core.domain.valueobject.BatchId;
+import co.edu.uco.notification.core.exception.AttachmentNotReadyException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.port.in.BatchAcceptedResult;
 import co.edu.uco.notification.core.port.in.BatchItemResult;
@@ -48,7 +50,8 @@ public final class SendNotificationBatchService implements SendNotificationBatch
             item.recipientId(),
             item.recipient(),
             item.content(),
-            item.priority());
+            item.priority(),
+            item.attachments());
 
     return sendNotificationUseCase
         .send(itemCommand)
@@ -58,8 +61,14 @@ public final class SendNotificationBatchService implements SendNotificationBatch
                     ? BatchItemResult.duplicate(item.externalId(), result.notificationId())
                     : BatchItemResult.accepted(item.externalId(), result.notificationId()))
         .onErrorResume(
-            ex ->
-                ex instanceof ChannelNotAvailableException || ex instanceof InvalidContentException,
+            SendNotificationBatchService::isItemRejection,
             ex -> Mono.just(BatchItemResult.rejected(item.externalId(), ex.getMessage())));
+  }
+
+  private static boolean isItemRejection(final Throwable error) {
+    return error instanceof ChannelNotAvailableException
+        || error instanceof InvalidContentException
+        || error instanceof InvalidAttachmentException
+        || error instanceof AttachmentNotReadyException;
   }
 }

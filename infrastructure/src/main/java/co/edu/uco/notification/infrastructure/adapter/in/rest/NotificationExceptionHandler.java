@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import org.springframework.http.HttpStatus;
@@ -24,6 +25,11 @@ public class NotificationExceptionHandler {
 
   @ExceptionHandler(InvalidContentException.class)
   public ResponseEntity<ErrorResponse> handleInvalidContent(final InvalidContentException e) {
+    return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(e.getMessage()));
+  }
+
+  @ExceptionHandler(InvalidAttachmentException.class)
+  public ResponseEntity<ErrorResponse> handleInvalidAttachment(final InvalidAttachmentException e) {
     return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(e.getMessage()));
   }
 

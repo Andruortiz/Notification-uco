@@ -33,8 +33,7 @@ public class NotificationMongoAdapter implements NotificationRepository {
   @Override
   public Mono<Notification> save(final Notification notification) {
     Preconditions.requireNonNull(notification, "notification must not be null");
-    return mongoTemplate
-        .save(NotificationDocumentMapper.toDocument(notification))
+    return Mono.defer(() -> mongoTemplate.save(NotificationDocumentMapper.toDocument(notification)))
         .map(NotificationDocumentMapper::toDomain)
         .onErrorMap(
             OptimisticLockingFailureException.class,
@@ -99,6 +98,7 @@ public class NotificationMongoAdapter implements NotificationRepository {
             .with(Sort.by(Sort.Direction.DESC, "acceptedAt"))
             .skip(criteria.offset())
             .limit(criteria.limit() + 1);
+    query.fields().exclude("attachments");
     return mongoTemplate
         .find(query, NotificationDocument.class)
         .map(NotificationDocumentMapper::toDomain);

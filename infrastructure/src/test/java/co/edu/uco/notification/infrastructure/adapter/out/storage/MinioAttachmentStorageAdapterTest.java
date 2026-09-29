@@ -199,4 +199,13 @@ class MinioAttachmentStorageAdapterTest {
 
     assertFalse(text.contains("secret-1"), text);
   }
+
+  @Test
+  void pingIsTrueOnlyWhenTheStorageAnswers() {
+    assertTrue(adapter("bucket-" + UUID.randomUUID()).ping().block());
+    assertFalse(
+        new MinioAttachmentStorageAdapter(properties("bucket", "http://localhost:1"))
+            .ping()
+            .block());
+  }
 }

@@ -16,6 +16,18 @@ spring:
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
 
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-components: always
+      group:
+        readiness:
+          include: readinessState,mongo,rabbit
+        liveness:
+          include: livenessState
+
 springdoc:
   swagger-ui:
     url: /openapi/api-notificaciones.yaml

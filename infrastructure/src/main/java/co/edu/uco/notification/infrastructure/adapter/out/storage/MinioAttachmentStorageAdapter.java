@@ -177,6 +177,12 @@ public class MinioAttachmentStorageAdapter implements AttachmentStoragePort {
             MinioAttachmentStorageAdapter::unavailable);
   }
 
+  public Mono<Boolean> ping() {
+    return call(() -> client().bucketExists(BucketExistsArgs.builder().bucket(bucket).build()))
+        .map(exists -> Boolean.TRUE)
+        .onErrorReturn(false);
+  }
+
   @Override
   public Optional<String> parseUploadUrl(final String url) {
     if (url == null) {

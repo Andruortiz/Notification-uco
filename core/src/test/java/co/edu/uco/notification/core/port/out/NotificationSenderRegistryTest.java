@@ -42,6 +42,11 @@ class NotificationSenderRegistryTest {
     public Optional<String> disabledReason() {
       return Optional.empty();
     }
+
+    @Override
+    public boolean supportsAttachments() {
+      return false;
+    }
   }
 
   private static FakeSender fake(final String providerId) {

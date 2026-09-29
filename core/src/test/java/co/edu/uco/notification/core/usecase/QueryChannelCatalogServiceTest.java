@@ -40,6 +40,11 @@ class QueryChannelCatalogServiceTest {
     public Mono<AttemptResult> send(final Notification notification) {
       return Mono.just(AttemptResult.ACCEPTED);
     }
+
+    @Override
+    public boolean supportsAttachments() {
+      return false;
+    }
   }
 
   private static NotificationSenderPort enabled(final String providerId) {

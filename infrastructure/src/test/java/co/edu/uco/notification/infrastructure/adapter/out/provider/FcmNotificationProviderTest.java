@@ -193,6 +193,11 @@ class FcmNotificationProviderTest {
     assertTrue(enabledProvider().disabledReason().isEmpty());
   }
 
+  @Test
+  void doesNotSupportAttachmentsYet() {
+    assertFalse(enabledProvider().supportsAttachments());
+  }
+
   @ParameterizedTest
   @MethodSource("disabledConfigurations")
   void exposesTheSameDisabledReasonWithoutCredentialFragments(

@@ -193,5 +193,10 @@ public class FcmNotificationProvider implements NotificationSenderPort {
     return disabledReason;
   }
 
+  @Override
+  public boolean supportsAttachments() {
+    return false;
+  }
+
   private record Outcome(int status, String messageId, String errorCode) {}
 }

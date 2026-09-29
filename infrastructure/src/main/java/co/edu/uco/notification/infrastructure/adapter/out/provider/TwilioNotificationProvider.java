@@ -144,5 +144,10 @@ public class TwilioNotificationProvider implements NotificationSenderPort {
     return disabledReason;
   }
 
+  @Override
+  public boolean supportsAttachments() {
+    return false;
+  }
+
   private record Outcome(int status, TwilioApiResponse body) {}
 }

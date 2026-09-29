@@ -122,4 +122,9 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
   public Optional<String> disabledReason() {
     return disabledReason;
   }
+
+  @Override
+  public boolean supportsAttachments() {
+    return false;
+  }
 }

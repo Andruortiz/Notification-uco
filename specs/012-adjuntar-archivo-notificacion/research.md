@@ -1,40 +1,37 @@
 # Research: Adjuntar un archivo a una notificación
 
-Cada decisión indica qué se eligió, por qué y qué se descartó. Las que dependen de una pregunta de
-`spec.md § Clarifications` lo dicen; esas preguntas siguen pendientes de confirmación del usuario.
+Cada decisión indica qué se eligió, por qué y qué se descartó. Q2–Q5 de `spec.md § Clarifications` están
+confirmadas desde el 2026-09-28; Q1 se reabrió el 2026-09-29 y su respuesta vigente es el modelo híbrido
+por tamaño (plan v3, aceptado). Las Decisiones 1, 3, 5, 9 y 11 se reescribieron para la v3; las
+Decisiones 12 a 15 son nuevas.
 
-## Decisión 1 — Cómo viaja el archivo (Q1, pendiente de confirmación)
+## Decisión 1 — Cómo viaja el archivo (Q1, reabierta el 2026-09-29)
 
-- **Decisión (recomendada)**: referencia https. Cada adjunto llega como `{ fileName, contentType,
-  sizeBytes, url }`. El servicio no descarga, no abre y no guarda el archivo; guarda la referencia y los
-  metadatos con la notificación.
+- **Decisión**: modelo híbrido por tamaño, con umbral de 1 MB (1 048 576 bytes).
+  - **Hasta 1 MB**: `content` en Base64 dentro de la solicitud. Se decodifica, se verifica (Decisión 12)
+    de forma síncrona y se guarda como `BinData` con la notificación, en la misma escritura.
+  - **Más de 1 MB, hasta 10 MB**: `url` de una subida emitida por el servicio a su propio MinIO
+    (Decisión 13). La notificación solo se acepta si esa subida es del mismo tenant y está `CLEAN`.
+  - Exactamente uno de `content` o `url` por adjunto. El umbral separa los caminos en los dos sentidos.
 - **Por qué**:
-  - Los tres proveedores previstos consumen una dirección de archivo: el de correo acepta adjuntos por
-    dirección además de por contenido, el de SMS solo acepta direcciones públicas de medios y el de push
-    solo acepta la imagen por dirección. Con contenido embebido, SMS y push obligarían al servicio a
-    publicar el archivo en una dirección accesible desde el proveedor.
-  - No aparece ningún almacén nuevo. Hoy la notificación se guarda como un único documento en MongoDB; un
-    archivo de varios MB codificado en ese documento se acerca al límite de 16 MB por documento y engorda
-    cada lectura del despacho, la búsqueda y las actualizaciones en vivo. Un almacén aparte (GridFS o
-    almacenamiento de objetos) trae escritura en dos pasos sin atomicidad, limpieza de huérfanos y una
-    política de retención que el proyecto aún no tiene.
-  - La aceptación sigue siendo barata: el cuerpo sigue muy por debajo del límite de 256 KB que el
-    servidor reactivo acepta por defecto, y un lote de 16 elementos concurrentes no retiene decenas de MB
-    en memoria.
-- **Costo aceptado**: el tamaño y el tipo son los **declarados** por el cliente. Se documenta como riesgo
-  con dueño y fecha en el spec (Risks) y se acota con los topes globales (Decisión 3) y la regla de
-  despacho (Decisión 6).
+  - La v1 (referencia https alojada por el cliente) validaba tamaño y tipo **declarados** y no podía
+    analizar el archivo. El modelo híbrido verifica el archivo real en ambos caminos.
+  - Embeber todo (la v2 hipotética) obligaría a aceptar cuerpos de ~70 MB en memoria (5 × 10 MB × 4/3) y
+    a guardar hasta 50 MB por notificación, por encima del límite de 16 MB de un documento de MongoDB. Con
+    el umbral, el cuerpo queda en ≤ 8 MB y el `BinData` embebido en ≤ 5 MB por notificación.
+  - La subida prefirmada lleva los archivos grandes directo al almacén, sin pasar por el servicio ni por
+    su memoria durante la solicitud de notificación.
 - **Alternativas descartadas**:
-  - **Contenido embebido**: ver el delta completo en `plan.md § Si Q1 cambia a contenido embebido`.
-  - **Ambas formas**: suma los costos de las dos sin un caso de uso que lo pida hoy. El contrato queda
-    abierto a agregar un campo `content` excluyente con `url` más adelante sin romper a nadie.
-  - **Descargar el archivo en la aceptación para verificarlo**: convierte al servicio en un cliente HTTP
-    de direcciones arbitrarias (riesgo de SSRF hacia la red interna del clúster), agrega latencia y una
-    dependencia de disponibilidad externa a la aceptación.
+  - **Referencia https arbitraria (v1)**: tipo y tamaño no verificables; el servicio no puede analizarlo
+    sin volverse cliente HTTP de direcciones arbitrarias (SSRF).
+  - **Todo embebido (v2)**: memoria y límite de documento, ver arriba.
+  - **GridFS en lugar de MinIO para los grandes**: evita un servicio nuevo, pero obliga a que el archivo
+    pase por el servicio (sin subida directa) y no ofrece direcciones prefirmadas; lo descartó el usuario
+    al elegir MinIO.
 
-## Decisión 2 — Dónde declara cada canal sus reglas de adjuntos (Q3, pendiente de confirmación)
+## Decisión 2 — Dónde declara cada canal sus reglas de adjuntos (Q3, confirmada)
 
-- **Decisión (recomendada)**: dentro de la forma de contenido del canal (`contentSchema`, JSON Schema
+- **Decisión**: dentro de la forma de contenido del canal (`contentSchema`, JSON Schema
   2020-12), la misma que hoy fija `maxLength` del cuerpo. El canal declara una propiedad `attachments`
   de tipo arreglo; `maxItems` fija la cantidad, `items.properties.contentType.enum` los tipos y
   `items.properties.sizeBytes.maximum` el tamaño.
@@ -50,60 +47,73 @@ Cada decisión indica qué se eligió, por qué y qué se descartó. Las que dep
   `ChannelRoute` y en `ChannelItem`. Más tipada, pero duplica el mecanismo de reglas por canal, cambia el
   contrato de la consulta del catálogo, la siembra y el refresco, y deja dos lugares donde mirar las
   reglas de un canal.
-- **Configuración por defecto**: no cambia. Ningún canal declara `attachments` (Q3) porque ningún
-  proveedor real sabe enviarlos; cada historia de canal habilitará el suyo. `application.yml` no se toca.
+- **Configuración por defecto**: ningún canal declara `attachments` (Q3). `application.yml` cambia solo
+  por el límite del cuerpo y la configuración no sensible de adjuntos (Decisión 13), no por el catálogo.
 
-## Decisión 3 — Reglas globales y en qué momento se aplican
+## Decisión 3 — Reglas globales y en qué momento se aplican (reescrita para la v3)
 
-- **Decisión**: una política pura de dominio, `AttachmentPolicy` (`core/domain/policy`), con los topes
-  globales como constantes, igual que `NotificationContent.MAX_LENGTH`:
-  - a lo sumo **5** adjuntos por notificación;
-  - `sizeBytes` presente, entre 1 y **10 485 760** (10 MiB), inclusivo;
-  - `contentType` presente y, ya normalizado, dentro de la lista global: `application/pdf`, `image/png`,
-    `image/jpeg`, `image/gif`, `image/webp`, `text/plain`, `text/csv`,
-    `application/vnd.openxmlformats-officedocument.wordprocessingml.document`,
-    `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`;
-  - `fileName` presente, de 1 a 255 caracteres, sin `/`, `\`, caracteres de control, y distinto de `.` y
-    `..`;
-  - `url` presente, de hasta 2048 caracteres, URI absoluta con esquema `https`, con servidor y sin
-    usuario ni contraseña.
-- **Momento**: solo en la aceptación (`SendNotificationService`), antes de la validación por canal. **No**
-  en el constructor de `Attachment` ni al reconstituir desde MongoDB: si un tope global baja mañana, las
-  notificaciones ya aceptadas deben seguir cargándose y despachándose.
-- **Error**: `InvalidAttachmentException(position, rule)` con mensaje `attachments[<i>]: <regla>` y, si
-  el nombre es válido, `(<fileName>)`. Nunca incluye la `url`.
-- **Por qué no validar en el constructor**: el constructor no conoce la posición en la lista (FR-007) y
-  el mapeo desde MongoDB debe ser tolerante. `Attachment` solo normaliza el tipo y copia valores.
-- **Alternativa descartada**: validar en el controlador. Dejaría la regla de negocio en `infrastructure`
-  (Principio I) y el caso de uso de lote sin ella.
+- **Decisión**: `AttachmentPolicy` (`core/domain/policy`), política pura sin E/S, con los topes como
+  constantes. Orden de evaluación; se reporta la primera regla incumplida del primer adjunto inválido:
+  1. a lo sumo **5** adjuntos (sin posición);
+  2. `fileName` presente, de 1 a 255 caracteres, sin `/`, `\`, caracteres de control, distinto de `.` y
+     `..`;
+  3. **extensión prohibida**: `fileName` en minúsculas, sin puntos ni espacios finales, no termina en
+     ninguna de `.exe .msi .bat .cmd .com .scr .pif .vbs .vbe .js .jse .wsf .wsh .ps1 .hta .cpl .msc .reg
+     .lnk .jar .dll .sh .apk .app .gadget .com.pif .msix .war`;
+  4. `contentType` presente y, ya normalizado, en la **lista blanca v3**: `application/pdf`, `image/png`,
+     `image/jpeg`, `text/plain`, `text/csv`,
+     `application/vnd.openxmlformats-officedocument.wordprocessingml.document`,
+     `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` (salen `image/gif` e
+     `image/webp`; PPTX nunca estuvo en la constante y queda excluido de forma explícita);
+  5. `sizeBytes` presente, entre 1 y **10 485 760**, inclusivo;
+  6. exactamente uno de `content` o `url`; `content` en Base64 estándar válido (sin prefijo `data:` ni
+     saltos de línea), con tamaño decodificado ≤ **1 048 576** e igual a `sizeBytes`; `url` solo si
+     `sizeBytes` > 1 048 576, de hasta 2048 caracteres;
+  7. suma de `sizeBytes` ≤ **26 214 400** (sin posición).
+- **Lo que no está en la política**: que la `url` sea una subida emitida por el servicio para ese tenant
+  y esté `CLEAN` necesita E/S; lo comprueba `AttachmentResolver` (Decisión 13). La regla de la v1 "https
+  sin credenciales" desaparece: una `url` que no sea del servicio se rechaza igual.
+- **Momento**: en la aceptación (`SendNotificationService`) y, para las reglas 2–5, en la emisión de una
+  subida. **No** en el constructor de `Attachment` ni al reconstituir desde MongoDB, por el mismo motivo
+  que en la v1: si un tope baja mañana, lo ya aceptado debe seguir cargándose.
+- **Error**: `InvalidAttachmentException(position, rule[, fileName])`, sin cambio: mensaje
+  `attachments[<i>]: <regla>` y `(<fileName>)` cuando el nombre es válido. Nunca incluye el contenido ni
+  la dirección.
+- **Decodificar el Base64 en `core`** (JDK, `java.util.Base64`) y no en el controlador: así el lote aplica
+  la misma regla con la misma posición.
+- **Alternativa descartada**: comparar la extensión por su último segmento solamente. No cubre `.com.pif`,
+  que la lista incluye como sufijo compuesto.
 
 ## Decisión 4 — Normalización del tipo de contenido
 
-- **Decisión**: `Attachment` guarda el tipo en minúsculas, sin parámetros (`; charset=...`) y sin espacios.
-  Tanto la lista global como el `enum` del canal se comparan contra ese valor; los esquemas del catálogo
-  deben escribir los tipos en minúsculas (documentado en el contrato).
+- **Decisión**: el tipo se guarda en minúsculas, sin parámetros (`; charset=...`) y sin espacios. Tanto la
+  lista global como el `enum` del canal se comparan contra ese valor; los esquemas del catálogo deben
+  escribir los tipos en minúsculas (documentado en el contrato).
 - **Alternativa descartada**: comodines (`image/*`). No hacen falta para los canales previstos y
   complican la regla global.
 
-## Decisión 5 — La referencia nunca sale del servicio salvo hacia el proveedor
+## Decisión 5 — Datos sensibles: contenido y dirección de subida (reescrita para la v3)
 
 - **Decisión**:
   - El nodo que `ContentSchemaValidator` valida contiene `fileName`, `contentType` y `sizeBytes` de cada
-    adjunto, **nunca** `url`: ningún mensaje del validador puede citarla.
-  - `Attachment.toString()` se redefine para omitir la `url`; así, cualquier `toString` de
-    `NotificationContent` o de un comando que acabe en un registro o en una excepción no la filtra.
-  - Los registros de adjuntos (Decisión 8) solo escriben nombre, tipo y tamaño; el nombre se registra con
-    los caracteres de control reemplazados, para que un nombre malicioso no parta la línea.
-  - Los eventos de dominio (`NotificationAccepted`, etc.) solo llevan `notificationId` y fecha; el mensaje
-    de despacho solo lleva el `notificationId`. No cambian.
-  - Las respuestas de estado, búsqueda y actualizaciones en vivo no incluyen el contenido hoy y no se
-    amplían (Out of Scope).
-- **Dónde sí está**: en el documento de MongoDB de la notificación (necesario para despachar, FR-008) y
-  en el objeto que recibe el adaptador de proveedor.
+    adjunto, **nunca** `content` ni `url`.
+  - `toString()` redefinido sin `content` ni `url` en `AttachmentSubmission`, `Attachment`,
+    `AttachmentSource.EmbeddedContent`, `AttachmentRequest` y `AttachmentUploadResponse`.
+  - La dirección prefirmada solo sale del servicio en la respuesta de `POST /attachment-uploads`. No se
+    guarda (se guarda la clave del objeto) y no se registra. La `url` que el cliente envía en la
+    notificación se reduce a su `uploadId`; la parte de consulta (la firma) se descarta.
+  - Los registros (Decisión 8) escriben nombre, tipo, tamaño y huella. La huella SHA-256 no es sensible:
+    identifica un archivo sin revelarlo, y es lo que permite auditarlo.
+  - Los eventos de dominio y el mensaje de despacho no cambian (solo identificadores). El mensaje de
+    escaneo lleva `{ tenantId, uploadId }`.
+  - Las respuestas de estado, búsqueda y actualizaciones en vivo no incluyen adjuntos; además, la búsqueda
+    y el reencolado leen con una proyección que excluye `attachments.content`.
+- **Dónde sí está el contenido**: en el documento de MongoDB de la notificación (camino chico), en el
+  objeto limpio de MinIO (camino grande) y en el objeto que recibe el adaptador de proveedor.
 
-## Decisión 6 — Proveedor que no sabe enviar adjuntos (Q4, pendiente de confirmación)
+## Decisión 6 — Proveedor que no sabe enviar adjuntos (Q4, confirmada)
 
-- **Decisión (recomendada)**: `NotificationSenderPort` gana `boolean supportsAttachments()` **abstracto**.
+- **Decisión**: `NotificationSenderPort` gana `boolean supportsAttachments()` **abstracto**.
   `SimulatedNotificationProvider` devuelve `true`; Brevo, Twilio y FCM devuelven `false` hasta sus
   historias. En `DispatchNotificationService.sendThrough`, si la notificación tiene adjuntos y el
   proveedor no los soporta, el resultado es `AttemptResult.PERMANENT_FAILURE` **sin llamar al
@@ -117,75 +127,164 @@ Cada decisión indica qué se eligió, por qué y qué se descartó. Las que dep
   cada adaptador la reimplementara, uno que la olvide entregaría sin adjunto en silencio.
 - **Motivo textual**: `DeliveryAttempt` no tiene campo de causa y `core` no registra. El historial guarda
   proveedor y fallo definitivo; el motivo se deduce de datos visibles. Queda como riesgo con dueño y fecha
-  en el spec. Alternativas descartadas: agregar causa a `DeliveryAttempt` (cambio de modelo y de todas las
-  respuestas de historial, fuera del alcance de esta historia); registrar desde `core` (rompe el patrón
-  de un núcleo sin registros).
+  en el spec.
 - **Rechazar ya en la aceptación si el proveedor preferente no sabe enviar adjuntos**: descartado como
   única barrera, porque el catálogo puede cambiar entre aceptación y despacho; y como barrera adicional,
-  porque acopla la aceptación al registro de proveedores sin ganar garantía. La declaración del canal es
-  el contrato con el cliente; el despacho es la red de seguridad.
+  porque acopla la aceptación al registro de proveedores sin ganar garantía.
 
 ## Decisión 7 — Orden de validación e idempotencia
 
-- **Decisión**: se conserva el orden actual de `SendNotificationService`: ruta del canal →
-  validación (ahora `AttachmentPolicy` y luego `ContentSchemaValidator`) → búsqueda de duplicada →
-  aceptación. Una duplicada con adjuntos inválidos se rechaza, igual que hoy una duplicada con contenido
-  inválido (FR-012 ajustado a este comportamiento).
+- **Decisión**: ruta del canal → `AttachmentPolicy` (barata, sin E/S) → `ContentSchemaValidator` →
+  `AttachmentResolver` (decodifica e inspecciona los embebidos; resuelve las subidas) → búsqueda de
+  duplicada → aceptación. Una duplicada con adjuntos inválidos se rechaza, igual que hoy una duplicada
+  con contenido inválido (FR-012). Un reintento de una duplicada vuelve a inspeccionar, pero la caché por
+  huella (Decisión 12) evita volver a llamar al antivirus.
 - **Alternativa descartada**: buscar la duplicada antes de validar. Cambiaría el comportamiento existente
   sin adjuntos, fuera del alcance.
 
-## Decisión 8 — Registros de aceptación y rechazo (FR-010)
+## Decisión 8 — Registros (FR-010)
 
-- **Decisión**: los escribe `NotificationController` (infraestructura), solo cuando la solicitud trae
-  adjuntos, con el estilo `clave=valor` que ya usan los adaptadores de proveedor:
-  - aceptada: `Notification accepted with attachments tenantId=… externalId=… notificationId=…
-    duplicate=… attachments=[fileName|contentType|sizeBytes, …]`;
-  - rechazada: `Notification with attachments rejected tenantId=… externalId=… attachments=[…]
-    reason=<mensaje de la excepción>` (el mensaje nunca contiene la `url`, Decisiones 3 y 5).
-  El formateo vive en una clase auxiliar del paquete REST, `AttachmentLogFormatter`, que reemplaza
-  caracteres de control del nombre.
-- **Por qué en el controlador**: es el único punto que tiene a la vez el tenant, el identificador externo
-  y el resultado; `core` no registra.
+- **Decisión**: estilo `clave=valor` que ya usan los adaptadores de proveedor, escrito en infraestructura:
+  - `NotificationController`, solo cuando la solicitud trae adjuntos: aceptada (`tenantId`, `externalId`,
+    `notificationId`, `duplicate`, `attachments=[fileName|contentType|sizeBytes|sha256, …]`) y rechazada
+    (`tenantId`, `externalId`, metadatos, `reason`);
+  - `AttachmentUploadController`: emisión y `:complete` (`tenantId`, `uploadId`, metadatos, estado);
+  - `AttachmentScanListener`: veredicto (`tenantId`, `uploadId`, `sha256`, `state`, `reason` y firma
+    si es `INFECTED`).
+  El formateo vive en `AttachmentLogFormatter`, que reemplaza caracteres de control del nombre.
 - **Brecha que no se cierra**: el formato estructurado (JSON) del RNF-10 sigue pendiente para todo el
   servicio (spec, Risks).
 
-## Decisión 9 — Persistencia
+## Decisión 9 — Persistencia (reescrita para la v3)
 
-- **Decisión**: subdocumentos embebidos en `notifications`: `NotificationDocument` gana
-  `List<AttachmentDocument> attachments` (`fileName`, `contentType`, `sizeBytes`, `url`), en el orden
-  recibido. Un documento anterior sin el campo se lee como lista vacía. Sin índices nuevos ni migración.
-- **Por qué**: 5 × (≤ 2048 + ≤ 255 + tipo + tamaño) son pocos KB; se lee con la notificación en una sola
-  operación, conservando el bloqueo optimista existente.
+- **`notifications`**: `NotificationDocument.attachments` es una lista de `AttachmentDocument`
+  { `tenantId`, `fileName`, `contentType`, `sizeBytes`, `sha256`, `storage` (`EMBEDDED` | `OBJECT`),
+  `content` (`BinData`, solo `EMBEDDED`), `uploadId` y `objectKey` (solo `OBJECT`) }, en el orden
+  recibido. Sin `url`. Un documento sin el campo se lee como lista vacía. Tope: 5 MB de `BinData` por
+  documento.
+- **`attachment_uploads`** (nueva): `AttachmentUploadDocument` { `_id` = `uploadId`, `tenantId`,
+  `fileName`, `contentType`, `sizeBytes`, `uploadKey`, `cleanKey`, `state`, `rejectionReason`,
+  `signature`, `sha256`, `issuedAt`, `expiresAt`, `completedAt`, `scannedAt`, `version` }. Índice
+  `(tenantId, _id)`. Las transiciones son `findAndModify` con la condición `state = PENDING_SCAN`.
+- **`attachment_scan_verdicts`** (nueva): { `tenantId`, `sha256`, `verdict`, `signature`,
+  `signatureVersion`, `scannedAt`, `expiresAt` }. Índice único `(tenantId, sha256)`; índice TTL sobre
+  `expiresAt`, que solo tienen los `CLEAN` (24 h).
+- **Sin migración**: la v1 nunca llegó a `develop`; no hay subdocumentos con `url` que conservar.
+- **Por qué embebido en la notificación y no en una colección aparte**: una sola escritura atómica
+  (Principio VIII) sin transacciones multi-documento, que el MongoDB local (no réplica) no ofrece.
 
-## Decisión 10 — Lote (Q5, pendiente de confirmación)
+## Decisión 10 — Lote (Q5, confirmada)
 
-- **Decisión (recomendada)**: `SendNotificationBatchService` agrega `InvalidAttachmentException` a los
-  errores que convierten un elemento en `rejected` con su motivo (hoy `ChannelNotAvailableException` e
-  `InvalidContentException`). `BatchNotificationItem` ya lleva `NotificationContent`, que ahora incluye
-  los adjuntos; no cambia de forma.
-- **Hallazgo**: `/notifications:sendBatch` está en el contrato y el caso de uso existe con su bean, pero
-  **ningún controlador lo atiende**. El contrato no lo marca como planificado o bloqueado. Esta historia
-  no lo expone (fuera de alcance); SC-007 se prueba en el caso de uso. Se reporta al usuario como posible
-  brecha preexistente.
+- **Decisión**: `SendNotificationBatchService` convierte en `rejected` con su motivo
+  `ChannelNotAvailableException`, `InvalidContentException`, `InvalidAttachmentException` y
+  `AttachmentNotReadyException`. `AttachmentInspectionUnavailableException` es de infraestructura y se
+  propaga como cualquier otro error de infraestructura del lote.
+- **Hallazgo (sin cambio)**: `/notifications:sendBatch` está en el contrato y el caso de uso existe, pero
+  **ningún controlador lo atiende**. Esta historia no lo expone; SC-007 se prueba en el caso de uso.
 
-## Decisión 11 — Pruebas
+## Decisión 11 — Pruebas (reescrita para la v3)
 
-- **Unitarias `core`** (JUnit 5 + Mockito + `StepVerifier`): `AttachmentTest`, `AttachmentPolicyTest`
-  (cada regla y cada límite inclusivo), `ContentSchemaValidatorTest` (cerrado por defecto, reglas del
-  canal, mensaje sin `url`), `NotificationContentTest`, `SendNotificationServiceTest` (rechazo sin
-  `save` ni `publish`), `DispatchNotificationServiceTest` (regla de Decisión 6 y control positivo),
-  `SendNotificationBatchServiceTest` (SC-007).
-- **Integración de adaptador** (Testcontainers, sin simulaciones de la base):
-  `NotificationMongoAdapterTest` — ida y vuelta con adjuntos en orden y documento antiguo sin el campo.
-- **Controlador**: `NotificationControllerTest` (`@WebFluxTest`) — mapeo de `attachments`, ausencia →
-  lista vacía, `400` por `InvalidAttachmentException`, registros de aceptación y rechazo.
-- **E2E** `NotificationAttachmentE2ETest` (`@SpringBootTest(RANDOM_PORT)` + `@Testcontainers` con MongoDB
-  y RabbitMQ + `WebTestClient`), refresco del catálogo a 1 s y dos emisores de prueba registrados como
-  beans: `recording-attachments` (`supportsAttachments() = true`) y `recording-plain` (`false`), que
-  guardan lo que reciben. El catálogo se escribe en `@BeforeEach` con canales de prueba y se espera a que
-  `GET /channels` lo refleje. Cubre SC-001 a SC-006 y la User Story 3.4 (EMAIL por defecto rechaza).
-  SC-003 captura registros (`ListAppender`), respuestas de error, eventos publicados (cola temporal
-  enlazada al exchange de eventos) y las consultas de estado y búsqueda, con control positivo de nombre,
-  tipo y tamaño. SC-005 afirma el plazo con `Duration`. Las notificaciones se producen por la API real,
-  nunca con documentos armados a mano.
-- **Arquitectura**: `HexagonalArchitectureTest` y `ModularityTests` sin cambios, deben seguir en verde.
+- **Unitarias `core`** (JUnit 5 + Mockito + `StepVerifier`): `AttachmentPolicyTest` (cada regla y cada
+  límite inclusivo, incluidos 1 048 576 / 1 048 577 y 26 214 400 / 26 214 401, cada extensión prohibida,
+  mayúsculas y punto final), `AttachmentSubmissionTest`, `AttachmentTest`, `Sha256DigestTest`,
+  `AttachmentUploadTest` (solo desde `PENDING_SCAN`), `AttachmentInspectorTest` (orden y cortocircuitos
+  de la caché), `AttachmentResolverTest` (dos tenants), los servicios de subida,
+  `SendNotificationServiceTest`, `SendNotificationBatchServiceTest` (SC-007),
+  `DispatchNotificationServiceTest` (SC-006), `ContentSchemaValidatorTest`, `NotificationContentTest`.
+- **Integración de adaptadores** (Testcontainers, sin simular el servicio real): MinIO (firma, PUT real,
+  `stat`, copia con ETag obsoleto que falla: SC-013), ClamAV (EICAR, archivo limpio, versión de firmas,
+  puerto cerrado → no disponible: SC-014), Tika (un archivo real por tipo de la lista blanca, ejecutable
+  renombrado, HTML declarado como texto), MongoDB (`BinData`, proyección, transición concurrente con un
+  solo ganador, caché por tenant).
+- **Consumidor de escaneo**: mensaje producido con el publicador real, nunca con JSON armado a mano;
+  ack después de persistir; reenvío de un mensaje ya resuelto sin efecto; DLQ con el antivirus caído.
+- **E2E** (`@SpringBootTest(RANDOM_PORT)` + `@Testcontainers` + `WebTestClient`, refresco del catálogo a
+  1 s, emisores de prueba `recording-attachments` y `recording-plain` como beans):
+  - `NotificationAttachmentE2ETest` (MongoDB, RabbitMQ, ClamAV): camino chico; SC-001 (embebido),
+    SC-002, SC-003, SC-005 con `Duration`, SC-006, SC-008 (embebido), SC-012 con `Duration`, US3.1, US3.4
+    y duplicada.
+  - `AttachmentUploadE2ETest` (lo anterior más MinIO): camino grande; SC-001 (subida), SC-003 (dirección
+    de subida), SC-008 (subida), SC-009, SC-010 con dos tenants y control positivo, SC-011 con
+    `Duration`.
+  - `NotificationAttachmentScannerDownE2ETest` (MongoDB, RabbitMQ, ClamAV inalcanzable): SC-014 con
+    control positivo sin adjuntos.
+  - Las pruebas de "no aparece" llevan su control positivo; las de tiempo afirman con `Duration`.
+- **Arquitectura**: `HexagonalArchitectureTest` y `ModularityTests` en verde.
+
+## Decisión 12 — Verificación de contenido: Tika, ClamAV y huella (nueva)
+
+- **Decisión**: `AttachmentInspector` en `core`, común a ambos caminos, sobre bytes en memoria (≤ 1 MB en
+  la aceptación; ≤ 10 MB en el consumidor, con concurrencia acotada):
+  1. `Sha256Digest.of(bytes)` con `MessageDigest` (JDK).
+  2. `ContentTypeDetectorPort.detect(bytes, fileName)` (Tika, en infraestructura). El tipo detectado debe
+     estar en la lista blanca y coincidir con el declarado; única equivalencia admitida: `text/csv`
+     declarado y `text/plain` detectado.
+  3. `ScanVerdictCachePort.find(tenantId, sha256)`: `INFECTED` → rechazo sin reescanear; `CLEAN` de la
+     misma versión de firmas y ≤ 24 h → se omite el antivirus.
+  4. `MalwareScannerPort.scan(bytes)` (ClamAV `INSTREAM`); el veredicto se guarda en la caché.
+- **Tika detrás de un puerto, no en `core`**: `HexagonalArchitectureTest` solo prohíbe Spring, pero el
+  Principio I prohíbe cualquier framework en `core`. Solo `tika-core` más el detector de contenedores
+  OOXML, sin los analizadores completos; se ejecuta en `boundedElastic`.
+- **ClamAV sin librería cliente**: el protocolo `INSTREAM` es simple (bloques con longitud y un bloque
+  vacío final); el adaptador lo habla con Reactor Netty `TcpClient`, con tiempo máximo y concurrencia
+  acotada. `VERSION` da la versión de firmas, cacheada unos minutos.
+- **Caché por `(tenantId, sha256)` y no global**: una caché global permitiría a un tenant averiguar, por
+  la latencia o por la respuesta, si otro tenant subió un archivo concreto (antecedente de HU2-072). Se
+  pierde la deduplicación entre tenants, que no es un objetivo.
+- **Alternativas descartadas**: comprobar la firma de los primeros bytes a mano (la reemplaza Tika, por
+  decisión del usuario); invalidar la caché solo por TTL (una firma nueva publicada hoy no revisaría lo
+  cacheado ayer).
+
+## Decisión 13 — Subidas a MinIO y máquina de estados (nueva)
+
+- **Emisión** (`POST /attachment-uploads`): valida las reglas 2–5 de la Decisión 3 más `sizeBytes`
+  > 1 048 576; crea `AttachmentUpload` en `PENDING_SCAN` con `uploadKey =
+  tenants/{tenantId}/uploads/{uploadId}`; devuelve un PUT prefirmado contra el endpoint **público** de
+  MinIO (configurable, distinto del interno), vigente 15 minutos por defecto.
+- **Cierre** (`POST /attachment-uploads/{uploadId}:complete`): `stat` del objeto; ausente → `409`;
+  tamaño distinto → `400`, se borra el objeto y la subida sigue en `PENDING_SCAN`; si no, publica
+  `{ tenantId, uploadId }` en la cola de escaneo y responde `202`. Si la subida ya está resuelta, devuelve
+  su estado sin encolar.
+- **Escaneo** (`AttachmentScanListener`, ack manual, reintentos de `RabbitRetryConfig`, DLQ propia):
+  `stat` → ETag; lectura condicionada al ETag; `AttachmentInspector`; `CLEAN` → copia condicionada al
+  ETag a `cleanKey = tenants/{tenantId}/clean/{uploadId}`, transición y borrado de `uploadKey`;
+  `INFECTED` → borrado del objeto y transición con motivo (`MALWARE` con la firma, o
+  `CONTENT_TYPE_MISMATCH`). Ack solo después de persistir.
+- **Por qué la copia condicionada**: el PUT prefirmado sigue vigente después del escaneo; sin la copia a
+  una clave nunca prefirmada, alguien con la dirección podría reemplazar un objeto ya limpio (FR-025).
+- **Por qué `INFECTED` también para el tipo que no coincide**: el usuario fijó tres estados; un motivo
+  explícito evita que la auditoría confunda un tipo incorrecto con un virus.
+- **Uso en la notificación** (`AttachmentResolver`): la `url` debe tener esquema, servidor y puerto del
+  endpoint público y la ruta `/{bucket}/tenants/{tenantId}/uploads/{uploadId}`; el `tenantId` de la ruta
+  debe ser el de la solicitud; la subida se busca por `(tenantId, uploadId)`; nombre, tipo y tamaño deben
+  coincidir; `PENDING_SCAN` → `409`, `INFECTED` → `400`, `CLEAN` → `StoredObject(uploadId, cleanKey)`.
+- **Cliente**: `MinioAsyncClient` (`CompletableFuture` → `Mono.fromFuture`); la firma de la dirección es
+  un cálculo local.
+- **Alternativas descartadas**:
+  - Notificaciones de bucket de MinIO a RabbitMQ en lugar de `:complete`: acopla la configuración de
+    MinIO a la topología del broker, es más difícil de probar y el evento no trae un tenant validado.
+  - Escaneo síncrono en `:complete`: haría innecesaria la máquina de estados que el usuario pidió y
+    retendría hasta 10 MB y la latencia del antivirus en una solicitud HTTP.
+  - POST prefirmado con política de tamaño: el SDK lo permite, pero el tamaño se comprueba igual en
+    `:complete` y en el escaneo, y el PUT simplifica el cliente.
+
+## Decisión 14 — Aislamiento por tenant (nueva)
+
+- **Decisión**: `tenantId` propio en `AttachmentUpload`, en cada `AttachmentDocument` y en la caché de
+  veredictos. Toda búsqueda de subidas es por `(tenantId, uploadId)`; las claves de MinIO se arman desde el
+  registro del tenant, nunca desde la `url` del cliente; "no existe" y "es de otro tenant" dan la misma
+  respuesta (`404` en la API de subidas, el mismo `400` en la notificación). Al reconstituir una
+  notificación, un adjunto con `tenantId` distinto al de la notificación es un error de integridad.
+- **Por qué tanto**: en HU2-072 un filtro de tenant correcto no evitó emitir un `REMOVE` con los datos
+  completos de otro tenant. Aquí se prueba qué hace el código con el resultado del predicado, no solo el
+  predicado, en E2E con dos tenants y control positivo.
+
+## Decisión 15 — Disponibilidad del antivirus y del almacén (nueva)
+
+- **Decisión**: si ClamAV o MinIO fallan o vencen su tiempo, `AttachmentInspectionUnavailableException`
+  → `503` en la aceptación y en las operaciones de subida; nack y reintento en el consumidor. Nunca se
+  acepta un archivo sin analizar.
+- **Salud**: indicadores de MinIO y ClamAV en `/actuator/health`, **fuera** del grupo de *readiness*: su
+  caída solo afecta a notificaciones con adjuntos y no debe sacar de servicio las que no los llevan
+  (propuesta del plan v3, aceptada con él).
+- **Límite del cuerpo**: `spring.codec.max-in-memory-size` = 8 MB; excederlo responde `413`.

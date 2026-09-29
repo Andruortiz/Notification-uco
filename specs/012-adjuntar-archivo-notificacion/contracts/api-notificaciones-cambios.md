@@ -1,14 +1,36 @@
-# Cambios al contrato público: `api-notificaciones.yaml`
+# Cambios al contrato público: `api-notificaciones.yaml` (plan v3)
 
 Se aplican a `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml` **antes** de tocar
-el controlador (Principio II). Con la respuesta recomendada de Q1 (referencia https). Ninguna operación
-nueva; se añade un esquema, un campo opcional y se amplían descripciones. Los clientes actuales no
-cambian: `attachments` es opcional.
+cualquier controlador (Principio II). Parten del contrato tal como quedó tras la v1 (commit `8c45a4d`:
+campo `attachments`, esquema `Attachment` con `url` obligatoria, `400` de `POST /notifications`, frase del
+lote y descripciones de `contentSchema`). Los clientes actuales sin adjuntos no cambian: `attachments` sigue
+siendo opcional.
 
-## `SendNotificationRequest` — campo nuevo `attachments`
+Resumen:
 
-Se añade a `properties` (no a `required`). Como `SendNotificationBatchRequest.items` referencia este
-esquema, el lote lo hereda sin cambios propios.
+| Elemento | Cambio |
+|---|---|
+| Etiqueta `Adjuntos` | nueva |
+| `Attachment` | `content` XOR `url` (`oneOf`); lista blanca v3; descripción de `url` como subida emitida por el servicio |
+| `SendNotificationRequest.attachments` | descripción reescrita |
+| `POST /notifications` | `400` ampliado; `409`, `413` y `503` nuevos |
+| `POST /notifications:sendBatch` | frase ampliada |
+| `POST /attachment-uploads` | nueva (CRUD natural) |
+| `POST /attachment-uploads/{uploadId}:complete` | nueva (acción de negocio) |
+| `GET /attachment-uploads/{uploadId}` | nueva |
+| `UploadId`, `IssueAttachmentUploadRequest`, `AttachmentUploadResponse`, `AttachmentUploadState` | nuevos |
+| `ChannelItem.contentSchema`, `RegisterChannelRequest.contentSchema` | sin cambio desde la v1 |
+
+## Etiqueta nueva
+
+```yaml
+  - name: Adjuntos
+    description: >
+      Subida de archivos de más de 1 MB al almacén del servicio para adjuntarlos a notificaciones.
+      Los archivos de hasta 1 MB viajan embebidos en la propia notificación.
+```
+
+## `SendNotificationRequest.attachments` — descripción
 
 ```yaml
         attachments:
@@ -19,33 +41,47 @@ esquema, el lote lo hereda sin cambios propios.
             Opcional. Archivos que acompañan la notificación, en el orden en que se entregarán. El canal
             debe declararlos en su forma de contenido (ver GET /channels, campo contentSchema, propiedad
             attachments); un canal que no los declara rechaza toda notificación con adjuntos. Con la
-            configuración por defecto ningún canal los declara. El servicio no descarga ni guarda el
-            archivo: guarda la dirección y la entrega al proveedor en el despacho. El tamaño y el tipo son
-            los declarados; un archivo que no coincida lo rechazará el proveedor. Una notificación con un
-            adjunto inválido se rechaza completa con 400; nunca se acepta sin el adjunto. Si el proveedor
-            que la despacha no sabe enviar adjuntos, termina en FAILED sin enviarse.
+            configuración por defecto ningún canal los declara. Cada adjunto lleva exactamente uno de
+            content (archivo de hasta 1 MB codificado en Base64) o url (archivo de más de 1 MB subido antes
+            con POST /attachment-uploads y en estado CLEAN). A lo sumo 5 adjuntos y 25 MB (26214400 bytes)
+            en total. El servicio verifica el tipo real de cada archivo y lo analiza con un antivirus. Una
+            notificación con un adjunto inválido se rechaza completa; nunca se acepta sin el adjunto. Si el
+            proveedor que la despacha no sabe enviar adjuntos, termina en FAILED sin enviarse.
           items:
             $ref: '#/components/schemas/Attachment'
 ```
 
-## `Attachment` — esquema nuevo
+## `Attachment` — esquema reescrito
 
 ```yaml
     Attachment:
       type: object
-      required: [fileName, contentType, sizeBytes, url]
+      required: [fileName, contentType, sizeBytes]
+      oneOf:
+        - required: [content]
+          not:
+            required: [url]
+        - required: [url]
+          not:
+            required: [content]
       properties:
         fileName:
           type: string
           minLength: 1
           maxLength: 255
-          description: Nombre con el que lo verá el destinatario. Sin separadores de ruta ni caracteres de control; distinto de "." y "..".
+          description: >
+            Nombre con el que lo verá el destinatario. Sin separadores de ruta ni caracteres de control;
+            distinto de "." y "..". No puede terminar en una extensión prohibida (sin distinguir
+            mayúsculas, ignorando puntos y espacios finales): .exe .msi .bat .cmd .com .scr .pif .vbs .vbe
+            .js .jse .wsf .wsh .ps1 .hta .cpl .msc .reg .lnk .jar .dll .sh .apk .app .gadget .com.pif .msix
+            .war.
           example: factura-0042.pdf
         contentType:
           type: string
           description: >
-            Tipo de medio. Se compara en minúsculas y sin parámetros. Tipos admitidos por el servicio:
-            application/pdf, image/png, image/jpeg, image/gif, image/webp, text/plain, text/csv,
+            Tipo de medio. Se compara en minúsculas y sin parámetros, y debe coincidir con el tipo real
+            del contenido. Tipos admitidos por el servicio: application/pdf, image/png, image/jpeg,
+            text/plain, text/csv,
             application/vnd.openxmlformats-officedocument.wordprocessingml.document,
             application/vnd.openxmlformats-officedocument.spreadsheetml.sheet. Cada canal puede admitir
             menos.
@@ -55,48 +91,253 @@ esquema, el lote lo hereda sin cambios propios.
           format: int64
           minimum: 1
           maximum: 10485760
-          description: Tamaño declarado en bytes. Tope del servicio 10 MiB; cada canal puede fijar menos. Límite inclusivo.
+          description: >
+            Tamaño real en bytes. Hasta 1048576 va en content; de 1048577 a 10485760, en url. Con content
+            debe ser igual al tamaño decodificado; con url, igual al de la subida. Cada canal puede fijar
+            menos. Límite inclusivo.
           example: 183422
+        content:
+          type: string
+          format: byte
+          description: >
+            Archivo de hasta 1 MB codificado en Base64 estándar (RFC 4648, con relleno), sin prefijo
+            "data:" ni saltos de línea. Dato sensible: nunca aparece en respuestas, registros ni eventos.
         url:
           type: string
           format: uri
           maxLength: 2048
-          pattern: '^[Hh][Tt][Tt][Pp][Ss]://'
           description: >
-            Dirección https donde el cliente aloja el archivo, sin usuario ni contraseña. Debe seguir
-            accesible durante los reintentos. Se trata como dato sensible: nunca aparece en respuestas,
-            registros ni eventos del servicio.
-          example: https://files.example.com/invoices/0042.pdf?token=abc
+            uploadUrl devuelta por POST /attachment-uploads para el mismo tenant, cuya subida está en
+            estado CLEAN. Cualquier otra dirección se rechaza; el servicio no la descarga. La parte de
+            consulta se ignora y la dirección no se guarda.
 ```
 
-## `POST /notifications` — respuesta `400`
+## `POST /notifications` — respuestas
 
 ```yaml
         '400':
           description: >
             El canal no existe/está deshabilitado, el contenido no cumple el esquema del canal, o un adjunto
-            es inválido: el canal no acepta adjuntos, o el adjunto incumple un tope del servicio o una regla
-            del canal. El mensaje identifica el adjunto por su posición (attachments[i]) y la regla
-            incumplida; nunca incluye la dirección del archivo.
+            es inválido: el canal no acepta adjuntos; el adjunto incumple un tope del servicio (cantidad,
+            tamaño, tamaño total, tipo, extensión) o una regla del canal; lleva content y url a la vez o
+            ninguno; content no es Base64 válido o no coincide con sizeBytes; url no es una subida de este
+            tenant o sus datos no coinciden; la subida está INFECTED; el tipo real no coincide con el
+            declarado; o el archivo contiene software malicioso. El mensaje identifica el adjunto por su
+            posición (attachments[i]) y la regla incumplida; nunca incluye el contenido ni la dirección.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: >
+            Un adjunto referencia una subida todavía en PENDING_SCAN. Reintentar cuando
+            GET /attachment-uploads/{uploadId} devuelva CLEAN.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '413':
+          description: El cuerpo de la solicitud supera 8 MB.
+        '503':
+          description: >
+            El antivirus o el almacén de archivos no están disponibles o no respondieron a tiempo. La
+            notificación no se aceptó; puede reintentarse. Las notificaciones sin adjuntos no se ven
+            afectadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 ```
 
 ## `POST /notifications:sendBatch` — descripción
 
-Se añade al final de la descripción existente:
+Reemplaza la frase añadida en la v1:
 
 ```yaml
-        Un elemento con un adjunto inválido se rechaza solo, con su motivo; los demás siguen.
+        Un elemento con un adjunto inválido, o que referencia una subida todavía en PENDING_SCAN, se
+        rechaza solo, con su motivo; los demás siguen.
 ```
 
-## `ChannelItem.contentSchema` y `RegisterChannelRequest.contentSchema` — descripción
+## Operaciones nuevas
 
 ```yaml
+  /attachment-uploads:
+    post:
+      tags: [Adjuntos]
+      summary: Pedir una dirección de subida para un archivo grande
+      description: >
+        Emite una dirección prefirmada (PUT) para subir al almacén del servicio un archivo de más de 1 MB
+        y hasta 10 MB. La subida nace en PENDING_SCAN. Después de subir el archivo con un PUT a uploadUrl
+        (antes de expiresAt), avisar con POST /attachment-uploads/{uploadId}:complete. uploadUrl es una
+        credencial temporal: solo aparece en esta respuesta.
+      operationId: issueAttachmentUpload
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueAttachmentUploadRequest'
+      responses:
+        '201':
+          description: Subida emitida.
+          headers:
+            Location:
+              schema:
+                type: string
+              description: /attachment-uploads/{uploadId}
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentUploadResponse'
+        '400':
           description: >
-            Forma de contenido (JSON Schema como texto) tal como está guardada. Nulo si el canal no declara
-            ninguna. Además del largo de subject y body, puede declarar adjuntos con una propiedad
-            "attachments" de tipo arreglo: maxItems (cantidad), items.properties.contentType.enum (tipos,
-            en minúsculas) e items.properties.sizeBytes.maximum (bytes). Un canal sin esa propiedad no
-            acepta adjuntos.
+            Nombre, tipo, extensión o tamaño inválidos, o tamaño de hasta 1 MB (ese archivo va embebido en
+            la notificación).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: El almacén de archivos no está disponible.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /attachment-uploads/{uploadId}:complete:
+    post:
+      tags: [Adjuntos]
+      summary: Avisar que la subida terminó
+      description: >
+        Comprueba que el archivo está en el almacén y que su tamaño coincide con el declarado, y encola
+        su análisis. La subida sigue en PENDING_SCAN hasta que el análisis termina en CLEAN o INFECTED.
+        Si la subida ya está resuelta, devuelve su estado sin volver a analizar.
+      operationId: completeAttachmentUpload
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/UploadId'
+      responses:
+        '202':
+          description: Análisis encolado, o subida ya resuelta (ver state).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentUploadResponse'
+        '400':
+          description: >
+            El tamaño del archivo subido no coincide con el declarado. El archivo se descarta y la subida
+            sigue en PENDING_SCAN: puede volver a subirse mientras uploadUrl esté vigente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: La subida no existe para este tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: El archivo todavía no está en el almacén.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: El almacén de archivos o el broker no están disponibles.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /attachment-uploads/{uploadId}:
+    get:
+      tags: [Adjuntos]
+      summary: Consultar el estado de una subida
+      operationId: getAttachmentUpload
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/UploadId'
+      responses:
+        '200':
+          description: Estado actual. Nunca incluye uploadUrl.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentUploadResponse'
+        '404':
+          description: La subida no existe para este tenant.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 ```
 
-(`RegisterChannelRequest` conserva su primera frase propia y añade la misma explicación de adjuntos.)
+## Parámetro y esquemas nuevos
+
+```yaml
+  parameters:
+    UploadId:
+      name: uploadId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    IssueAttachmentUploadRequest:
+      type: object
+      required: [fileName, contentType, sizeBytes]
+      properties:
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Mismas reglas que Attachment.fileName.
+        contentType:
+          type: string
+          description: Mismos tipos que Attachment.contentType.
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 1048577
+          maximum: 10485760
+          description: Tamaño exacto del archivo que se subirá.
+    AttachmentUploadState:
+      type: string
+      enum: [PENDING_SCAN, CLEAN, INFECTED]
+    AttachmentUploadResponse:
+      type: object
+      required: [uploadId, state, fileName, contentType, sizeBytes]
+      properties:
+        uploadId:
+          type: string
+        state:
+          $ref: '#/components/schemas/AttachmentUploadState'
+        fileName:
+          type: string
+        contentType:
+          type: string
+        sizeBytes:
+          type: integer
+          format: int64
+        sha256:
+          type: string
+          nullable: true
+          description: Huella SHA-256 en hexadecimal, desde que termina el análisis.
+        rejectionReason:
+          type: string
+          nullable: true
+          enum: [MALWARE, CONTENT_TYPE_MISMATCH, null]
+          description: Solo en INFECTED.
+        uploadUrl:
+          type: string
+          format: uri
+          nullable: true
+          description: Solo en la respuesta de POST /attachment-uploads. Credencial temporal.
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Vencimiento de uploadUrl. Solo en la respuesta de POST /attachment-uploads.
+```

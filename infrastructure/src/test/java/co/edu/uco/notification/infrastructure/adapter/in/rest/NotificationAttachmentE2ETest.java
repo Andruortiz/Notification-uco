@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -66,6 +67,11 @@ class NotificationAttachmentE2ETest {
   static final String DOCS = "E2E_DOCS";
   static final String NO_ATTACHMENTS = "E2E_NO_ATTACHMENTS";
   static final String PLAIN_PROVIDER = "E2E_PLAIN_PROVIDER";
+  static final String STRICT = "E2E_STRICT";
+  static final String STRICT_SCHEMA =
+      "{\"type\":\"object\",\"properties\":{\"attachments\":{\"type\":\"array\",\"maxItems\":2,"
+          + "\"items\":{\"type\":\"object\",\"properties\":{\"contentType\":{\"enum\":[\"application/pdf\"]},"
+          + "\"sizeBytes\":{\"maximum\":100000}}}}}}";
   static final String ALLOWED_TYPES =
       "[\"application/pdf\",\"image/png\",\"image/jpeg\",\"text/plain\",\"text/csv\","
           + "\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\","
@@ -134,6 +140,8 @@ class NotificationAttachmentE2ETest {
     awaitSchema(DOCS, schema -> schema != null && schema.contains("10485760"));
     awaitSchema(NO_ATTACHMENTS, Objects::isNull);
     awaitSchema(PLAIN_PROVIDER, schema -> schema != null && schema.contains("10485760"));
+    saveChannel(STRICT, "recording-attachments", STRICT_SCHEMA);
+    awaitSchema(STRICT, schema -> schema != null && schema.contains("100000"));
   }
 
   void saveChannel(final String channel, final String provider, final String schema) {
@@ -357,5 +365,177 @@ class NotificationAttachmentE2ETest {
     assertEquals(2, attempts.size());
     assertEquals(attempts.get(0).content().attachments(), attempts.get(1).content().attachments());
     assertEquals(Sha256Digest.of(pdf), attempts.get(1).content().attachments().getFirst().sha256());
+  }
+
+  static Map<String, Object> attachment(
+      final String fileName,
+      final String type,
+      final Object sizeBytes,
+      final String content,
+      final String url) {
+    final Map<String, Object> attachment = new HashMap<>();
+    attachment.put("fileName", fileName);
+    attachment.put("contentType", type);
+    attachment.put("sizeBytes", sizeBytes);
+    attachment.put("content", content);
+    attachment.put("url", url);
+    return attachment;
+  }
+
+  static String base64(final byte[] bytes) {
+    return Base64.getEncoder().encodeToString(bytes);
+  }
+
+  void assertRejected(
+      final String externalId,
+      final String channel,
+      final List<Map<String, Object>> attachments,
+      final String expectedFragment) {
+    final Map<String, Object> error =
+        post(request(externalId, channel, attachments))
+            .expectStatus()
+            .isBadRequest()
+            .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
+            .returnResult()
+            .getResponseBody();
+    final String message = String.valueOf(error.get("message"));
+    assertTrue(message.contains(expectedFragment), externalId + " -> " + message);
+    assertEquals(0L, storedNotificationsWithExternalId(externalId), externalId);
+  }
+
+  @Test
+  void everyAttachmentRuleRejectsTheWholeNotificationAndStoresNothing() {
+    final byte[] pdf = SampleFiles.pdf("rules");
+    final String pdf64 = base64(pdf);
+    final String upload = "http://localhost:9000/notification-attachments/tenants/x/uploads/y";
+    final long tenMegabytes = 10_485_760L;
+    final byte[] overOneMegabyte = SampleFiles.pdfOfSize(1_048_577, 7);
+
+    assertRejected(
+        "sc002-channel",
+        NO_ATTACHMENTS,
+        List.of(embedded("a.pdf", "application/pdf", pdf)),
+        "channel does not accept attachments");
+    assertRejected(
+        "sc002-channel-type",
+        STRICT,
+        List.of(embedded("a.png", "image/png", SampleFiles.png())),
+        "attachments[0]");
+    assertRejected(
+        "sc002-global-type",
+        DOCS,
+        List.of(embedded("a.gif", "image/gif", pdf)),
+        "contentType image/gif is not allowed");
+    assertRejected(
+        "sc002-extension",
+        DOCS,
+        List.of(embedded("factura.pdf.exe", "application/pdf", pdf)),
+        "fileName extension is not allowed");
+    assertRejected(
+        "sc002-channel-size",
+        STRICT,
+        List.of(embedded("big.pdf", "application/pdf", SampleFiles.pdfOfSize(200_000, 8))),
+        "attachments[0]");
+    assertRejected(
+        "sc002-aggregate",
+        DOCS,
+        List.of(
+            attachment("a.pdf", "application/pdf", tenMegabytes, null, upload),
+            attachment("b.pdf", "application/pdf", tenMegabytes, null, upload),
+            attachment("c.pdf", "application/pdf", tenMegabytes, null, upload)),
+        "the total size of the attachments must not exceed 26214400 bytes");
+    assertRejected(
+        "sc002-global-count",
+        DOCS,
+        Collections.nCopies(6, embedded("a.pdf", "application/pdf", pdf)),
+        "at most 5 attachments are allowed");
+    assertRejected(
+        "sc002-channel-count",
+        STRICT,
+        Collections.nCopies(3, embedded("a.pdf", "application/pdf", pdf)),
+        "attachments");
+    assertRejected(
+        "sc002-name",
+        DOCS,
+        List.of(embedded("..", "application/pdf", pdf)),
+        "attachments[0]: fileName");
+    assertRejected(
+        "sc002-missing-type",
+        DOCS,
+        List.of(attachment("a.pdf", null, pdf.length, pdf64, null)),
+        "contentType is required");
+    assertRejected(
+        "sc002-size",
+        DOCS,
+        List.of(attachment("a.pdf", "application/pdf", 0, pdf64, null)),
+        "sizeBytes must be at least 1");
+    assertRejected(
+        "sc002-both",
+        DOCS,
+        List.of(attachment("a.pdf", "application/pdf", pdf.length, pdf64, upload)),
+        "exactly one of content or url is required");
+    assertRejected(
+        "sc002-neither",
+        DOCS,
+        List.of(attachment("a.pdf", "application/pdf", pdf.length, null, null)),
+        "exactly one of content or url is required");
+    assertRejected(
+        "sc002-base64",
+        DOCS,
+        List.of(attachment("a.pdf", "application/pdf", 3, "not-base64", null)),
+        "content must be valid Base64");
+    assertRejected(
+        "sc002-embedded-too-large",
+        DOCS,
+        List.of(embedded("big.pdf", "application/pdf", overOneMegabyte)),
+        "content is only allowed for files of up to 1048576 bytes");
+    assertRejected(
+        "sc002-decoded-size",
+        DOCS,
+        List.of(attachment("a.pdf", "application/pdf", pdf.length + 1, pdf64, null)),
+        "sizeBytes does not match the decoded content");
+    assertRejected(
+        "sc002-url-small",
+        DOCS,
+        List.of(attachment("a.pdf", "application/pdf", 1_000, null, upload)),
+        "url is only allowed for files larger than 1048576 bytes");
+    assertRejected(
+        "sc002-real-type",
+        DOCS,
+        List.of(embedded("photo.pdf", "application/pdf", SampleFiles.png())),
+        "the content is not application/pdf");
+    assertRejected(
+        "sc002-foreign-url",
+        DOCS,
+        List.of(
+            attachment(
+                "a.pdf", "application/pdf", 2_000_000, null, "https://files.example.test/a.pdf")),
+        "url is not an upload issued by this service for this tenant");
+  }
+
+  @Test
+  void theAntivirusTestFileIsRejectedAsMalwareAndNothingIsStored() {
+    assertRejected(
+        "sc008-embedded",
+        DOCS,
+        List.of(embedded("eicar.txt", "text/plain", SampleFiles.text(SampleFiles.EICAR))),
+        "the file contains malicious software");
+  }
+
+  @Test
+  void aBodyOverEightMegabytesIsRejectedAsTooLarge() {
+    final List<Map<String, Object>> attachments = new ArrayList<>();
+    for (int index = 0; index < 5; index++) {
+      attachments.add(
+          attachment(
+              "f" + index + ".pdf",
+              "application/pdf",
+              1_048_576,
+              base64(SampleFiles.pdfOfSize(1_300_000, 50 + index)),
+              null));
+    }
+
+    post(request("sc002-413", DOCS, attachments)).expectStatus().isEqualTo(413);
+    assertEquals(0L, storedNotificationsWithExternalId("sc002-413"));
   }
 }

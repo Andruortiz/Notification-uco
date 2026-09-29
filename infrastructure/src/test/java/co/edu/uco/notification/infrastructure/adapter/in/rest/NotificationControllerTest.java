@@ -12,6 +12,10 @@ import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
+import co.edu.uco.notification.core.exception.AttachmentNotReadyException;
+import co.edu.uco.notification.core.exception.AttachmentNotUploadedException;
+import co.edu.uco.notification.core.exception.AttachmentUploadNotFoundException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
@@ -316,5 +320,71 @@ class NotificationControllerTest {
               assertFalse(responseBody.contains("secret-token-3141"), responseBody);
               assertFalse(responseBody.contains(ATTACHMENT_CONTENT), responseBody);
             });
+  }
+
+  private void assertSendFailsWith(
+      final Throwable error, final HttpStatus status, final String message) {
+    when(sendNotificationUseCase.send(any())).thenReturn(Mono.error(error));
+
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("X-Tenant-Id", "tenant-1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(REQUEST_WITH_ATTACHMENTS)
+        .exchange()
+        .expectStatus()
+        .isEqualTo(status)
+        .expectBody()
+        .jsonPath("$.message")
+        .isEqualTo(message);
+  }
+
+  @Test
+  void anUploadStillBeingScannedIsAConflict() {
+    assertSendFailsWith(
+        new AttachmentNotReadyException(1),
+        HttpStatus.CONFLICT,
+        "attachments[1]: the upload is still being scanned; retry later");
+  }
+
+  @Test
+  void anUnavailableInspectionIsServiceUnavailableWithoutInternalDetails() {
+    assertSendFailsWith(
+        new AttachmentInspectionUnavailableException(
+            "the antivirus is not available", new IllegalStateException("clamd at 10.0.0.7")),
+        HttpStatus.SERVICE_UNAVAILABLE,
+        "the antivirus is not available");
+  }
+
+  @Test
+  void anUnknownUploadIsNotFound() {
+    assertSendFailsWith(
+        new AttachmentUploadNotFoundException(),
+        HttpStatus.NOT_FOUND,
+        "attachment upload not found");
+  }
+
+  @Test
+  void aFileNotYetUploadedIsAConflict() {
+    assertSendFailsWith(
+        new AttachmentNotUploadedException(),
+        HttpStatus.CONFLICT,
+        "the file has not been uploaded yet");
+  }
+
+  @Test
+  void aBodyOverEightMegabytesIsPayloadTooLarge() {
+    final String huge = "a".repeat(9 * 1024 * 1024);
+
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("X-Tenant-Id", "tenant-1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(REQUEST_BODY.replace("\"Body\"", "\"" + huge + "\""))
+        .exchange()
+        .expectStatus()
+        .isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
   }
 }

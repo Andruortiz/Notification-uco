@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,9 +31,11 @@
 
 ## Notes
 
-- Tres marcadores [NEEDS CLARIFICATION] quedan abiertos a propósito para `/speckit-clarify`: cómo viaja
-  el archivo (embebido o por referencia, FR-001), cuántos adjuntos admite una notificación (Edge Cases) y
-  qué hace el despacho cuando el proveedor no sabe enviar adjuntos (User Story 5). La primera es una
-  decisión que el usuario reservó expresamente para la fase de aclaración.
+- Los tres marcadores [NEEDS CLARIFICATION] del borrador inicial (cómo viaja el archivo, cuántos adjuntos
+  y qué hace el despacho con un proveedor que no sabe enviarlos) se resolvieron en `/speckit-clarify` junto
+  con dos preguntas más (dónde se declara la regla por canal y cómo se comporta el lote). Las cinco quedan
+  en `## Clarifications` con una respuesta recomendada, pendiente de confirmación del usuario al aprobar el
+  plan. Q1 es una decisión reservada por el usuario: si elige la otra opción, el spec y el plan se
+  actualizan según lo indicado en la propia pregunta.
 - Los tipos de medio (`application/pdf`, `image/png`) y los nombres de canal (EMAIL, SMS, PUSH) son datos
   del dominio, no detalles de implementación.

@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.config;
 
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.port.in.*;
+import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ContentTypeDetectorPort;
@@ -14,6 +15,7 @@ import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.usecase.*;
+import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,6 +46,45 @@ public class UseCaseConfig {
       final AttachmentStoragePort attachmentStoragePort) {
     return new AttachmentResolver(
         attachmentInspector, attachmentUploadRepository, attachmentStoragePort);
+  }
+
+  @Bean
+  IssueAttachmentUploadUseCase issueAttachmentUploadUseCase(
+      final AttachmentUploadRepository attachmentUploadRepository,
+      final AttachmentStoragePort attachmentStoragePort,
+      final AttachmentProperties attachmentProperties) {
+    return new IssueAttachmentUploadService(
+        attachmentUploadRepository,
+        attachmentStoragePort,
+        attachmentProperties.upload().expiration(),
+        Clock.systemUTC());
+  }
+
+  @Bean
+  CompleteAttachmentUploadUseCase completeAttachmentUploadUseCase(
+      final AttachmentUploadRepository attachmentUploadRepository,
+      final AttachmentStoragePort attachmentStoragePort,
+      final AttachmentScanRequestPort attachmentScanRequestPort) {
+    return new CompleteAttachmentUploadService(
+        attachmentUploadRepository,
+        attachmentStoragePort,
+        attachmentScanRequestPort,
+        Clock.systemUTC());
+  }
+
+  @Bean
+  GetAttachmentUploadUseCase getAttachmentUploadUseCase(
+      final AttachmentUploadRepository attachmentUploadRepository) {
+    return new GetAttachmentUploadService(attachmentUploadRepository);
+  }
+
+  @Bean
+  ScanAttachmentUploadUseCase scanAttachmentUploadUseCase(
+      final AttachmentUploadRepository attachmentUploadRepository,
+      final AttachmentStoragePort attachmentStoragePort,
+      final AttachmentInspector attachmentInspector) {
+    return new ScanAttachmentUploadService(
+        attachmentUploadRepository, attachmentStoragePort, attachmentInspector, Clock.systemUTC());
   }
 
   @Bean

@@ -9,6 +9,7 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.port.in.AttachmentSummary;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
@@ -97,6 +98,9 @@ public final class SendNotificationService implements SendNotificationUseCase {
   private static SendNotificationResult toResult(
       final Notification notification, final boolean duplicate) {
     return new SendNotificationResult(
-        notification.notificationId(), notification.status(), duplicate);
+        notification.notificationId(),
+        notification.status(),
+        duplicate,
+        notification.content().attachments().stream().map(AttachmentSummary::of).toList());
   }
 }

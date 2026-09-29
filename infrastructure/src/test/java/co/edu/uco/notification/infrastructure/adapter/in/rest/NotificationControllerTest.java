@@ -7,6 +7,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.domain.valueobject.AttachmentSubmission;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
@@ -20,6 +23,7 @@ import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
+import co.edu.uco.notification.core.port.in.AttachmentSummary;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusUseCase;
 import co.edu.uco.notification.core.port.in.NotificationSearchPage;
 import co.edu.uco.notification.core.port.in.NotificationStatusView;
@@ -32,6 +36,7 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -386,5 +391,149 @@ class NotificationControllerTest {
         .exchange()
         .expectStatus()
         .isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+  }
+
+  private ListAppender<ILoggingEvent> captureLogs() {
+    final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    appender.start();
+    ((Logger) LoggerFactory.getLogger(NotificationController.class)).addAppender(appender);
+    return appender;
+  }
+
+  private static void release(final ListAppender<ILoggingEvent> appender) {
+    ((Logger) LoggerFactory.getLogger(NotificationController.class)).detachAppender(appender);
+  }
+
+  private static List<String> lines(final ListAppender<ILoggingEvent> appender) {
+    return appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+  }
+
+  private void post(final String body, final HttpStatus expected) {
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("X-Tenant-Id", "tenant-1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(body)
+        .exchange()
+        .expectStatus()
+        .isEqualTo(expected);
+  }
+
+  @Test
+  void anAcceptedNotificationWithAttachmentsIsLoggedWithMetadataAndHashOnly() {
+    final NotificationId id = NotificationId.newId();
+    when(sendNotificationUseCase.send(any()))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    id,
+                    NotificationStatus.PENDING,
+                    false,
+                    List.of(
+                        new AttachmentSummary(
+                            "invoice.pdf", "application/pdf", 20L, "a".repeat(64)),
+                        new AttachmentSummary(
+                            "contract.pdf", "application/pdf", 2_000_000L, "b".repeat(64))))));
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      post(REQUEST_WITH_ATTACHMENTS, HttpStatus.ACCEPTED);
+
+      final String line =
+          lines(logs).stream()
+              .filter(message -> message.startsWith("Notification accepted with attachments"))
+              .findFirst()
+              .orElseThrow();
+      assertTrue(line.contains("tenantId=tenant-1"), line);
+      assertTrue(line.contains("externalId=order-43"), line);
+      assertTrue(line.contains("notificationId=" + id.value()), line);
+      assertTrue(line.contains("duplicate=false"), line);
+      assertTrue(
+          line.contains(
+              "attachments=[invoice.pdf|application/pdf|20|"
+                  + "a".repeat(64)
+                  + ", contract.pdf|application/pdf|2000000|"
+                  + "b".repeat(64)
+                  + "]"),
+          line);
+      assertTrue(lines(logs).stream().noneMatch(message -> message.contains("secret-token-3141")));
+      assertTrue(lines(logs).stream().noneMatch(message -> message.contains(ATTACHMENT_CONTENT)));
+    } finally {
+      release(logs);
+    }
+  }
+
+  @Test
+  void aRejectedNotificationWithAttachmentsIsLoggedWithMetadataAndReason() {
+    when(sendNotificationUseCase.send(any()))
+        .thenReturn(
+            Mono.error(
+                new InvalidAttachmentException(
+                    0, "the file contains malicious software", "invoice.pdf")));
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      post(REQUEST_WITH_ATTACHMENTS, HttpStatus.BAD_REQUEST);
+
+      final String line =
+          lines(logs).stream()
+              .filter(message -> message.startsWith("Notification with attachments rejected"))
+              .findFirst()
+              .orElseThrow();
+      assertTrue(line.contains("tenantId=tenant-1"), line);
+      assertTrue(line.contains("externalId=order-43"), line);
+      assertTrue(
+          line.contains(
+              "attachments=[invoice.pdf|application/pdf|20, contract.pdf|application/pdf|2000000]"),
+          line);
+      assertTrue(
+          line.contains("reason=attachments[0]: the file contains malicious software"), line);
+      assertTrue(lines(logs).stream().noneMatch(message -> message.contains("secret-token-3141")));
+      assertTrue(lines(logs).stream().noneMatch(message -> message.contains(ATTACHMENT_CONTENT)));
+    } finally {
+      release(logs);
+    }
+  }
+
+  @Test
+  void aFileNameWithLineBreaksIsLoggedOnASingleLine() {
+    when(sendNotificationUseCase.send(any()))
+        .thenReturn(
+            Mono.error(
+                new InvalidAttachmentException(
+                    0, "fileName must not contain path separators or control characters")));
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      post(
+          REQUEST_WITH_ATTACHMENTS.replace("invoice.pdf", "evil\\r\\nFAKE LOG LINE"),
+          HttpStatus.BAD_REQUEST);
+
+      final String line =
+          lines(logs).stream()
+              .filter(message -> message.startsWith("Notification with attachments rejected"))
+              .findFirst()
+              .orElseThrow();
+      assertFalse(line.contains("\n"), line);
+      assertFalse(line.contains("\r"), line);
+      assertTrue(line.contains("evil__FAKE LOG LINE"), line);
+    } finally {
+      release(logs);
+    }
+  }
+
+  @Test
+  void aNotificationWithoutAttachmentsLogsNothingNew() {
+    when(sendNotificationUseCase.send(any()))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    NotificationId.newId(), NotificationStatus.PENDING, false)));
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      post(REQUEST_BODY, HttpStatus.ACCEPTED);
+
+      assertTrue(lines(logs).isEmpty(), lines(logs).toString());
+    } finally {
+      release(logs);
+    }
   }
 }

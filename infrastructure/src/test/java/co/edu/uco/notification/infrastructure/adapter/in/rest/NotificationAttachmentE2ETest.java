@@ -6,6 +6,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.Attachment;
 import co.edu.uco.notification.core.domain.valueobject.AttachmentSource;
@@ -16,9 +19,11 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
+import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.infrastructure.support.AttachmentTestContainers;
 import co.edu.uco.notification.infrastructure.support.RecordingAttachmentSender;
 import co.edu.uco.notification.infrastructure.support.SampleFiles;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -33,6 +38,12 @@ import org.bson.Document;
 import org.bson.types.Binary;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+import org.springframework.amqp.core.AmqpAdmin;
+import org.springframework.amqp.core.Binding;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.Queue;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -537,5 +548,101 @@ class NotificationAttachmentE2ETest {
 
     post(request("sc002-413", DOCS, attachments)).expectStatus().isEqualTo(413);
     assertEquals(0L, storedNotificationsWithExternalId("sc002-413"));
+  }
+
+  @Autowired private AmqpAdmin amqpAdmin;
+
+  @Autowired private RabbitTemplate rabbitTemplate;
+
+  @Autowired private RabbitTopologyProperties rabbitTopologyProperties;
+
+  @Test
+  void theEmbeddedContentNeverLeavesTheServiceWhileItsMetadataIsLogged() {
+    final String marker = "LEAK-MARKER-7761-" + System.nanoTime();
+    final byte[] content = SampleFiles.text("confidential " + marker + "\n");
+    final String encoded = base64(content);
+    final Queue events = new Queue("sc003-events-" + System.nanoTime(), false, false, false);
+    amqpAdmin.declareQueue(events);
+    amqpAdmin.declareBinding(
+        new Binding(
+            events.getName(),
+            Binding.DestinationType.QUEUE,
+            rabbitTopologyProperties.eventsExchange(),
+            "",
+            null));
+    final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    logs.start();
+    ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).addAppender(logs);
+    try {
+      final String notificationId =
+          accepted(
+                  request(
+                      "sc003-valid", DOCS, List.of(embedded("secret.txt", "text/plain", content))))
+              .get("notificationId")
+              .toString();
+      assertEquals("DELIVERED", awaitStatus(notificationId, "DELIVERED", Duration.ofSeconds(20)));
+      final String errorBody =
+          post(request(
+                  "sc003-invalid",
+                  DOCS,
+                  List.of(embedded("secret.pdf", "application/pdf", content))))
+              .expectStatus()
+              .isBadRequest()
+              .expectBody(String.class)
+              .returnResult()
+              .getResponseBody();
+      final String statusBody = getBody("/notifications/" + notificationId);
+      final String searchBody = getBody("/notifications?limit=50");
+      final List<String> eventBodies = new ArrayList<>();
+      Message message = rabbitTemplate.receive(events.getName(), 2_000);
+      while (message != null) {
+        eventBodies.add(new String(message.getBody(), StandardCharsets.UTF_8));
+        message = rabbitTemplate.receive(events.getName(), 500);
+      }
+      final List<String> logLines =
+          logs.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+
+      final List<String> everything = new ArrayList<>(logLines);
+      everything.add(errorBody);
+      everything.add(statusBody);
+      everything.add(searchBody);
+      everything.addAll(eventBodies);
+      assertTrue(everything.stream().noneMatch(text -> text.contains(marker)), "marker leaked");
+      assertTrue(everything.stream().noneMatch(text -> text.contains(encoded)), "content leaked");
+      assertTrue(!eventBodies.isEmpty(), "events were captured");
+      assertTrue(
+          logLines.stream()
+              .anyMatch(
+                  line ->
+                      line.contains(
+                          "secret.txt|text/plain|"
+                              + content.length
+                              + "|"
+                              + Sha256Digest.of(content).hex())),
+          "metadata must be logged");
+      assertTrue(
+          logLines.stream()
+              .anyMatch(
+                  line ->
+                      line.startsWith("Notification with attachments rejected")
+                          && line.contains("secret.pdf|application/pdf|" + content.length)),
+          "rejection must be logged");
+    } finally {
+      ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).detachAppender(logs);
+      amqpAdmin.deleteQueue(events.getName());
+    }
+  }
+
+  private String getBody(final String uri) {
+    return webTestClient
+        .get()
+        .uri(uri)
+        .header("X-Tenant-Id", TENANT)
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody(String.class)
+        .returnResult()
+        .getResponseBody();
   }
 }

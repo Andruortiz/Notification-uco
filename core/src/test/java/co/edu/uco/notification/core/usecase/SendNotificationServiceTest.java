@@ -19,6 +19,7 @@ import co.edu.uco.notification.core.exception.AttachmentNotReadyException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
+import co.edu.uco.notification.core.port.in.AttachmentSummary;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
@@ -297,7 +298,23 @@ class SendNotificationServiceTest {
     givenAcceptancePipeline();
 
     StepVerifier.create(service.send(commandWith(INVOICE_SUBMISSION, RECEIPT_SUBMISSION)))
-        .assertNext(result -> assertFalse(result.duplicate()))
+        .assertNext(
+            result -> {
+              assertFalse(result.duplicate());
+              assertEquals(
+                  List.of(
+                      new AttachmentSummary(
+                          "invoice.pdf",
+                          "application/pdf",
+                          PDF_BYTES.length,
+                          Sha256Digest.of(PDF_BYTES).hex()),
+                      new AttachmentSummary(
+                          "receipt.png",
+                          "image/png",
+                          PNG_BYTES.length,
+                          Sha256Digest.of(PNG_BYTES).hex())),
+                  result.attachments());
+            })
         .verifyComplete();
 
     verify(attachmentResolver).resolve(TENANT_ID, List.of(INVOICE_SUBMISSION, RECEIPT_SUBMISSION));
@@ -332,6 +349,9 @@ class SendNotificationServiceTest {
             result -> {
               assertTrue(result.duplicate());
               assertEquals(existing.notificationId(), result.notificationId());
+              assertEquals(
+                  List.of("invoice.pdf"),
+                  result.attachments().stream().map(AttachmentSummary::fileName).toList());
             })
         .verifyComplete();
 

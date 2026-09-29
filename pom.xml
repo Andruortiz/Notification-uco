@@ -30,6 +30,8 @@
         <spring-modulith.version>1.2.4</spring-modulith.version>
         <springdoc.version>2.6.0</springdoc.version>
         <json-schema-validator.version>1.4.0</json-schema-validator.version>
+        <tika.version>3.2.3</tika.version>
+        <minio.version>8.5.17</minio.version>
 
         <spotless-maven-plugin.version>2.43.0</spotless-maven-plugin.version>
         <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>
@@ -67,6 +69,17 @@
                 <version>${spring-modulith.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.tika</groupId>
+                <artifactId>tika-core</artifactId>
+                <version>${tika.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.minio</groupId>
+                <artifactId>minio</artifactId>
+                <version>${minio.version}</version>
             </dependency>
 
             <dependency>

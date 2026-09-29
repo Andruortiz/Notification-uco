@@ -83,7 +83,7 @@ spec cambiarían con la otra respuesta.
   - Afecta a: FR-003, FR-004, FR-011, User Story 3, Assumptions.
 - **Q4 — ¿Qué pasa en el despacho con una notificación con adjunto cuando el proveedor elegido no sabe
   enviar adjuntos?**
-  - Opciones: (A) falla definitivamente sin enviarse, sin reintentos, con el motivo trazable; (B) se envía
+  - Opciones: (A) falla definitivamente sin enviarse, sin reintentos, con el proveedor en su historial; (B) se envía
     sin el adjunto; (C) no es parte de esta historia.
   - **Respuesta recomendada (pendiente de confirmación)**: **A**. B es una entrega a medias silenciosa,
     contraria a la historia; C deja abierta esa misma entrega a medias en cuanto un operador declare
@@ -122,7 +122,8 @@ notificación guardada conserva el adjunto (nombre, tipo, tamaño y archivo) y q
 3. **Given** una notificación sin adjunto, **When** el cliente la pide por cualquier canal, **Then** se
    comporta exactamente igual que antes de esta historia.
 4. **Given** la misma notificación (mismo identificador externo del cliente) pedida dos veces con adjunto,
-   **When** llega la segunda, **Then** se devuelve la primera como duplicada, igual que sin adjunto.
+   **When** llega la segunda con adjuntos válidos, **Then** se devuelve la primera como duplicada, igual
+   que sin adjunto, y sus adjuntos no cambian.
 5. **Given** una notificación con adjunto que queda pendiente de reintento, **When** se reintenta,
    **Then** el proveedor vuelve a recibir los mismos adjuntos.
 
@@ -157,7 +158,7 @@ ninguna queda registrada ni encolada.
 5. **Given** un canal que admite hasta 2 adjuntos, **When** el cliente envía 3, **Then** se rechaza
    completa.
 6. **Given** un rechazo por adjunto inválido, **When** el cliente lee el motivo, **Then** el motivo
-   identifica qué adjunto (posición y nombre) y qué regla falló, y no contiene la referencia al archivo.
+   identifica qué adjunto (por su posición) y qué regla falló, y no contiene la referencia al archivo.
 
 ---
 
@@ -229,13 +230,13 @@ debe salir sin el archivo.
 
 **Independent Test**: Declarar adjuntos en un canal cuyo proveedor preferente no sabe enviarlos, pedir una
 notificación con adjunto y confirmar que termina fallida sin haberse enviado y sin reintentos, con el
-motivo trazable; y que una notificación sin adjunto por el mismo canal sí se envía (control positivo).
+proveedor en su historial; y que una notificación sin adjunto por el mismo canal sí se envía (control positivo).
 
 **Acceptance Scenarios**:
 
 1. **Given** una notificación aceptada con adjunto y un proveedor preferente que no sabe enviar adjuntos,
    **When** se despacha, **Then** el proveedor no la recibe y la notificación termina fallida, sin
-   reintentos, con un registro que nombra el proveedor y el motivo.
+   reintentos, con un intento de fallo definitivo a nombre de ese proveedor en su historial.
 2. **Given** el mismo canal y proveedor, **When** se despacha una notificación sin adjunto, **Then** se
    envía normalmente.
 
@@ -260,8 +261,9 @@ motivo trazable; y que una notificación sin adjunto por el mismo canal sí se e
   (User Story 5).
 - **Canal que declara adjuntos sin restringir tipos**: acepta los tipos de la lista global de tipos
   permitidos; nunca un tipo fuera de ella.
-- **Notificación duplicada (mismo identificador externo) con un adjunto distinto**: se devuelve la
-  original como duplicada; el nuevo adjunto no se valida contra la original ni la reemplaza.
+- **Notificación duplicada (mismo identificador externo) con un adjunto distinto**: si el nuevo adjunto es
+  válido, se devuelve la original como duplicada y el nuevo adjunto no la reemplaza; si es inválido, se
+  rechaza como cualquier solicitud inválida (FR-012).
 - **Referencia vencida o archivo borrado por el cliente antes del despacho**: el proveedor no podrá
   obtener el archivo; el resultado es el que el proveedor reporte (fuera del control de esta historia).
 
@@ -288,8 +290,9 @@ motivo trazable; y que una notificación sin adjunto por el mismo canal sí se e
   ausente o mal formado; tamaño ausente, cero o negativo; referencia ausente o que no es una dirección
   https válida. Nunca se acepta la notificación sin el adjunto ni con parte de sus adjuntos, y nada queda
   registrado ni encolado.
-- **FR-007**: El motivo del rechazo MUST identificar el adjunto (posición y nombre) y la regla incumplida,
-  y MUST NOT contener la referencia al archivo.
+- **FR-007**: El motivo del rechazo MUST identificar el adjunto por su posición en la lista (y por su
+  nombre cuando la regla incumplida no es el propio nombre) y la regla incumplida, y MUST NOT contener la
+  referencia al archivo.
 - **FR-008**: Una notificación aceptada con adjuntos MUST conservarlos de forma duradera, en el orden
   enviado, de modo que el despacho, incluidos los reintentos y el reencolado de pendientes, disponga de
   ellos completos.
@@ -300,13 +303,16 @@ motivo trazable; y que una notificación sin adjunto por el mismo canal sí se e
   registrados con el tenant, el identificador externo y el nombre, tipo y tamaño de cada adjunto.
 - **FR-011**: La consulta del catálogo MUST mostrar, por canal, la declaración de adjuntos vigente como
   parte de su forma de contenido.
-- **FR-012**: La idempotencia por identificador externo MUST mantenerse: una solicitud duplicada devuelve
-  la notificación original sin validar ni guardar los nuevos adjuntos.
+- **FR-012**: La idempotencia por identificador externo MUST mantenerse con el mismo orden que hoy: primero
+  se valida la solicitud (contenido y adjuntos) y luego se busca la duplicada. Una solicitud duplicada
+  válida devuelve la notificación original sin guardar ni reemplazar sus adjuntos; una duplicada inválida
+  se rechaza, igual que hoy una duplicada con contenido inválido.
 - **FR-013**: Las operaciones de envío individual y en lote MUST quedar descritas con los adjuntos en el
   contrato público antes de implementarse, incluidos los motivos de rechazo.
 - **FR-014**: Cada proveedor MUST declarar si sabe enviar adjuntos. Una notificación con adjuntos cuyo
-  proveedor elegido no sabe enviarlos MUST terminar fallida sin enviarse y sin reintentos, con un registro
-  que nombra el proveedor y el motivo (Q4). Hoy solo el proveedor simulado declara saber enviarlos.
+  proveedor elegido no sabe enviarlos MUST terminar fallida sin enviarse y sin reintentos, con un intento
+  de fallo definitivo a nombre de ese proveedor en su historial (Q4). Hoy solo el proveedor simulado
+  declara saber enviarlos.
 - **FR-015**: En un envío en lote, un elemento con un adjunto inválido MUST rechazarse solo, con su motivo,
   sin afectar a los demás elementos (Q5).
 - **FR-016**: El servicio MUST NOT descargar ni abrir el archivo referenciado durante la aceptación.
@@ -365,6 +371,9 @@ motivo trazable; y que una notificación sin adjunto por el mismo canal sí se e
 - La referencia puede incluir un permiso de acceso temporal emitido por el alojamiento del cliente; es
   responsabilidad del cliente que siga vigente durante los reintentos.
 - El identificador de tenant sigue siendo el sustituto provisional de la identidad del cliente.
+- El envío en lote está descrito en el contrato público y existe como caso de uso, pero hoy no tiene una
+  operación HTTP que lo atienda. La regla de Q5 se aplica y se prueba en el caso de uso de lote; exponerlo
+  por HTTP no es parte de esta historia.
 
 ## Risks
 
@@ -375,6 +384,11 @@ motivo trazable; y que una notificación sin adjunto por el mismo canal sí se e
 - **Archivos de destinatarios alojados por el cliente**: la seguridad del documento depende de cómo lo
   aloje el cliente (dirección pública o con permiso temporal). El servicio no lo publica ni lo copia.
   Dueño: andrualv. Revisión: 2026-12-31.
+- **Motivo del fallo por proveedor sin adjuntos no textual**: el historial de intentos registra el
+  proveedor y el fallo definitivo, pero no guarda un motivo textual, porque los intentos no tienen hoy un
+  campo de causa. El motivo se deduce de dos datos visibles (la notificación tiene adjuntos y el proveedor
+  no declara saber enviarlos). Dueño: andrualv. Revisión: con la primera historia que agregue causa a los
+  intentos, a más tardar 2026-12-31.
 - **Registros estructurados todavía incompletos**: el servicio aún no emite registros estructurados en
   todo el ciclo de vida; esta historia agrega solo los registros de aceptación y rechazo de adjuntos
   (FR-010) sin cerrar esa brecha general. Dueño: andrualv. Revisión: 2026-12-31.

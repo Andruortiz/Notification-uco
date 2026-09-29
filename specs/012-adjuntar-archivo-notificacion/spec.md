@@ -4,9 +4,9 @@
 
 **Created**: 2026-09-28
 
-**Status**: Clarificado con respuestas recomendadas — Q1–Q5 pendientes de confirmación del usuario al aprobar
-el plan. Q1 (cómo viaja el archivo) es una decisión reservada expresamente por el usuario: la respuesta
-registrada es solo una recomendación y el plan indica qué cambia si se elige la otra.
+**Status**: Plan aceptado — Q1–Q5 de Clarifications confirmadas por el usuario (2026-09-28) al aprobar el
+plan, todas con la respuesta que figuraba como recomendada. Q1 (cómo viaja el archivo), decisión reservada
+por el usuario, quedó confirmada como referencia https.
 
 **Input**: User description: "Como sistema cliente, quiero poder adjuntar un archivo a una notificación,
 para enviar comprobantes, documentos o imágenes junto con el mensaje de una forma segura."
@@ -19,11 +19,11 @@ cada canal, que esta historia no bloquea ni implementa.
 
 ## Clarifications
 
-### Session 2026-09-28 — pendientes de confirmación
+### Session 2026-09-28 — confirmadas (2026-09-28)
 
-No fue posible consultar al usuario durante la redacción. Cada pregunta queda registrada con una respuesta
-**recomendada**, que el usuario confirma o cambia al aprobar el plan. Para cada una se indica qué partes del
-spec cambiarían con la otra respuesta.
+No fue posible consultar al usuario durante la redacción, así que cada pregunta se registró con una
+respuesta recomendada. El usuario **confirmó** las cinco tal cual al aprobar el plan. Para cada una se
+indica qué partes del spec cambiarían si la respuesta fuera otra en el futuro.
 
 - **Q1 — ¿El archivo viaja embebido en la propia solicitud de notificación (su contenido codificado en
   texto) o como una referencia (una dirección web) a un archivo que el cliente ya aloja en otro lugar?**
@@ -47,20 +47,20 @@ spec cambiarían con la otra respuesta.
     reintentos; y la dirección en sí puede contener un permiso de acceso temporal, así que se trata como
     dato sensible (nunca en registros, errores ni eventos).
   - **Opción C — Ambas**: el cliente elige por adjunto. Suma el costo de A y de B.
-  - **Respuesta recomendada (pendiente de confirmación)**: **B — referencia**. Mantiene la historia en su
+  - **Respuesta confirmada por el usuario**: **B — referencia**. Mantiene la historia en su
     alcance (modelo, validación y contrato), no introduce un almacén de archivos ni su retención, no infla
     la aceptación, y coincide con lo que consumen los tres proveedores previstos. La pérdida de A (tamaño y
     tipo verificados sobre el archivo real) se acota con el tope global, la lista de tipos permitidos y la
     regla de Q4, y queda como riesgo documentado.
-  - Si se elige A: FR-001, FR-008 y FR-009 pasan a hablar del contenido del archivo; se agregan un almacén
+  - Si en el futuro se cambiara a A: FR-001, FR-008 y FR-009 pasan a hablar del contenido del archivo; se agregan un almacén
     de archivos, la verificación del tipo real, un límite de tamaño de la solicitud y una política de
     retención; las Assumptions sobre la dirección web se retiran; y el riesgo "tamaño declarado" desaparece.
-    El plan detalla el delta técnico.
+    `plan.md § Si Q1 cambia a contenido embebido` queda como referencia del delta técnico; no aplica.
   - Afecta a: FR-001, FR-008, FR-009, FR-016, Key Entities, Edge Cases, Risks.
 - **Q2 — ¿Una notificación lleva a lo sumo un adjunto, o puede llevar varios hasta un máximo por canal?**
   - Opciones: (A) exactamente cero o uno; (B) una lista, con un máximo por canal y un tope global de 5;
     (C) una lista sin máximo por canal, solo el tope global.
-  - **Respuesta recomendada (pendiente de confirmación)**: **B**. El contrato nace como lista y no hay que
+  - **Respuesta confirmada por el usuario**: **B**. El contrato nace como lista y no hay que
     romperlo cuando el correo necesite factura y comprobante juntos; cada canal fija su máximo (el push, por
     ejemplo, solo admitirá una imagen). La historia sigue cubriendo el caso "un archivo" como el más común.
   - Si se elige A: la cantidad máxima desaparece de FR-003 y FR-005 y el adjunto deja de ser una lista.
@@ -72,7 +72,7 @@ spec cambiarían con la otra respuesta.
     los declara; la configuración por defecto no los declara en ningún canal; (B) una sección propia del
     canal (tipos, tamaño, cantidad), con la misma regla por defecto; (C) como A, pero la configuración por
     defecto los habilita en EMAIL.
-  - **Respuesta recomendada (pendiente de confirmación)**: **A**. Es el mismo mecanismo que ya fija el largo
+  - **Respuesta confirmada por el usuario**: **A**. Es el mismo mecanismo que ya fija el largo
     máximo del mensaje, la consulta del catálogo ya lo muestra sin cambiar su contrato y extender la
     validación de la forma de contenido es exactamente el área que esta historia toca. Por defecto ningún
     canal acepta adjuntos porque ningún proveedor real sabe enviarlos todavía; cada historia de canal
@@ -85,7 +85,7 @@ spec cambiarían con la otra respuesta.
   enviar adjuntos?**
   - Opciones: (A) falla definitivamente sin enviarse, sin reintentos, con el proveedor en su historial; (B) se envía
     sin el adjunto; (C) no es parte de esta historia.
-  - **Respuesta recomendada (pendiente de confirmación)**: **A**. B es una entrega a medias silenciosa,
+  - **Respuesta confirmada por el usuario**: **A**. B es una entrega a medias silenciosa,
     contraria a la historia; C deja abierta esa misma entrega a medias en cuanto un operador declare
     adjuntos en un canal cuyo proveedor aún no los soporta. Cada proveedor declara si sabe enviar adjuntos;
     hoy solo el simulado.
@@ -93,7 +93,7 @@ spec cambiarían con la otra respuesta.
 - **Q5 — En un envío en lote, ¿un elemento con un adjunto inválido se rechaza solo, o rechaza el lote
   completo?**
   - Opciones: (A) se rechaza solo ese elemento, con su motivo, y los demás siguen; (B) se rechaza el lote.
-  - **Respuesta recomendada (pendiente de confirmación)**: **A**. Es la regla que el lote ya aplica a un
+  - **Respuesta confirmada por el usuario**: **A**. Es la regla que el lote ya aplica a un
     contenido inválido: cada elemento se valida por separado y un elemento inválido no bloquea a los demás.
     "Rechazar completa" se refiere a la notificación del elemento, que nunca se acepta sin su adjunto.
   - Afecta a: FR-015, Edge Cases.
@@ -273,7 +273,7 @@ proveedor en su historial; y que una notificación sin adjunto por el mismo cana
 
 - **FR-001**: El componente MUST permitir que una solicitud de notificación incluya una lista de adjuntos.
   Cada adjunto se describe por su nombre de archivo, su tipo de contenido, su tamaño en bytes y una
-  referencia https al archivo, que aloja el cliente (Q1, recomendada B).
+  referencia https al archivo, que aloja el cliente (Q1).
 - **FR-002**: Los adjuntos MUST ser opcionales: una notificación sin adjuntos se acepta, valida, guarda y
   despacha exactamente igual que antes de esta historia.
 - **FR-003**: Cada canal del catálogo MUST poder declarar, dentro de su forma de contenido, si acepta

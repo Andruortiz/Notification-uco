@@ -200,8 +200,8 @@ en `GET /channels`; por defecto ningún canal acepta adjuntos.
 
 **Independent Test**: spec.md, User Story 3, escenarios 1–4; SC-005.
 
-- [ ] T065 [US3] Comprobar que ningún cambio de código es necesario más allá de T020: `GET /channels` ya expone `contentSchema` tal cual y `application.yml` no declara `attachments` en ningún canal; si la comprobación encuentra algo distinto, registrarlo aquí como desviación (reabre v1 T025)
-- [ ] T066 [US3] Casos en `NotificationAttachmentE2ETest`: US3.1 (`GET /channels` muestra la declaración), US3.3 (un canal con `maximum` sobre el tope global rechaza un adjunto entre ambos), US3.4 (EMAIL por defecto rechaza) y SC-005 (bajar `maximum` en el catálogo y afirmar que el rechazo empieza antes de `Duration.ofSeconds(5)`) — depende de T044, T065
+- [X] T065 [US3] Comprobar que ningún cambio de código es necesario más allá de T020: `GET /channels` ya expone `contentSchema` tal cual y `application.yml` no declara `attachments` en ningún canal; si la comprobación encuentra algo distinto, registrarlo aquí como desviación (reabre v1 T025) Comprobado: `ChannelItemResponse` expone `contentSchema` tal cual y en `application.yml` ningún canal declara `attachments` (la única clave `attachments` es el bloque de configuración `notification.attachments`)
+- [X] T066 [US3] Casos en `NotificationAttachmentE2ETest`: US3.1 (`GET /channels` muestra la declaración), US3.3 (un canal con `maximum` sobre el tope global rechaza un adjunto entre ambos), US3.4 (EMAIL por defecto rechaza) y SC-005 (bajar `maximum` en el catálogo y afirmar que el rechazo empieza antes de `Duration.ofSeconds(5)`) — depende de T044, T065 Verde a la primera (la regla vive en `ContentSchemaValidator` y el refresco del catálogo ya existía). SC-005 se mide desde que se guarda el cambio hasta el primer `400`
 
 ---
 
@@ -211,9 +211,9 @@ en `GET /channels`; por defecto ningún canal acepta adjuntos.
 
 **Independent Test**: spec.md, User Story 5, escenarios 1–2; SC-006.
 
-- [ ] T067 [P] [US5] Pruebas en `core-test/usecase/DispatchNotificationServiceTest.java`: notificación con adjuntos y emisor con `supportsAttachments() == false` → `send` nunca invocado, estado `FAILED`, intento `PERMANENT_FAILURE` a nombre del proveedor, guardado y evento `NotificationFailed` publicado; mismo emisor sin adjuntos → `send` invocado (control positivo); emisor con soporte y adjuntos → `send` invocado (sin cambio respecto de v1 T026)
-- [ ] T068 [US5] Implementar la regla en `sendThrough` de `core-main/usecase/DispatchNotificationService.java` (research.md, Decisión 6) — depende de T067
-- [ ] T069 [US5] SC-006 en `NotificationAttachmentE2ETest`: canal con `recording-plain`, con adjuntos → `FAILED` y el emisor no la recibe; sin adjuntos → `DELIVERED` y sí la recibe — depende de T044, T068
+- [X] T067 [P] [US5] Pruebas en `core-test/usecase/DispatchNotificationServiceTest.java`: notificación con adjuntos y emisor con `supportsAttachments() == false` → `send` nunca invocado, estado `FAILED`, intento `PERMANENT_FAILURE` a nombre del proveedor, guardado y evento `NotificationFailed` publicado; mismo emisor sin adjuntos → `send` invocado (control positivo); emisor con soporte y adjuntos → `send` invocado (sin cambio respecto de v1 T026) Rojo observado: el emisor sin soporte se invocaba (`send` devolvía `null` en el doble)
+- [X] T068 [US5] Implementar la regla en `sendThrough` de `core-main/usecase/DispatchNotificationService.java` (research.md, Decisión 6) — depende de T067
+- [X] T069 [US5] SC-006 en `NotificationAttachmentE2ETest`: canal con `recording-plain`, con adjuntos → `FAILED` y el emisor no la recibe; sin adjuntos → `DELIVERED` y sí la recibe — depende de T044, T068 Verde tras T068
 
 ---
 

@@ -645,4 +645,83 @@ class NotificationAttachmentE2ETest {
         .returnResult()
         .getResponseBody();
   }
+
+  @Test
+  void theCatalogShowsTheChannelDeclarationAndTheGlobalCapAlwaysWins() {
+    final String catalog = getBody("/channels");
+    assertTrue(catalog.contains(DOCS), catalog);
+    assertTrue(catalog.contains("\\\"attachments\\\""), catalog);
+
+    saveChannel("E2E_GENEROUS", "recording-attachments", attachmentsSchema(20_000_000L));
+    awaitSchema("E2E_GENEROUS", schema -> schema != null && schema.contains("20000000"));
+    assertRejected(
+        "us3-global-cap",
+        "E2E_GENEROUS",
+        List.of(
+            attachment(
+                "big.pdf",
+                "application/pdf",
+                10_485_761L,
+                null,
+                "http://localhost:9000/notification-attachments/tenants/x/uploads/y")),
+        "sizeBytes must not exceed 10485760");
+  }
+
+  @Test
+  void theDefaultEmailChannelDoesNotAcceptAttachments() {
+    assertRejected(
+        "us3-default-email",
+        "EMAIL",
+        List.of(embedded("a.pdf", "application/pdf", SampleFiles.pdf("email"))),
+        "channel does not accept attachments");
+  }
+
+  @Test
+  void aSmallerChannelMaximumIsAppliedWithinFiveSeconds() {
+    saveChannel("E2E_SHRINK", "recording-attachments", attachmentsSchema(10_485_760L));
+    awaitSchema("E2E_SHRINK", schema -> schema != null && schema.contains("10485760"));
+    final byte[] pdf = SampleFiles.pdfOfSize(200_000, 9);
+    accepted(
+        request("sc005-before", "E2E_SHRINK", List.of(embedded("a.pdf", "application/pdf", pdf))));
+
+    saveChannel("E2E_SHRINK", "recording-attachments", attachmentsSchema(100_000L));
+    final Instant changedAt = Instant.now();
+    int attempt = 0;
+    Duration elapsed = Duration.ZERO;
+    while (elapsed.compareTo(Duration.ofSeconds(10)) < 0) {
+      final int status =
+          post(request(
+                  "sc005-after-" + attempt++,
+                  "E2E_SHRINK",
+                  List.of(embedded("a.pdf", "application/pdf", pdf))))
+              .returnResult(String.class)
+              .getStatus()
+              .value();
+      elapsed = Duration.between(changedAt, Instant.now());
+      if (status == 400) {
+        break;
+      }
+    }
+
+    assertTrue(elapsed.compareTo(Duration.ofSeconds(5)) < 0, "applied after " + elapsed);
+  }
+
+  @Test
+  void aProviderWithoutAttachmentSupportNeverDeliversANotificationWithAttachments() {
+    final String withAttachment =
+        accepted(
+                request(
+                    "sc006-with",
+                    PLAIN_PROVIDER,
+                    List.of(embedded("a.pdf", "application/pdf", SampleFiles.pdf("sc006")))))
+            .get("notificationId")
+            .toString();
+    final String withoutAttachment =
+        accepted(request("sc006-without", PLAIN_PROVIDER, null)).get("notificationId").toString();
+
+    assertEquals("FAILED", awaitStatus(withAttachment, "FAILED", Duration.ofSeconds(20)));
+    assertEquals("DELIVERED", awaitStatus(withoutAttachment, "DELIVERED", Duration.ofSeconds(20)));
+    assertTrue(recordingPlain.receivedFor(NotificationId.of(withAttachment)).isEmpty());
+    assertEquals(1, recordingPlain.receivedFor(NotificationId.of(withoutAttachment)).size());
+  }
 }

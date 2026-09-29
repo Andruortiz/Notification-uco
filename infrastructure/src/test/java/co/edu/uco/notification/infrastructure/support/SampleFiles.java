@@ -41,9 +41,13 @@ public final class SampleFiles {
   }
 
   public static byte[] pdfOfSize(final int size) {
-    final byte[] header = pdf("padding");
+    return pdfOfSize(size, size);
+  }
+
+  public static byte[] pdfOfSize(final int size, final long seed) {
+    final byte[] header = pdf("padding " + seed);
     final byte[] bytes = new byte[size];
-    new Random(size).nextBytes(bytes);
+    new Random(seed).nextBytes(bytes);
     System.arraycopy(header, 0, bytes, 0, Math.min(header.length, size));
     return bytes;
   }

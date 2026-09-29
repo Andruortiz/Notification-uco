@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.valueobject.Attachment;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
@@ -30,6 +31,9 @@ final class NotificationDocumentMapper {
         notification.recipient().address(),
         notification.content().subject(),
         notification.content().body(),
+        notification.content().attachments().stream()
+            .map(NotificationDocumentMapper::toDocument)
+            .toList(),
         notification.priority(),
         notification.status(),
         notification.acceptedAt(),
@@ -49,7 +53,13 @@ final class NotificationDocumentMapper {
             RecipientId.of(document.recipientId()),
             Recipient.of(document.recipientAddress())),
         new NotificationDetails(
-            NotificationContent.of(document.contentSubject(), document.contentBody()),
+            NotificationContent.of(
+                document.contentSubject(),
+                document.contentBody(),
+                Objects.requireNonNullElse(document.attachments(), List.<AttachmentDocument>of())
+                    .stream()
+                    .map(NotificationDocumentMapper::toDomain)
+                    .toList()),
             document.priority()),
         document.status(),
         new NotificationMetadata(document.acceptedAt(), document.version()),
@@ -57,6 +67,16 @@ final class NotificationDocumentMapper {
             .stream()
             .map(NotificationDocumentMapper::toDomain)
             .toList());
+  }
+
+  private static AttachmentDocument toDocument(final Attachment attachment) {
+    return new AttachmentDocument(
+        attachment.fileName(), attachment.contentType(), attachment.sizeBytes(), attachment.url());
+  }
+
+  private static Attachment toDomain(final AttachmentDocument document) {
+    return Attachment.of(
+        document.fileName(), document.contentType(), document.sizeBytes(), document.url());
   }
 
   private static DeliveryAttemptDocument toDocument(final DeliveryAttempt attempt) {

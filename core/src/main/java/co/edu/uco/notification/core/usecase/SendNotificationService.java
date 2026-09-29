@@ -2,6 +2,7 @@ package co.edu.uco.notification.core.usecase;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
+import co.edu.uco.notification.core.domain.policy.AttachmentPolicy;
 import co.edu.uco.notification.core.domain.policy.ContentSchemaValidator;
 import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
@@ -48,6 +49,7 @@ public final class SendNotificationService implements SendNotificationUseCase {
 
   private Mono<SendNotificationResult> validateAndProceed(
       final ChannelRoute route, final SendNotificationCommand command) {
+    AttachmentPolicy.validate(command.content().attachments());
     ContentSchemaValidator.validate(route.channelType(), route.contentSchema(), command.content());
     return notificationRepository
         .findByTenantAndExternalId(command.tenantId(), command.externalId())

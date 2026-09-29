@@ -1,5 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
+import java.util.List;
+
 public record SendNotificationRequest(
     String externalId,
     String channelType,
@@ -7,4 +9,10 @@ public record SendNotificationRequest(
     String recipientAddress,
     String subject,
     String body,
-    String priority) {}
+    String priority,
+    List<AttachmentRequest> attachments) {
+
+  public SendNotificationRequest {
+    attachments = attachments == null ? List.of() : List.copyOf(attachments);
+  }
+}

@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
@@ -24,6 +25,7 @@ import co.edu.uco.notification.core.repository.NotificationRepository;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -189,5 +191,146 @@ class SendNotificationServiceTest {
     assertThrows(
         NullPointerException.class,
         () -> new SendNotificationService(channelCatalogPort, notificationRepository, null));
+  }
+
+  private static final String ATTACHMENTS_SCHEMA =
+      "{\"type\":\"object\",\"properties\":{\"attachments\":{\"type\":\"array\",\"maxItems\":5,"
+          + "\"items\":{\"properties\":{\"contentType\":{\"enum\":[\"application/pdf\",\"image/png\"]}}}}}}";
+
+  private static final Attachment INVOICE =
+      Attachment.of("invoice.pdf", "application/pdf", 1024L, "https://files.example.test/i.pdf");
+  private static final Attachment RECEIPT =
+      Attachment.of("receipt.png", "image/png", 2048L, "https://files.example.test/r.png");
+
+  private static SendNotificationCommand commandWith(final Attachment... attachments) {
+    return new SendNotificationCommand(
+        TENANT_ID,
+        EXTERNAL_ID,
+        CHANNEL_TYPE,
+        RecipientId.of("recipient-1"),
+        Recipient.of("alice@example.com"),
+        NotificationContent.of("Subject", "Body", List.of(attachments)),
+        Priority.NORMAL);
+  }
+
+  private void givenRouteWithSchema(final String schema) {
+    when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID))
+        .thenReturn(
+            Mono.just(new ChannelRoute(CHANNEL_TYPE, List.of(ProviderId.of("simulated")), schema)));
+  }
+
+  private void verifyNothingWasStored() {
+    verify(notificationRepository, never())
+        .findByTenantAndExternalId(any(TenantId.class), any(ExternalId.class));
+    verify(notificationRepository, never()).save(any(Notification.class));
+    verify(eventPublisherPort, never()).publish(any());
+    verify(eventPublisherPort, never()).enqueueForDispatch(any(Notification.class));
+  }
+
+  @Test
+  void sendStoresTheAttachmentsInOrderWhenTheChannelDeclaresThem() {
+    givenRouteWithSchema(ATTACHMENTS_SCHEMA);
+    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
+        .thenReturn(Mono.empty());
+    when(notificationRepository.save(any(Notification.class)))
+        .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.send(commandWith(INVOICE, RECEIPT)))
+        .assertNext(result -> assertFalse(result.duplicate()))
+        .verifyComplete();
+
+    final ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+    verify(notificationRepository).save(saved.capture());
+    assertEquals(List.of(INVOICE, RECEIPT), saved.getValue().content().attachments());
+    verify(eventPublisherPort).enqueueForDispatch(any(Notification.class));
+  }
+
+  @Test
+  void sendReturnsTheOriginalForAValidDuplicateWithAttachments() {
+    final Notification existing =
+        Notification.accept(
+            new NotificationRouting(
+                TENANT_ID,
+                EXTERNAL_ID,
+                CHANNEL_TYPE,
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(
+                NotificationContent.of("Subject", "Body", List.of(INVOICE)), Priority.NORMAL));
+    existing.pullEvents();
+    givenRouteWithSchema(ATTACHMENTS_SCHEMA);
+    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
+        .thenReturn(Mono.just(existing));
+
+    StepVerifier.create(service.send(commandWith(RECEIPT)))
+        .assertNext(
+            result -> {
+              assertTrue(result.duplicate());
+              assertEquals(existing.notificationId(), result.notificationId());
+            })
+        .verifyComplete();
+
+    verify(notificationRepository, never()).save(any(Notification.class));
+    assertEquals(List.of(INVOICE), existing.content().attachments());
+  }
+
+  @Test
+  void sendRejectsAnAttachmentThatBreaksAGlobalRuleWithoutStoringAnything() {
+    givenRouteWithSchema(ATTACHMENTS_SCHEMA);
+    final Attachment tooLarge =
+        Attachment.of("big.pdf", "application/pdf", 10_485_761L, "https://files.example.test/b");
+
+    StepVerifier.create(service.send(commandWith(INVOICE, tooLarge)))
+        .expectErrorSatisfies(
+            error -> {
+              assertTrue(error instanceof InvalidAttachmentException, error.toString());
+              assertTrue(error.getMessage().startsWith("attachments[1]: "), error.getMessage());
+            })
+        .verify();
+
+    verifyNothingWasStored();
+  }
+
+  @Test
+  void sendRejectsAnAttachmentThatBreaksTheChannelRuleWithoutStoringAnything() {
+    givenRouteWithSchema(ATTACHMENTS_SCHEMA);
+    final Attachment gif =
+        Attachment.of("anim.gif", "image/gif", 10L, "https://files.example.test/a.gif");
+
+    StepVerifier.create(service.send(commandWith(gif)))
+        .expectError(InvalidContentException.class)
+        .verify();
+
+    verifyNothingWasStored();
+  }
+
+  @Test
+  void sendRejectsAttachmentsOnAChannelThatDoesNotDeclareThem() {
+    givenRouteWithSchema(null);
+
+    StepVerifier.create(service.send(commandWith(INVOICE)))
+        .expectErrorSatisfies(
+            error ->
+                assertTrue(
+                    error.getMessage().contains("channel does not accept attachments"),
+                    error.getMessage()))
+        .verify();
+
+    verifyNothingWasStored();
+  }
+
+  @Test
+  void sendRejectsAnInvalidDuplicateBeforeLookingForTheOriginal() {
+    givenRouteWithSchema(ATTACHMENTS_SCHEMA);
+    final Attachment unnamed =
+        Attachment.of(" ", "application/pdf", 10L, "https://files.example.test/u.pdf");
+
+    StepVerifier.create(service.send(commandWith(unnamed)))
+        .expectError(InvalidAttachmentException.class)
+        .verify();
+
+    verifyNothingWasStored();
   }
 }

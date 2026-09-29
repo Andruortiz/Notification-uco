@@ -16,6 +16,7 @@ import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.usecase.RequeuePendingNotificationsService;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Date;
 import java.util.List;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
@@ -216,5 +217,56 @@ class NotificationMongoAdapterTest {
         NotificationStatus.RECOVERABLE,
         new NotificationMetadata(Instant.now().minusSeconds(300), null),
         attempts);
+  }
+
+  @Test
+  void saveThenFindByIdKeepsTheAttachmentsInOrder() {
+    final Attachment invoice =
+        Attachment.of("invoice.pdf", "application/pdf", 1024L, "https://files.example.test/i.pdf");
+    final Attachment receipt =
+        Attachment.of("receipt.png", "image/png", 2048L, "https://files.example.test/r.png");
+    final Notification notification =
+        Notification.accept(
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-attachments"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(
+                NotificationContent.of("Subject", "Body", List.of(invoice, receipt)),
+                Priority.NORMAL));
+    final Notification saved = adapter.save(notification).block();
+
+    StepVerifier.create(adapter.findById(saved.notificationId()))
+        .assertNext(found -> assertEquals(List.of(invoice, receipt), found.content().attachments()))
+        .verifyComplete();
+  }
+
+  @Test
+  void aDocumentStoredWithoutAttachmentsIsReadWithAnEmptyList() {
+    final String id = NotificationId.newId().value();
+    mongoTemplate
+        .getCollection("notifications")
+        .flatMap(
+            collection ->
+                Mono.from(
+                    collection.insertOne(
+                        new Document("_id", id)
+                            .append("tenantId", "tenant-1")
+                            .append("externalId", "legacy-1")
+                            .append("channelType", "EMAIL")
+                            .append("recipientId", "recipient-1")
+                            .append("recipientAddress", "alice@example.com")
+                            .append("contentBody", "Body")
+                            .append("priority", "NORMAL")
+                            .append("status", "PENDING")
+                            .append("acceptedAt", Date.from(Instant.now()))
+                            .append("version", 0L))))
+        .block();
+
+    StepVerifier.create(adapter.findById(NotificationId.of(id)))
+        .assertNext(found -> assertEquals(List.of(), found.content().attachments()))
+        .verifyComplete();
   }
 }

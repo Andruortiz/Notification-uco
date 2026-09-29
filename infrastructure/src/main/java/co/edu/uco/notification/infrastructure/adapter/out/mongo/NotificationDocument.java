@@ -24,6 +24,7 @@ public record NotificationDocument(
     String recipientAddress,
     String contentSubject,
     String contentBody,
+    List<AttachmentDocument> attachments,
     Priority priority,
     NotificationStatus status,
     Instant acceptedAt,
@@ -31,7 +32,13 @@ public record NotificationDocument(
     @Version Long version) {
 
   public NotificationDocument {
+    attachments = attachments == null ? null : List.copyOf(attachments);
     deliveryAttempts = deliveryAttempts == null ? null : List.copyOf(deliveryAttempts);
+  }
+
+  @Override
+  public List<AttachmentDocument> attachments() {
+    return attachments == null ? null : List.copyOf(attachments);
   }
 
   @Override

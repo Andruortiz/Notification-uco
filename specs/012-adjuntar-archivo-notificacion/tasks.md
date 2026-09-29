@@ -32,7 +32,7 @@ prioridad (US1, US2, US4 son P1; US3, US5 son P2). La E2E cierra en la fase fina
 
 **Purpose**: contrato público primero (Principio II).
 
-- [ ] T001 Aplicar `contracts/api-notificaciones-cambios.md` a `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`: campo `attachments` en `SendNotificationRequest`, esquema nuevo `Attachment`, descripción del `400` de `POST /notifications`, frase añadida a la descripción de `POST /notifications:sendBatch`, y descripciones de `ChannelItem.contentSchema` y `RegisterChannelRequest.contentSchema`
+- [X] T001 Aplicar `contracts/api-notificaciones-cambios.md` a `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`: campo `attachments` en `SendNotificationRequest`, esquema nuevo `Attachment`, descripción del `400` de `POST /notifications`, frase añadida a la descripción de `POST /notifications:sendBatch`, y descripciones de `ChannelItem.contentSchema` y `RegisterChannelRequest.contentSchema`
 
 ---
 

@@ -52,7 +52,10 @@ paths:
                 $ref: '#/components/schemas/SendNotificationResponse'
         '400':
           description: >
-            El canal no existe/está deshabilitado, o el contenido no cumple el esquema del canal.
+            El canal no existe/está deshabilitado, el contenido no cumple el esquema del canal, o un adjunto
+            es inválido: el canal no acepta adjuntos, o el adjunto incumple un tope del servicio o una regla
+            del canal. El mensaje identifica el adjunto por su posición (attachments[i]) y la regla
+            incumplida; nunca incluye la dirección del archivo.
           content:
             application/json:
               schema:
@@ -175,7 +178,8 @@ paths:
       description: >
         CU-02. El lote es su propia unidad de seguimiento (RF-02), no un bucle sobre POST
         /notifications -- cada elemento se valida e idempotiza por separado, y un elemento
-        inválido no bloquea a los demás.
+        inválido no bloquea a los demás. Un elemento con un adjunto inválido se rechaza solo, con su
+        motivo; los demás siguen.
       operationId: sendNotificationBatch
       parameters:
         - $ref: '#/components/parameters/TenantId'
@@ -487,6 +491,58 @@ components:
           example: Hola Alice, tu pedido fue confirmado.
         priority:
           $ref: '#/components/schemas/Priority'
+        attachments:
+          type: array
+          nullable: true
+          maxItems: 5
+          description: >
+            Opcional. Archivos que acompañan la notificación, en el orden en que se entregarán. El canal
+            debe declararlos en su forma de contenido (ver GET /channels, campo contentSchema, propiedad
+            attachments); un canal que no los declara rechaza toda notificación con adjuntos. Con la
+            configuración por defecto ningún canal los declara. El servicio no descarga ni guarda el
+            archivo: guarda la dirección y la entrega al proveedor en el despacho. El tamaño y el tipo son
+            los declarados; un archivo que no coincida lo rechazará el proveedor. Una notificación con un
+            adjunto inválido se rechaza completa con 400; nunca se acepta sin el adjunto. Si el proveedor
+            que la despacha no sabe enviar adjuntos, termina en FAILED sin enviarse.
+          items:
+            $ref: '#/components/schemas/Attachment'
+
+    Attachment:
+      type: object
+      required: [fileName, contentType, sizeBytes, url]
+      properties:
+        fileName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Nombre con el que lo verá el destinatario. Sin separadores de ruta ni caracteres de control; distinto de "." y "..".
+          example: factura-0042.pdf
+        contentType:
+          type: string
+          description: >
+            Tipo de medio. Se compara en minúsculas y sin parámetros. Tipos admitidos por el servicio:
+            application/pdf, image/png, image/jpeg, image/gif, image/webp, text/plain, text/csv,
+            application/vnd.openxmlformats-officedocument.wordprocessingml.document,
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet. Cada canal puede admitir
+            menos.
+          example: application/pdf
+        sizeBytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 10485760
+          description: Tamaño declarado en bytes. Tope del servicio 10 MiB; cada canal puede fijar menos. Límite inclusivo.
+          example: 183422
+        url:
+          type: string
+          format: uri
+          maxLength: 2048
+          pattern: '^[Hh][Tt][Tt][Pp][Ss]://'
+          description: >
+            Dirección https donde el cliente aloja el archivo, sin usuario ni contraseña. Debe seguir
+            accesible durante los reintentos. Se trata como dato sensible: nunca aparece en respuestas,
+            registros ni eventos del servicio.
+          example: https://files.example.com/invoices/0042.pdf?token=abc
 
     SendNotificationResponse:
       type: object
@@ -627,7 +683,11 @@ components:
         contentSchema:
           type: string
           nullable: true
-          description: Esquema JSON Schema (como string) contra el que se valida el contenido enviado por este canal.
+          description: >
+            Esquema JSON Schema (como string) contra el que se valida el contenido enviado por este canal.
+            Además del largo de subject y body, puede declarar adjuntos con una propiedad "attachments" de
+            tipo arreglo: maxItems (cantidad), items.properties.contentType.enum (tipos, en minúsculas) e
+            items.properties.sizeBytes.maximum (bytes). Un canal sin esa propiedad no acepta adjuntos.
         maxRetryAttempts:
           type: integer
           nullable: true
@@ -724,7 +784,12 @@ components:
         contentSchema:
           type: string
           nullable: true
-          description: Forma de contenido (JSON Schema como texto) tal como está guardada. Nulo si el canal no declara ninguna.
+          description: >
+            Forma de contenido (JSON Schema como texto) tal como está guardada. Nulo si el canal no declara
+            ninguna. Además del largo de subject y body, puede declarar adjuntos con una propiedad
+            "attachments" de tipo arreglo: maxItems (cantidad), items.properties.contentType.enum (tipos,
+            en minúsculas) e items.properties.sizeBytes.maximum (bytes). Un canal sin esa propiedad no
+            acepta adjuntos.
         providers:
           type: array
           minItems: 1

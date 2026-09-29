@@ -5,7 +5,7 @@ description: "Task list for HU2-021"
 
 # Tasks: Enviar un lote de notificaciones por HTTP
 
-**Input**: Design documents from `/specs/011-exponer-envio-lote/`
+**Input**: Design documents from `/specs/014-exponer-envio-lote/`
 
 **Prerequisites**: plan.md (Estado: Pendiente, ver "Estado del plan"), spec.md (clarificado), research.md,
 data-model.md, contracts/send-notification-batch.yaml, quickstart.md.

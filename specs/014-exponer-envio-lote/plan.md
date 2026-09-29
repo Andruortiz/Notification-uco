@@ -2,7 +2,7 @@
 
 **Branch**: `feature/HU2-021-exponer-envio-lote` | **Date**: 2026-09-26 | **Spec**: [spec.md](./spec.md)
 
-**Input**: Feature specification from `/specs/011-exponer-envio-lote/spec.md`
+**Input**: Feature specification from `/specs/014-exponer-envio-lote/spec.md`
 
 **Note**: This template is filled in by the `/speckit-plan` command; its definition describes the execution workflow.
 
@@ -119,7 +119,7 @@ No violations requiring justification.
 ### Documentation (this feature)
 
 ```text
-specs/011-exponer-envio-lote/
+specs/014-exponer-envio-lote/
 ├── plan.md
 ├── research.md
 ├── data-model.md

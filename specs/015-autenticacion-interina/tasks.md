@@ -38,22 +38,22 @@ US3.
 **Purpose**: Contrato, dependencias y configuración base antes de tocar código de dominio o
 infraestructura.
 
-- [ ] T001 Actualizar `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`
+- [X] T001 Actualizar `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`
   según `specs/015-autenticacion-interina/contracts/api-notificaciones-cambios.md`: esquema
   `BearerAuth`, `security` global, retiro de `X-Tenant-Id` de `components.parameters` y de cada
   operación, respuestas `401`/`403` donde aplique, parámetro `access_token` en
   `GET /notifications:subscribe`, notas de rol mínimo en las operaciones ya expuestas y en las
   planificadas (retry, preferencias, registro de canal/proveedor). Principio II — se hace antes que
   cualquier código.
-- [ ] T002 Añadir `io.jsonwebtoken:jjwt-api`, `io.jsonwebtoken:jjwt-impl` (runtime) y
+- [X] T002 Añadir `io.jsonwebtoken:jjwt-api`, `io.jsonwebtoken:jjwt-impl` (runtime) y
   `io.jsonwebtoken:jjwt-jackson` (runtime) a `infrastructure/pom.xml`, con una propiedad de versión
   nueva en el `pom.xml` raíz si el proyecto centraliza versiones ahí (revisar convención existente de
   `spring-boot.version`, `resilience4j.version`, etc.).
-- [ ] T003 [P] Añadir `notification.auth.jwt.hs256-secret` (`${AUTH_JWT_HS256_SECRET}`, sin valor por
+- [X] T003 [P] Añadir `notification.auth.jwt.hs256-secret` (`${AUTH_JWT_HS256_SECRET}`, sin valor por
   defecto) y `notification.auth.jwt.ttl-minutes` (`${AUTH_JWT_TTL_MINUTES:720}`) a
   `infrastructure/src/main/resources/application.yml`, siguiendo la convención ya usada por
   `notification.*` en ese archivo.
-- [ ] T004 [P] Documentar `AUTH_JWT_HS256_SECRET` en `.env.example` con un valor de ejemplo marcado
+- [X] T004 [P] Documentar `AUTH_JWT_HS256_SECRET` en `.env.example` con un valor de ejemplo marcado
   explícitamente como solo-desarrollo (nunca un secreto real), junto a las demás variables ya
   documentadas ahí.
 

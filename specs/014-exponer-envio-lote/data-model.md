@@ -1,7 +1,11 @@
 # Data Model: Enviar un lote de notificaciones por HTTP
 
-Sin entidades de dominio nuevas ni cambios de persistencia. Solo DTOs HTTP que traducen el contrato a
-los tipos existentes de `core/port/in`.
+Sin entidades de dominio nuevas para el adaptador HTTP en sí: son DTOs que traducen el contrato a los
+tipos existentes de `core/port/in`. Ver "Desviaciones del plan" en `plan.md`: una revisión de código
+posterior encontró tres defectos que sí requirieron tocar el núcleo (`BatchItemOutcome.FAILED`,
+`NotificationAlreadyAcceptedException` y un registro propio de persistencia del lote,
+`notification_batches`, vía el nuevo puerto `NotificationBatchRepository`). Esas piezas no son DTOs
+HTTP y no se documentan aquí en detalle; ver el código y `plan.md`.
 
 ## Entrada
 
@@ -26,6 +30,6 @@ un error estructural: `400` para toda la solicitud.
 | `BatchAcceptedResponse` | `batchId` | `BatchAcceptedResult.batchId().value()` |
 | | `results` | `BatchAcceptedResult.results()`, en el mismo orden |
 | `BatchItemResultResponse` | `externalId` | `BatchItemResult.externalId().value()` |
-| | `outcome` | `BatchItemResult.outcome().name()` (`ACCEPTED`, `DUPLICATE`, `REJECTED`) |
-| | `notificationId` | `BatchItemResult.notificationId().value()`, `null` si `REJECTED` |
-| | `rejectionReason` | `BatchItemResult.rejectionReason()`, solo si `REJECTED` |
+| | `outcome` | `BatchItemResult.outcome().name()` (`ACCEPTED`, `DUPLICATE`, `REJECTED`, `FAILED`) |
+| | `notificationId` | `BatchItemResult.notificationId().value()`, `null` si `REJECTED` o `FAILED` |
+| | `rejectionReason` | `BatchItemResult.rejectionReason()`, solo si `REJECTED` o `FAILED` |

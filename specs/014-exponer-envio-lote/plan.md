@@ -30,7 +30,10 @@ controller nuevo en `adapter/in/rest` que recibe `SendNotificationBatchRequest`,
 `SendNotificationBatchCommand`, delega en el caso de uso y responde `202` con
 `BatchAcceptedResponse`. Antes del controller se actualiza el contrato (Principio II): la descripción
 de la operación pasa a indicar que está implementada y se documenta la respuesta `400` de solicitud
-estructuralmente inválida decidida en `spec.md § Clarifications`. El núcleo no se modifica.
+estructuralmente inválida decidida en `spec.md § Clarifications`. El núcleo no se modifica para
+exponer el adaptador en sí; sí se modificó después, en una segunda pasada, para corregir tres
+defectos que una revisión de código encontró una vez el controller ya delegaba en el caso de uso real
+(ver "Desviaciones del plan").
 
 ## Technical Context
 
@@ -108,11 +111,36 @@ No violations requiring justification.
 
 ## Riesgos conocidos
 
-- **`externalId` repetido en el mismo lote**: el caso de uso procesa hasta 16 elementos en paralelo y
-  la idempotencia se decide con "buscar y luego guardar"; dos elementos con el mismo `externalId`
-  pueden pasar ambos la búsqueda y el segundo chocar con la restricción única. Si la prueba E2E lo
-  confirma, se reporta como defecto del caso de uso (fuera de alcance) y se registra como pendiente con
-  dueño y fecha en `tasks.md`; no se parchea en el adaptador.
+- **`externalId` repetido en el mismo lote**: RESUELTO. Una revisión de código posterior a la
+  implementación inicial del adaptador confirmó que el riesgo se materializaba: el caso de uso
+  decidía la idempotencia con "buscar y luego guardar" y el segundo `save()` concurrente violaba la
+  restricción única sin traducirse a `DUPLICATE`. A diferencia de lo previsto arriba, esto SÍ se
+  corrigió en el núcleo (ver "Desviaciones del plan"), porque dejarlo como defecto conocido violaba
+  el Principio VII (ninguna solución temporal se acepta como definitiva sin dueño y fecha, y aquí sí
+  había una corrección clara y acotada disponible).
+
+## Desviaciones del plan
+
+Una revisión de código posterior a la primera implementación del controller encontró tres defectos
+adicionales que obligaron a tocar el núcleo, contradiciendo el Summary original ("El núcleo no se
+modifica"):
+
+- **Persistencia del lote (antes fuera de alcance)**: el spec original asumía que el `batchId` no se
+  persistía. Se agregó un puerto `NotificationBatchRepository` y su adaptador Mongo
+  (`NotificationBatchMongoAdapter`, colección `notification_batches`) para que el registro del lote
+  sobreviva a la respuesta HTTP. `SendNotificationBatchService` ahora depende de ese puerto. Ver
+  `spec.md § Assumptions` (actualizado).
+- **`BatchItemOutcome.FAILED`**: un fallo transitorio de infraestructura (por ejemplo el escáner de
+  adjuntos no responde) ya no propaga un error que tumba el lote completo con `flatMapSequential`;
+  se agregó un cuarto valor `FAILED` al enum del núcleo y un segundo `onErrorResume(Throwable.class,
+  ...)` en `SendNotificationBatchService.processItem`, después del de rechazo de negocio.
+- **Carrera de idempotencia intra-lote**: se agregó `NotificationAlreadyAcceptedException` (núcleo) y
+  su mapeo desde `DuplicateKeyException` en `NotificationMongoAdapter`; `SendNotificationService`
+  atrapa esa excepción y resuelve como `DUPLICATE` en vez de propagar el error.
+
+Estos tres cambios están fuera del `Scale/Scope` original (1 controller, 3 DTOs, 1 cambio de
+contrato) pero dentro del Principio VII: no se documentan como pendientes porque ya se corrigieron y
+probaron.
 
 ## Project Structure
 

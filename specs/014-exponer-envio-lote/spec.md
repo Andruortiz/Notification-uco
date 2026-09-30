@@ -123,11 +123,11 @@ notificación aceptada llega a su estado terminal de entrega a través del flujo
 ### Key Entities
 
 - **Lote**: agrupación de solicitudes de notificación enviadas en una sola petición; se identifica
-  con un `batchId` (propio del cliente o generado). En esta historia el lote existe como unidad en la
-  respuesta; su identificador no se persiste ni se puede consultar después.
+  con un `batchId` (propio del cliente o generado). El lote se persiste en un registro propio (ver
+  Assumptions); no existe todavía un endpoint para consultarlo después.
 - **Resultado por elemento**: para cada elemento del lote, su `externalId`, su resultado (`ACCEPTED`,
-  `DUPLICATE`, `REJECTED`), el identificador de la notificación (salvo si fue rechazado) y el motivo
-  del rechazo (solo si fue rechazado).
+  `DUPLICATE`, `REJECTED`, `FAILED`), el identificador de la notificación (salvo si fue rechazado o
+  falló) y el motivo (solo si fue rechazado o falló).
 
 ## Success Criteria *(mandatory)*
 
@@ -155,10 +155,11 @@ notificación aceptada llega a su estado terminal de entrega a través del flujo
 - No hay un tamaño máximo explícito de lote en el contrato; el tamaño queda acotado por el límite de
   tamaño de cuerpo de solicitud que ya aplica el servicio a cualquier operación. Fijar un máximo de
   elementos por lote es una decisión de producto (cuotas por tenant) fuera de esta historia.
-- El identificador de lote no se persiste junto a las notificaciones; consultar notificaciones por
-  lote no forma parte de esta historia ni del contrato actual.
-- El comportamiento cuando un mismo `externalId` aparece dos veces en el mismo lote, procesadas de
-  forma concurrente, depende del caso de uso del núcleo y de la restricción única de persistencia; si
-  se observa un defecto, se reporta y se documenta como pendiente, no se corrige en esta historia.
+- El identificador de lote se persiste en un registro propio, separado de cada notificación
+  individual (colección `notification_batches`, aislado por tenant). Sigue sin existir un endpoint
+  para consultarlo por HTTP; ese registro es bookkeeping interno, no una funcionalidad de consulta.
+- El comportamiento cuando un mismo `externalId` aparece dos veces en el mismo lote, procesado de
+  forma concurrente, ya se corrigió: la violación del índice único se traduce al mismo resultado
+  `DUPLICATE` que tendría una solicitud secuencial, en vez de propagarse como error o tumbar el lote.
 - Mientras la autenticación siga bloqueada, el tenant se toma de `X-Tenant-Id`, igual que en el resto
   de la API.

@@ -43,6 +43,17 @@ resolverse en `plan.md`/`research.md` con un análisis explícito de tradeoffs:
   (`LocalJwtTokenIssuer`), instanciada directamente por las pruebas, sin exponer ningún endpoint HTTP
   de emisión. Análisis completo en `research.md` (Decisión 2); misma sujeción a aprobación.
 
+### Session 2026-09-30 (segunda ronda, tras aprobación del plan)
+
+- Q: ¿Se deben registrar en el log los rechazos de autenticación/autorización (`401`/`403`), con datos
+  no sensibles, para poder detectar después un ataque o un cliente mal configurado? → A: Sí — cada
+  rechazo `401` o `403` se registra con `tenantId` (si pudo extraerse del token; puede ser nulo si el
+  token ni siquiera es un JWT sintácticamente válido) y una categoría del motivo (uno de: sin token,
+  token sintácticamente inválido, firma inválida, expirado, claims obligatorias faltantes, rol no
+  reconocido, rol insuficiente) — nunca el token ni el secreto de firma. Mismo patrón de sanitización y
+  mismo punto conceptual (donde se resuelve el resultado del rechazo) que ya usa
+  `AttachmentLogFormatter` para aceptación/rechazo de adjuntos.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Rechazar solicitudes sin identidad verificable (Priority: P1)
@@ -166,6 +177,10 @@ recibir `403` y el rol suficiente debe recibir el resultado normal de la operaci
   desactivado)? → Fuera de alcance: este paso interino no incluye una lista de revocación; el único
   mecanismo de expiración de un token es su claim `exp`. Se documenta como limitación conocida, no
   como pendiente a resolver en esta historia.
+- ¿Qué pasa si el token presentado ni siquiera es un JWT sintácticamente válido (no se puede
+  decodificar lo suficiente para leer `tenantId`)? → El registro del rechazo (FR-015) se hace igual,
+  con `tenantId` nulo y la categoría "token sintácticamente inválido"; el rechazo `401` no depende de
+  poder identificar el tenant.
 
 ## Requirements *(mandatory)*
 
@@ -228,6 +243,11 @@ recibir `403` y el rol suficiente debe recibir el resultado normal de la operaci
 - **FR-014**: El sistema DEBE tratar la limitación del endpoint `GET /notifications:subscribe` (SSE)
   para transportar el token como una condición documentada de esta historia, con la solución concreta
   decidida en el plan.
+- **FR-015**: El sistema DEBE registrar cada rechazo `401` o `403` con el `tenantId` (si pudo
+  extraerse del token; nulo si el token ni siquiera es un JWT sintácticamente válido) y una categoría
+  del motivo del rechazo (sin token, token sintácticamente inválido, firma inválida, expirado, claims
+  obligatorias faltantes, rol no reconocido, rol insuficiente). El registro NO DEBE incluir el token
+  ni el secreto de firma en ningún caso.
 
 ### Key Entities
 
@@ -257,6 +277,9 @@ recibir `403` y el rol suficiente debe recibir el resultado normal de la operaci
   medido de extremo a extremo incluyendo la validación del token.
 - **SC-005**: Un desarrollador o una suite de pruebas automatizada puede obtener un token válido para
   cualquier combinación de tenant y rol sin depender de un servicio externo ni de credenciales reales.
+- **SC-006**: El 100% de los rechazos `401`/`403` queda reflejado en el log con `tenantId` (o nulo) y
+  una categoría de motivo reconocible, verificado en pruebas automatizadas que confirman además que
+  ningún log generado por esta historia contiene el valor crudo del token ni el secreto de firma.
 
 ## Assumptions
 

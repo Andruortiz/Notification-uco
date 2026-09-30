@@ -70,21 +70,40 @@ String issue(TenantId tenantId, Role role, String subject, Duration ttl)
 Produce un JWT firmado con el mismo secreto HS256 configurado, con claims `sub`, `tenantId`, `role`,
 `iat`, `exp`.
 
+## `RejectionReason` (nuevo, `infrastructure/adapter/in/web/`)
+
+Enum cerrado, exclusivo de infraestructura (no es un concepto de dominio, es una categoría de log):
+`MISSING_TOKEN`, `MALFORMED_TOKEN`, `INVALID_SIGNATURE`, `EXPIRED`, `MISSING_CLAIMS`, `UNKNOWN_ROLE`,
+`INSUFFICIENT_ROLE`. Usado únicamente por `AuthenticationLogFormatter` y `AuthenticationWebFilter`
+(FR-015, research Decisión 7).
+
+## `AuthenticationLogFormatter` (nuevo, `infrastructure/adapter/in/web/`)
+
+Clase utilitaria sin estado, misma forma que `AttachmentLogFormatter` ya existente en
+`adapter/in/rest/`: expone un método que sanitiza `tenantId` (puede ser `null`) y compone la línea de
+log junto con el `RejectionReason`, nunca con el token ni el secreto.
+
 ## `AuthenticationWebFilter` (nuevo, `infrastructure/adapter/in/web/`)
 
 No es una entidad de datos, pero define el flujo de resolución:
 
 1. Excluir `OPTIONS` y las rutas exentas (Decisión 4 de `research.md`).
-2. Extraer el header `Authorization`; si falta o no tiene el prefijo `Bearer `, responder `401`.
-   Excepción: en `GET /notifications:subscribe`, si falta el header, intentar el parámetro de consulta
+2. Extraer el header `Authorization`; si falta o no tiene el prefijo `Bearer `, registrar el rechazo
+   (`RejectionReason.MISSING_TOKEN`, `tenantId=null`) y responder `401`. Excepción: en
+   `GET /notifications:subscribe`, si falta el header, intentar el parámetro de consulta
    `access_token` (Decisión 5 de `research.md`).
 3. Invocar `TokenValidationPort.validate(rawToken)`.
-4. Si el `Mono` termina en error (`InvalidTokenException` o cualquier otro), responder `401`.
+4. Si el `Mono` termina en error (`InvalidTokenException` o cualquier otro), clasificar el motivo
+   (`MALFORMED_TOKEN`, `INVALID_SIGNATURE`, `EXPIRED`, `MISSING_CLAIMS` o `UNKNOWN_ROLE` según la
+   causa), extraer el `tenantId` de forma best-effort para el log (puede quedar `null`), registrar el
+   rechazo y responder `401`.
 5. Si el `Mono` completa, verificar el rol contra la tabla de enrutamiento
    (`RouteAuthorizationPolicy`, mapa estático método+path → `Role` mínimo, FR-009/FR-010). Si el rol no
-   alcanza, responder `403`.
+   alcanza, registrar el rechazo (`RejectionReason.INSUFFICIENT_ROLE`, `tenantId` ya conocido) y
+   responder `403`.
 6. Si el rol alcanza, colocar el `AuthenticatedPrincipal` en un atributo del `ServerWebExchange` y
-   continuar la cadena (`chain.filter(exchange)`).
+   continuar la cadena (`chain.filter(exchange)`), sin registrar nada (el camino feliz no genera log de
+   rechazo).
 
 ## Controladores existentes — cambio de firma (no de contrato de negocio)
 

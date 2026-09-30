@@ -163,6 +163,36 @@ largo aumenta la ventana de riesgo si un token interino se filtra. Doce horas es
 razonable para un mecanismo explícitamente temporal, configurable sin cambiar código si la operación
 real lo requiere distinto.
 
+## Decisión 7 — Registro de rechazos de autenticación/autorización
+
+**Decisión**: `AuthenticationWebFilter` registra un log estructurado por cada rechazo `401`/`403`, con
+`tenantId` (si pudo extraerse del token antes del fallo; `null` si el token ni siquiera es un JWT
+sintácticamente válido) y una categoría cerrada del motivo: `MISSING_TOKEN`, `MALFORMED_TOKEN`,
+`INVALID_SIGNATURE`, `EXPIRED`, `MISSING_CLAIMS`, `UNKNOWN_ROLE`, `INSUFFICIENT_ROLE`. Nunca el token
+crudo ni el secreto de firma.
+
+**Rationale**: decisión aceptada por el usuario (segunda ronda de clarificación, 2026-09-30) para
+poder detectar después un ataque o un cliente mal configurado sin exponer material sensible en el log,
+consistente con el Principio IX (observabilidad y trazabilidad) y con RNF-10 (logs estructurados, sin
+credenciales). Se sigue el mismo patrón ya usado en el repositorio para sanitizar valores antes de
+loguearlos (`AttachmentLogFormatter`), replicado como `AuthenticationLogFormatter` en el mismo paquete
+del filtro (`infrastructure/adapter/in/web/`) por tratarse de la misma responsabilidad conceptual
+(sanitizar antes de loguear), no por reutilizar la clase de adjuntos directamente entre módulos sin
+relación.
+
+**Implementación**: el filtro clasifica el motivo del rechazo en el mismo punto donde hoy decide
+responder `401` o `403` (research Decisión 3) y emite un log con nivel `WARN` (rechazo es una
+condición anómala, no un error de infraestructura) antes de escribir la respuesta. El `tenantId` se
+extrae de forma best-effort (JJWT permite leer claims de un JWT con firma inválida sin verificarla,
+pero solo si el JSON es parseable); si la extracción falla por cualquier motivo, se registra `null` sin
+relanzar una excepción adicional — el registro del rechazo nunca debe, por sí mismo, cambiar el código
+de respuesta ya decidido.
+
+**Alternatives considered**:
+- **Loguear el motivo detallado de la falla criptográfica** (p. ej. el mensaje de excepción de JJWT):
+  rechazado — podría filtrar detalles de implementación útiles para un atacante iterando ataques
+  contra la firma; la categoría cerrada ya es suficiente para diagnóstico operativo.
+
 ## Librerías y dependencias nuevas
 
 - `io.jsonwebtoken:jjwt-api`, `io.jsonwebtoken:jjwt-impl` (runtime), `io.jsonwebtoken:jjwt-jackson`

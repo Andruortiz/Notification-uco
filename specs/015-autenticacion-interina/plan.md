@@ -8,7 +8,7 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente
+**Estado**: Aceptado
 
 **Versión del plan**: 1
 
@@ -35,8 +35,11 @@ leer `@RequestHeader("X-Tenant-Id")` y reciben un `AuthenticatedPrincipal` ya re
 (`LocalJwtTokenIssuer`, research Decisión 2), sin exponer ningún endpoint de emisión. El contrato
 OpenAPI se actualiza primero (Principio II) para declarar `BearerAuth`, retirar el parámetro
 `X-Tenant-Id`, y documentar `401`/`403` y la excepción de `GET /notifications:subscribe` (token por
-query param, research Decisión 5). No se implementa la integración real contra la plataforma de
-Seguridad externa (PEP/PDP/OPA, DEP-01) — sigue bloqueada y fuera de alcance.
+query param, research Decisión 5). Cada rechazo `401`/`403` queda registrado con `tenantId` (si se
+pudo extraer) y una categoría cerrada del motivo, sin el token ni el secreto (FR-015, research
+Decisión 7), con el mismo patrón de sanitización que `AttachmentLogFormatter`. No se implementa la
+integración real contra la plataforma de Seguridad externa (PEP/PDP/OPA, DEP-01) — sigue bloqueada y
+fuera de alcance.
 
 ## Technical Context
 
@@ -51,11 +54,14 @@ Seguridad externa (PEP/PDP/OPA, DEP-01) — sigue bloqueada y fuera de alcance.
 prueba de adaptador (`LocalJwtTokenValidationAdapterTest` — firma válida/inválida, expiración, claims
 faltantes, usando `LocalJwtTokenIssuer` real para producir los tokens de prueba, nunca JSON armado a
 mano); prueba del filtro (`AuthenticationWebFilterTest` con `WebTestClient` contra un
-`@SpringBootTest` mínimo o un `ApplicationContextRunner`, verificando 401/403/200 y que los
-controladores existentes siguen aceptando con un token válido); E2E
-(`AuthenticationInterinaE2ETest`, `@SpringBootTest(RANDOM_PORT)` + Testcontainers Mongo/RabbitMQ +
-`WebTestClient`) cubriendo fail-closed, resolución de tenant desde el token (no desde el header),
-autorización por rol, y el caso SSE con `access_token` en query. Arquitectura:
+`@SpringBootTest` mínimo o un `ApplicationContextRunner`, verificando 401/403/200, que los
+controladores existentes siguen aceptando con un token válido, y que cada rechazo queda registrado con
+`tenantId`/categoría sin el token crudo ni el secreto — FR-015, capturando la salida del logger de
+prueba); prueba unitaria de `AuthenticationLogFormatter` (sanitización, `tenantId` nulo cuando no se
+pudo extraer); E2E (`AuthenticationInterinaE2ETest`, `@SpringBootTest(RANDOM_PORT)` + Testcontainers
+Mongo/RabbitMQ + `WebTestClient`) cubriendo fail-closed, resolución de tenant desde el token (no desde
+el header), autorización por rol, el caso SSE con `access_token` en query, y una aserción de extremo a
+extremo de que el log de un rechazo no contiene el valor del token (SC-006). Arquitectura:
 `HexagonalArchitectureTest`/`ModularityTests` deben seguir en verde (el filtro y el adaptador viven en
 `infrastructure`, el puerto y los value objects en `core`, sin dependencia inversa).
 
@@ -138,7 +144,9 @@ infrastructure/src/main/java/co/edu/uco/notification/infrastructure/
 ├── adapter/in/web/
 │   ├── AuthenticationWebFilter.java             # nuevo
 │   ├── RouteAuthorizationPolicy.java            # nuevo
-│   └── AuthenticatedPrincipalArgumentResolver.java  # nuevo
+│   ├── AuthenticatedPrincipalArgumentResolver.java  # nuevo
+│   ├── RejectionReason.java                     # nuevo (FR-015)
+│   └── AuthenticationLogFormatter.java          # nuevo (FR-015)
 ├── config/
 │   └── WebFluxConfig.java (o equivalente ya existente)  # registra el argument resolver
 └── adapter/in/rest/
@@ -151,6 +159,7 @@ infrastructure/src/main/java/co/edu/uco/notification/infrastructure/
 infrastructure/src/test/java/co/edu/uco/notification/infrastructure/
 ├── adapter/out/security/local/LocalJwtTokenValidationAdapterTest.java  # nuevo
 ├── adapter/in/web/AuthenticationWebFilterTest.java                     # nuevo
+├── adapter/in/web/AuthenticationLogFormatterTest.java                  # nuevo (FR-015)
 └── e2e/AuthenticationInterinaE2ETest.java                              # nuevo
 ```
 

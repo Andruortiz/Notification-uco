@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -95,6 +96,14 @@ class BrevoNotificationProviderTest {
         new BrevoNotificationProvider(webClient, enabledProperties());
 
     assertTrue(provider.disabledReason().isEmpty());
+  }
+
+  @Test
+  void doesNotSupportAttachmentsYet() {
+    final BrevoNotificationProvider provider =
+        new BrevoNotificationProvider(webClient, enabledProperties());
+
+    assertFalse(provider.supportsAttachments());
   }
 
   @Test

@@ -88,6 +88,11 @@ class ProviderRoutingE2ETest {
       return Optional.empty();
     }
 
+    @Override
+    public boolean supportsAttachments() {
+      return false;
+    }
+
     List<NotificationId> received() {
       return List.copyOf(received);
     }

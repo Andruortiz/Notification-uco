@@ -75,11 +75,12 @@ public final class DispatchNotificationService implements DispatchNotificationUs
       final ProviderId providerId) {
     notification.markQueued();
 
-    return sender
-        .send(notification)
-        .flatMap(
-            outcome ->
-                saveAndPublish(applyOutcome(notification, outcome, providerId, retryPolicy)));
+    final Mono<AttemptResult> attempt =
+        notification.content().hasAttachments() && !sender.supportsAttachments()
+            ? Mono.just(AttemptResult.PERMANENT_FAILURE)
+            : sender.send(notification);
+    return attempt.flatMap(
+        outcome -> saveAndPublish(applyOutcome(notification, outcome, providerId, retryPolicy)));
   }
 
   private Mono<Void> saveAndPublish(final Notification notification) {

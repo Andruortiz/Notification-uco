@@ -68,6 +68,14 @@ class SimulatedNotificationProviderTest {
   }
 
   @Test
+  void supportsAttachments() {
+    final SimulatedNotificationProvider provider =
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
+
+    assertTrue(provider.supportsAttachments());
+  }
+
+  @Test
   void constructorRejectsNullProperties() {
     assertThrows(NullPointerException.class, () -> new SimulatedNotificationProvider(null));
   }

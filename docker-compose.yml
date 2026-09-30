@@ -25,6 +25,31 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
 
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: notification-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is not set, define it in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is not set, define it in .env}
+    volumes:
+      - minio-data:/data
+
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: notification-clamav
+    restart: unless-stopped
+    ports:
+      - "${CLAMAV_PORT:-3310}:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+
 volumes:
   mongodb-data:
   rabbitmq-data:
+  minio-data:
+  clamav-data:

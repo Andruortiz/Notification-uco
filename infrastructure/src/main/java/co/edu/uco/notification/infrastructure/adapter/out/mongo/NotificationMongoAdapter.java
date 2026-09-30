@@ -5,12 +5,14 @@ import co.edu.uco.notification.core.domain.valueobject.ExternalId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.ArrayList;
 import java.util.List;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
@@ -33,12 +35,16 @@ public class NotificationMongoAdapter implements NotificationRepository {
   @Override
   public Mono<Notification> save(final Notification notification) {
     Preconditions.requireNonNull(notification, "notification must not be null");
-    return mongoTemplate
-        .save(NotificationDocumentMapper.toDocument(notification))
+    return Mono.defer(() -> mongoTemplate.save(NotificationDocumentMapper.toDocument(notification)))
         .map(NotificationDocumentMapper::toDomain)
         .onErrorMap(
             OptimisticLockingFailureException.class,
-            error -> new NotificationVersionConflictException(notification.notificationId()));
+            error -> new NotificationVersionConflictException(notification.notificationId()))
+        .onErrorMap(
+            DuplicateKeyException.class,
+            error ->
+                new NotificationAlreadyAcceptedException(
+                    notification.tenantId(), notification.externalId()));
   }
 
   @Override
@@ -99,6 +105,7 @@ public class NotificationMongoAdapter implements NotificationRepository {
             .with(Sort.by(Sort.Direction.DESC, "acceptedAt"))
             .skip(criteria.offset())
             .limit(criteria.limit() + 1);
+    query.fields().exclude("attachments");
     return mongoTemplate
         .find(query, NotificationDocument.class)
         .map(NotificationDocumentMapper::toDomain);

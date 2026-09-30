@@ -167,6 +167,11 @@ class TwilioNotificationProviderTest {
   }
 
   @Test
+  void doesNotSupportAttachmentsYet() {
+    assertFalse(enabledProvider().supportsAttachments());
+  }
+
+  @Test
   void exposesTheDisabledReasonNamingTheMissingSettingWithoutOtherCredentialValues() {
     final TwilioNotificationProvider provider =
         new TwilioNotificationProvider(webClient, properties(null, AUTH_TOKEN, FROM_NUMBER));

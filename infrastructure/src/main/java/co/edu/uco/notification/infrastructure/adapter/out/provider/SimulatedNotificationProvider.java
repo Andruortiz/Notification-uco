@@ -37,4 +37,9 @@ public class SimulatedNotificationProvider implements NotificationSenderPort {
   public Optional<String> disabledReason() {
     return Optional.empty();
   }
+
+  @Override
+  public boolean supportsAttachments() {
+    return true;
+  }
 }

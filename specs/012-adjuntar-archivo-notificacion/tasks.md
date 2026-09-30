@@ -1,0 +1,282 @@
+---
+
+description: "Task list for HU2-092 (plan v3)"
+---
+
+# Tasks: Adjuntar un archivo a una notificación
+
+**Input**: Design documents from `/specs/012-adjuntar-archivo-notificacion/`
+
+**Prerequisites**: plan.md (versión 3, Aceptado), spec.md (Q1 reabierta: híbrido por tamaño; Q2–Q5
+confirmadas), research.md, data-model.md, contracts/api-notificaciones-cambios.md, quickstart.md
+
+**Versión**: regenerado el 2026-09-29 para el plan v3. Sustituye a la lista de la v1 (T001–T029). Lo que la
+v1 dejó hecho y la v3 conserva está marcado `[X]` con su origen; lo que la v3 cambia está abierto con la
+nota "reabre vN T0xx". La correspondencia completa está al final, en [Correspondencia con la lista
+v1](#correspondencia-con-la-lista-v1).
+
+**Trabajo sin commitear heredado**: hay cambios sin commitear de la v1 (T019–T022) en
+`SendNotificationBatchService.java`, `SendNotificationBatchServiceTest.java`,
+`NotificationExceptionHandler.java` y `NotificationControllerTest.java`. No se tocaron al regenerar esta
+lista. Las tareas T046–T049 los revisan y rehacen: su regla se conserva, pero sus pruebas usan una `url`
+https arbitraria como adjunto válido, que en la v3 es inválido. `Dockerfile` también tiene cambios sin
+commitear y no pertenece a esta historia.
+
+**Tests**: solicitadas explícitamente (Principio IV y plan § Pruebas): unitarias en `core` con
+`StepVerifier`; integración de cada adaptador contra su servicio real con Testcontainers (MongoDB,
+RabbitMQ, MinIO, ClamAV); `@WebFluxTest` de los controladores; y dos E2E, `NotificationAttachmentE2ETest`
+(camino chico) y `AttachmentUploadE2ETest` (camino grande y aislamiento por tenant). Orden por tarea:
+prueba → verla fallar por la razón correcta → implementar → ejecutar la clase → `spotless:apply`. Los
+mensajes de consumidores y adaptadores se producen con el productor real, nunca con JSON armado a mano;
+toda prueba de "no aparece" o "no llega" lleva su control positivo; todo umbral de tiempo se afirma con
+`Duration`.
+
+**Organization**: contrato e infraestructura primero; una fase fundacional grande (modelo, política,
+puertos, inspector, resolvedor y los adaptadores sin los cuales el contexto no arranca); luego una fase por
+historia de usuario en orden de prioridad (P1: US1, US2, US4, US6, US7; P2: US3, US5), y el cierre.
+
+## Path Conventions
+
+- `core-main/` = `core/src/main/java/co/edu/uco/notification/core/`
+- `core-test/` = `core/src/test/java/co/edu/uco/notification/core/`
+- `infra-main/` = `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/`
+- `infra-test/` = `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/`
+
+---
+
+## Phase 1: Setup
+
+**Purpose**: contrato público primero (Principio II), dependencias e infraestructura local.
+
+- [X] T001 Aplicar `contracts/api-notificaciones-cambios.md` (v3) a `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`: etiqueta `Adjuntos`; `Attachment` con `content` XOR `url` (`oneOf`), lista blanca v3 y extensiones prohibidas; descripción de `SendNotificationRequest.attachments`; `400` ampliado y `409`, `413`, `503` nuevos en `POST /notifications`; frase del lote; operaciones `POST /attachment-uploads`, `POST /attachment-uploads/{uploadId}:complete` y `GET /attachment-uploads/{uploadId}`; parámetro `UploadId` y esquemas `IssueAttachmentUploadRequest`, `AttachmentUploadState` y `AttachmentUploadResponse` (reabre v1 T001)
+- [X] T002 [P] Añadir los servicios `minio` y `clamav` a `docker-compose.yml`, con imágenes fijadas por versión, puertos configurables (`MINIO_PORT`, `MINIO_CONSOLE_PORT`, `CLAMAV_PORT`), credenciales de MinIO desde `.env` y volúmenes propios; añadir a `.env.example` `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, `MINIO_ENDPOINT`, `MINIO_PUBLIC_ENDPOINT`, `CLAMAV_HOST` y `CLAMAV_PORT`, con valores de ejemplo y nunca secretos reales. **Desviación**: Docker Hub ya no sirve `minio/minio` ("pull access denied") y `quay.io/minio/minio` responde 401; se fija el fork compatible `pgsty/minio:RELEASE.2026-08-04T00-00-00Z` (mismo binario y entrypoint)
+- [X] T003 [P] Añadir las dependencias con versión fijada en `pom.xml` (gestión de dependencias) e `infrastructure/pom.xml`: `tika-core`, el módulo de Tika que detecta contenedores OOXML (sin los analizadores completos), el cliente de MinIO (`MinioAsyncClient`) y el módulo MinIO de Testcontainers en `test` (si la versión 1.19.8 no lo trae, usar `GenericContainer` y anotarlo aquí); `./mvnw -B -ntp clean compile` en verde **Desviación**: solo `tika-core`; el módulo de Tika que detecta OOXML arrastra POI, así que la distinción DOCX/XLSX se hace en el adaptador leyendo `[Content_Types].xml` con `java.util.zip` (ver T030)
+- [X] T004 Crear `infra-test/support/AttachmentTestContainers.java` con contenedores compartidos de ClamAV (`GenericContainer`, puerto 3310, espera hasta que `clamd` acepte conexiones) y MinIO, y una prueba mínima que arranque ambos; medir el arranque de ClamAV bajo Testcontainers y dejar la cifra escrita en esta tarea (plan, Riesgos) — depende de T003. **Medido**: ClamAV 1.4 (`CLAMAV_NO_FRESHCLAMD=true`, base de firmas incluida) listo en ~39 s con ~1,03 GiB de memoria; las pruebas lo comparten por JVM (contenedores singleton)
+- [X] T005 Crear `infra-main/config/AttachmentProperties.java` (`@ConfigurationProperties("notification.attachments")`: `scan.timeout` 10 s, `scan.clean-verdict-ttl` 24 h, `scan.consumer-concurrency` 2, `upload.expiration` 15 min, `storage.bucket`, `storage.endpoint`, `storage.public-endpoint`, `clamav.host`, `clamav.port`) y el bloque correspondiente, más `spring.codec.max-in-memory-size: 8MB`, en `infrastructure/src/main/resources/application.yml`, sin secretos (data-model.md § Configuración)
+
+**Checkpoint**: contrato actualizado; `clean compile` en verde; ClamAV y MinIO arrancan bajo Testcontainers.
+
+---
+
+## Phase 2: Foundational (Blocking Prerequisites)
+
+**Purpose**: modelo, reglas, puertos, verificación y resolución de adjuntos, y los adaptadores que el
+contexto necesita para arrancar. Al final, el build completo compila y la suite existente sigue en verde.
+
+### 2A — Conservado de la v1
+
+- [X] T006 `boolean supportsAttachments()` abstracto en `core-main/port/out/NotificationSenderPort.java`, implementado en los cuatro adaptadores de `infra-main/adapter/out/provider/` (`simulated` → `true`, Brevo/Twilio/FCM → `false`) y en los tres dobles de prueba, con sus pruebas — **conservado de la v1** (T002–T003 v1, commit `0bd17b0`); se revalida en la regresión (T074)
+- [X] T007 `core-main/exception/InvalidAttachmentException.java` (posición, regla y nombre; mensaje `attachments[i]: <regla> (<fileName>)`, posición `-1` sin índice) — **conservado de la v1** (T009 v1, commit `0bd17b0`)
+
+### 2B — Modelo y reglas en `core`
+
+- [X] T008 [P] Pruebas en `core-test/domain/AttachmentSubmissionTest.java`: normaliza `contentType` como la v1, conserva `content` y `url` tal cual, `isEmbedded()` / `isReference()`, `toString()` sin `content` ni `url` y con nombre, tipo y tamaño
+- [X] T009 Crear `core-main/domain/valueobject/AttachmentSubmission.java` (data-model.md) — depende de T008
+- [X] T010 [P] Pruebas en `core-test/domain/Sha256DigestTest.java`: huella conocida de un contenido fijo, 64 caracteres hexadecimales en minúsculas, rechazo de un valor mal formado; y de `UploadId` (no vacío)
+- [X] T011 Crear `core-main/domain/valueobject/Sha256Digest.java`, `UploadId.java`, `ScanState.java`, `ScanVerdict.java` y `AttachmentRejectionReason.java` (data-model.md) — depende de T010
+- [X] T012 [P] Reescribir `core-test/domain/AttachmentTest.java` para el `Attachment` verificado: `tenantId`, `sha256` y `source` no nulos; `EmbeddedContent` copia los bytes al construir y al leer; `StoredObject` conserva `uploadId` y `objectKey`; `toString()` sin bytes ni clave de objeto y con nombre, tipo, tamaño y huella (reabre v1 T004)
+- [X] T013 Rediseñar `core-main/domain/valueobject/Attachment.java` y crear `core-main/domain/valueobject/AttachmentSource.java` (sellada: `EmbeddedContent`, `StoredObject`) (reabre v1 T005) — depende de T011, T012
+- [X] T014 Ajustar `core-test/domain/NotificationContentTest.java` al nuevo `Attachment` (los datos de ejemplo con `url` pasan a `EmbeddedContent`); `core-main/domain/valueobject/NotificationContent.java` no debería cambiar: si cambia, anotarlo aquí (reabre las pruebas de v1 T006) — depende de T013
+- [X] T015 [P] Reescribir `core-test/domain/AttachmentPolicyTest.java` para `validate(List<AttachmentSubmission>)`: 5 adjuntos válidos y 6 rechazados; nombre (se conservan los casos de la v1); cada una de las 28 extensiones prohibidas, en mayúsculas y con punto o espacio final, `factura.pdf.exe` rechazado y `factura.exe.pdf` aceptado por esta capa; lista blanca v3 (`image/gif` e `image/webp` rechazados); `sizeBytes` 1 y 10 485 760 válidos, 0, negativo, nulo y 10 485 761 inválidos; `content` y `url` a la vez, ninguno, Base64 inválido, con prefijo `data:` o con saltos de línea; embebido de 1 048 576 válido y de 1 048 577 inválido; embebido con tamaño decodificado distinto de `sizeBytes`; `url` con `sizeBytes` ≤ 1 048 576; `url` de 2049 caracteres; suma de 26 214 400 válida y de 26 214 401 inválida sin posición; `validateUploadRequest` (reglas de nombre, extensión, tipo y tamaño más `sizeBytes` > 1 048 576); `decode`; ningún mensaje contiene el contenido ni la `url`; se reporta la primera regla del primer adjunto inválido (reabre v1 T008)
+- [X] T016 Reescribir `core-main/domain/policy/AttachmentPolicy.java` (constantes, `validate`, `validateUploadRequest`, `decode`; research.md, Decisión 3) (reabre v1 T009) — depende de T009, T015 Añadido: `InvalidAttachmentException.forUpload(...)` para los mensajes de la emisión (`upload: <regla>`), en lugar de reutilizar la posición `-1`
+- [X] T017 [P] Pruebas en `core-test/domain/AttachmentUploadTest.java`: `issue` nace en `PENDING_SCAN` con `uploadKey` por tenant; `markCompleted`, `markClean` (con `cleanKey`) y `markInfected` (con motivo y firma) solo desde `PENDING_SCAN`; cualquier otra transición lanza `IllegalStateException`; nunca vuelve atrás
+- [X] T018 Crear `core-main/domain/AttachmentUpload.java` (data-model.md) — depende de T011, T017 Añadido: `uploadIdFromKey(tenant, key)` y codificación de los segmentos de la clave (`keySegment`), para que un `tenantId` con `/` no pueda salir de su prefijo
+- [X] T019 [P] Ajustar `core-test/domain/ContentSchemaValidatorTest.java` a la entrada con `AttachmentSubmission`: se conservan los casos de la v1 (cerrado por defecto, `maxItems`, `enum`, `maximum`, ruta `attachments[i]`) y se añade que un `content` y una `url` reconocibles nunca aparecen en el mensaje (reabre v1 T010)
+- [X] T020 Ajustar `core-main/domain/policy/ContentSchemaValidator.java` para validar los metadatos de las `AttachmentSubmission` (el nodo sigue siendo `{fileName, contentType, sizeBytes}`) (reabre v1 T011) — depende de T009, T019
+
+### 2C — Puertos, verificación y aceptación en `core`
+
+- [X] T021 Crear los puertos y excepciones de data-model.md: `core-main/port/out/AttachmentStoragePort.java` (con `PresignedUpload`, `StoredObjectInfo`, `UploadLocation`), `MalwareScannerPort.java`, `ContentTypeDetectorPort.java`, `ScanVerdictCachePort.java`, `AttachmentScanRequestPort.java`, `core-main/repository/AttachmentUploadRepository.java`, y `core-main/exception/AttachmentNotReadyException.java`, `AttachmentUploadNotFoundException.java` y `AttachmentInspectionUnavailableException.java` — depende de T011, T018 **Desviación menor**: el repositorio expone `insert` en lugar de `save`; se añaden `AttachmentNotUploadedException` (`409` de `:complete`) y `AttachmentObjectChangedException` (ETag que ya no coincide); `AttachmentInspection` vive en `usecase`
+- [X] T022 [P] Pruebas en `core-test/usecase/AttachmentInspectorTest.java`: la huella se calcula siempre; tipo detectado fuera de la lista o distinto del declarado → `CONTENT_TYPE_MISMATCH` sin llamar al antivirus; `text/csv` declarado con `text/plain` detectado se acepta; caché `INFECTED` → rechazo sin escanear; caché `CLEAN` de la misma versión de firmas → sin escanear; caché `CLEAN` de otra versión → escanea; sin caché → escanea y guarda el veredicto por `(tenantId, sha256)`; error del escáner → `AttachmentInspectionUnavailableException`
+- [X] T023 Crear `core-main/usecase/AttachmentInspector.java` (research.md, Decisión 12) — depende de T021, T022
+- [X] T024 [P] Pruebas en `core-test/usecase/AttachmentResolverTest.java`: embebido limpio → `Attachment` con `EmbeddedContent`, tenant y huella; embebido infectado → `InvalidAttachmentException` de software malicioso; referencia `CLEAN` → `StoredObject(uploadId, cleanKey)`; `PENDING_SCAN` → `AttachmentNotReadyException`; `INFECTED` → `InvalidAttachmentException`; `url` no emitida, de otro tenant (ruta con otro tenant, o subida inexistente para el tenant de la solicitud) → el **mismo** mensaje en los tres casos; nombre, tipo o tamaño distintos de los de la subida → rechazo; el orden de salida es el de entrada; ningún mensaje contiene el contenido ni la `url`
+- [X] T025 Crear `core-main/usecase/AttachmentResolver.java` (`concatMap`; data-model.md) — depende de T016, T023, T024
+- [X] T026 Añadir `List<AttachmentSubmission> attachments` (nulo → vacío) a `core-main/port/in/SendNotificationCommand.java` y `core-main/port/in/BatchNotificationItem.java`; `content` sigue llevando `subject` y `body` sin adjuntos (data-model.md) — depende de T009 Se conserva un constructor sin adjuntos en ambos records para no tocar a los llamadores existentes
+- [X] T027 [P] Reescribir las pruebas de adjuntos de `core-test/usecase/SendNotificationServiceTest.java`: orden ruta → `AttachmentPolicy` → `ContentSchemaValidator` → `AttachmentResolver` → duplicada → aceptación; cada rechazo sin `save`, `publish` ni `enqueueForDispatch`; la inspección ocurre antes de buscar la duplicada; duplicada válida devuelve la original sin guardar; `AttachmentInspectionUnavailableException` se propaga sin guardar; la notificación guardada lleva los `Attachment` verificados en orden (reabre v1 T012 y T018)
+- [X] T028 Ajustar `core-main/usecase/SendNotificationService.java` al nuevo orden y construir el `NotificationContent` final con los `Attachment` resueltos (reabre v1 T013) — depende de T020, T025, T026, T027
+
+### 2D — Adaptadores base e integración en `infrastructure`
+
+- [X] T029 [P] Pruebas en `infra-test/adapter/out/detection/TikaContentTypeDetectorAdapterTest.java` con archivos generados en la propia prueba, sin versionar binarios (PDF mínimo, PNG y JPEG con `ImageIO`, DOCX y XLSX mínimos con `java.util.zip`, CSV, TXT): cada tipo de la lista blanca se detecta como tal; un ejecutable (cabecera `MZ`) declarado `.pdf` no es PDF; un HTML declarado como texto se detecta como `text/html`
+- [X] T030 Crear `infra-main/adapter/out/detection/TikaContentTypeDetectorAdapter.java` (detección por contenido en `Schedulers.boundedElastic()`) — depende de T021, T029 **Desviación**: Tika core confía en el nombre para la familia ZIP (un ZIP cualquiera llamado `.docx` salía como DOCX); el adaptador reclasifica esa familia leyendo `[Content_Types].xml` (acotado a 1 MB) y devuelve `application/zip` si no es DOCX ni XLSX
+- [X] T031 [P] Pruebas en `infra-test/adapter/out/antivirus/ClamAvMalwareScannerAdapterTest.java` con el contenedor de T004: la cadena EICAR → `INFECTED` con el nombre de la firma; un texto limpio → `CLEAN`; `signatureVersion()` no vacía; puerto cerrado y tiempo vencido → `AttachmentInspectionUnavailableException` (parte de SC-014)
+- [X] T032 Crear `infra-main/adapter/out/antivirus/ClamAvMalwareScannerAdapter.java` (protocolo `INSTREAM` y `VERSION` por Reactor Netty `TcpClient`, tiempo máximo y concurrencia acotada; versión de firmas cacheada unos minutos) y `infra-main/config/ClamAvConfig.java` — depende de T005, T021, T031 **Desviación**: no se creó `ClamAvConfig`; el adaptador toma `AttachmentProperties` y una sola `AttachmentConfig` habilita esas propiedades. Concurrencia acotada con un semáforo no bloqueante (`clamav.max-concurrent-scans`, 4 por defecto)
+- [X] T033 [P] Pruebas en `infra-test/adapter/out/mongo/ScanVerdictMongoAdapterTest.java` (Testcontainers): guardar y leer por `(tenantId, sha256)`; la misma huella en dos tenants son dos entradas y ninguna se lee desde el otro tenant (con control positivo); el índice TTL existe y solo los `CLEAN` tienen `expiresAt`
+- [X] T034 Crear `infra-main/adapter/out/mongo/ScanVerdictDocument.java` y `ScanVerdictMongoAdapter.java` con sus índices (research.md, Decisión 9) — depende de T021, T033 Índices por anotación (`@CompoundIndex` único y `@Indexed(expireAfterSeconds = 0)`); un upsert concurrente con `DuplicateKeyException` se ignora
+- [X] T035 [P] Pruebas en `infra-test/adapter/out/storage/MinioAttachmentStorageAdapterTest.java` con el contenedor de T004: `presignUpload` y PUT real con `WebClient` a la dirección firmada contra el endpoint público; `stat` con tamaño y ETag; `read` con el ETag vigente; `copyIfMatch` con ETag obsoleto falla (SC-013); `delete`; `parseUploadUrl` acepta el endpoint público, el bucket y la ruta `tenants/{tenantId}/uploads/{uploadId}` ignorando la consulta, y rechaza otro servidor, otro puerto, otro bucket, otra ruta y una dirección mal formada; el bucket se crea en el primer uso, no al arrancar
+- [X] T036 Crear `infra-main/adapter/out/storage/MinioAttachmentStorageAdapter.java` (`MinioAsyncClient` con `Mono.fromFuture`) y `infra-main/config/MinioConfig.java` (credenciales solo por entorno) — depende de T005, T021, T035 **Desviación**: sin `MinioConfig` (ver T032). Los clientes solo se construyen si hay credenciales: sin ellas cada operación responde "no disponible" en lugar de impedir el arranque (lo exigía T043/RNF-12)
+- [X] T037 [P] Pruebas en `infra-test/adapter/out/mongo/AttachmentUploadMongoAdapterTest.java` (Testcontainers): guardar y leer por `(tenantId, uploadId)`; con otro tenant → vacío y ningún campo de la subida ajena en el resultado (con control positivo); `transition` condicionada: dos transiciones concurrentes desde `PENDING_SCAN`, solo una gana
+- [X] T038 Crear `infra-main/adapter/out/mongo/AttachmentUploadDocument.java` y `AttachmentUploadMongoAdapter.java` (`findAndModify` condicionado al estado y la versión) — depende de T018, T021, T037
+- [X] T039 [P] Reescribir las pruebas de adjuntos de `infra-test/adapter/out/mongo/NotificationMongoAdapterTest.java`: ida y vuelta con un adjunto `EMBEDDED` (`BinData`, mismos bytes) y uno `OBJECT` (`uploadId`, `objectKey`), en orden, con `tenantId` y `sha256`; documento sin `attachments` → lista vacía; búsqueda y `findByStatus` no traen `attachments.content`; un adjunto con `tenantId` distinto al de la notificación al reconstituir → error de integridad (reabre v1 T014) **Ajustada por la desviación de T040**: la prueba afirma que la búsqueda no trae `attachments` y que `findByStatus` sí conserva el contenido (lo necesita el reencolado). La integridad del tenant se prueba en dos casos: escritura rechazada y documento alterado rechazado al leer
+- [X] T040 Rediseñar `infra-main/adapter/out/mongo/AttachmentDocument.java` (sin `url`), ajustar `NotificationDocumentMapper.java` y añadir la proyección sin `attachments.content` a la búsqueda y al reencolado en `NotificationMongoAdapter.java` (reabre v1 T015) — depende de T013, T039 **Desviación**: la proyección excluye `attachments` completo y **solo en la búsqueda**. Excluirla también en `findByStatus` habría hecho que el reencolado (`RequeuePendingNotificationsService`, que vuelve a guardar lo que lee) borrara el contenido de los adjuntos. Además el mapeo rechaza escribir un adjunto de otro tenant (antes de escribir) y `save` pasa a ser perezoso (`Mono.defer`)
+- [X] T041 [P] Ajustar las pruebas de mapeo de `infra-test/adapter/in/rest/NotificationControllerTest.java`: `attachments` del request llega al comando como `AttachmentSubmission` en orden, con `content` o `url` y el tipo normalizado; ausente o `null` → lista vacía; `AttachmentRequest.toString()` sin `content` ni `url` (reabre v1 T016)
+- [X] T042 Añadir `content` a `infra-main/adapter/in/rest/AttachmentRequest.java` (`toString` sin `content` ni `url`) y mapear a `AttachmentSubmission` en `toCommand` de `infra-main/adapter/in/rest/NotificationController.java` (reabre v1 T017) — depende de T026, T041
+- [X] T043 Cablear en `infra-main/config/UseCaseConfig.java` `AttachmentInspector`, `AttachmentResolver` y el nuevo `SendNotificationService`; comprobar que el contexto arranca sin MinIO ni ClamAV disponibles (ningún adaptador se conecta al arrancar; RNF-12) ejecutando `ProviderRoutingE2ETest` y `NotificationServiceApplicationTests` — depende de T028, T030, T032, T034, T036, T038, T040, T042
+
+**Checkpoint**: `./mvnw -B -ntp clean compile` en verde; `./mvnw -B -ntp -pl core test` en verde; la
+suite E2E existente sin cambios de expectativas (SC-004).
+
+---
+
+## Phase 3: User Story 1 - Enviar una notificación con un archivo chico embebido (P1) 🎯 MVP
+
+**Goal**: un adjunto de hasta 1 MB embebido y limpio se acepta, se guarda como `BinData` con la
+notificación y el proveedor lo recibe al despachar, también en reintentos.
+
+**Independent Test**: spec.md, User Story 1, escenarios 1–5; SC-001 (embebido) y SC-012.
+
+- [X] T044 [US1] Crear `infra-test/adapter/in/rest/NotificationAttachmentE2ETest.java` (`@SpringBootTest(webEnvironment = RANDOM_PORT)` + `@Testcontainers` con MongoDB, RabbitMQ y el ClamAV de T004 + `WebTestClient`, estructura de `NotificationLiveUpdatesE2ETest`; `notification.catalog.refresh-interval-ms=1000`; emisores de prueba `recording-attachments` (`true`) y `recording-plain` (`false`) como beans que guardan lo que reciben; en `@BeforeEach`, canales de prueba en `channel_catalog` y espera activa a que `GET /channels` los refleje). Casos de US1: PDF limpio de 500 KB embebido → `202` → `DELIVERED`; el emisor recibe los mismos bytes, nombre, tipo, tamaño y huella en el orden enviado; el documento en MongoDB tiene `BinData` y `sha256`; duplicada válida → `duplicate: true` sin cambiar los adjuntos; SC-012: 5 × 1 MB embebidos limpios aceptados en ≤ `Duration.ofSeconds(5)` con ClamAV ya usado una vez en la clase **Desviación de proceso**: la implementación completa vive en la fase fundacional, así que la E2E pasó a la primera, sin rojo observable. Los emisores de prueba se extrajeron a `infra-test/support/RecordingAttachmentSender.java` para reutilizarlos en `AttachmentUploadE2ETest`
+- [X] T045 [US1] Escenario US1.5 (reintento con los mismos adjuntos) en `NotificationAttachmentE2ETest`: el emisor de prueba devuelve un fallo temporal la primera vez y en el reintento recibe los mismos adjuntos; si el intervalo de reintento no puede bajarse a segundos en la prueba, cubrirlo con la ida y vuelta de T039 más `DispatchNotificationServiceTest` y anotar aquí la desviación — depende de T044 Cubierto de punta a punta: `RetryPolicy` no permite bajar el retroceso de 30 s, así que la prueba espera el reintento real (~30 s) con `requeue-interval-ms=1000`
+
+**Checkpoint**: camino chico de punta a punta.
+
+---
+
+## Phase 4: User Story 2 - Rechazar completo lo que no se admite (P1)
+
+**Goal**: cualquier adjunto inválido rechaza la notificación completa con el código correcto y un motivo
+sin contenido ni dirección; en lote, solo el elemento; con el antivirus caído, `503` y nada aceptado.
+
+**Independent Test**: spec.md, User Story 2, escenarios 1–10; SC-002, SC-007, SC-008 (embebido) y SC-014.
+
+- [X] T046 [P] [US2] Rehacer las pruebas de lote en `core-test/usecase/SendNotificationBatchServiceTest.java` (reabre v1 T019). **Hay trabajo sin commitear** de la v1 en este archivo: su caso válido usa una `url` https arbitraria, que en la v3 es inválida. Rehacerlo con un adjunto embebido, con el `AttachmentResolver` real y los puertos simulados. Casos: un elemento con adjunto inválido, otro con una subida en `PENDING_SCAN` y otro válido → los dos primeros `rejected` con su motivo, el válido `accepted` (SC-007); `AttachmentInspectionUnavailableException` no se convierte en `rejected` **Adelantada** a la fase 2: el WIP de la v1 no compilaba con el nuevo `SendNotificationService`. Se rehízo con `content` embebido y un `AttachmentResolver` real; rojo observado: la subida en `PENDING_SCAN` hacía fallar el lote entero
+- [X] T047 [US2] Ajustar `core-main/usecase/SendNotificationBatchService.java`: `InvalidAttachmentException` y `AttachmentNotReadyException` → `rejected` (reabre v1 T020; **hay trabajo sin commitear** que ya añade `InvalidAttachmentException`: revisarlo, conservarlo y ampliarlo) — depende de T021, T046 **Adelantada** junto con T046; se conservó el `isItemRejection` del WIP y se amplió con `AttachmentNotReadyException`
+- [X] T048 [P] [US2] Pruebas de errores en `infra-test/adapter/in/rest/NotificationControllerTest.java`: `InvalidAttachmentException` → `400` con `attachments[i]` y sin `content` ni `url`; `AttachmentNotReadyException` → `409`; `AttachmentInspectionUnavailableException` → `503`; cuerpo mayor a 8 MB → `413` (reabre v1 T021; **hay trabajo sin commitear** con el caso `400`: conservarlo y ajustar su dato de ejemplo) Se conservó la prueba `400` del WIP (dato de ejemplo cambiado a `content` y dirección de subida); rojo observado: `409`, `503`, `404` y `413` respondían `500`. Añadido: `AttachmentNotUploadedException` → `409`
+- [X] T049 [US2] Manejar en `infra-main/adapter/in/rest/NotificationExceptionHandler.java` `InvalidAttachmentException` → `400`, `AttachmentNotReadyException` → `409`, `AttachmentUploadNotFoundException` → `404` y `AttachmentInspectionUnavailableException` → `503`, y confirmar el `413` del límite del codec (reabre v1 T022; **hay trabajo sin commitear** con el `400`: conservarlo) — depende de T021, T048 El `413` no lo daba Spring por sí solo (respondía `500`): se maneja `DataBufferLimitException` explícitamente. El `503` devuelve solo el mensaje de la excepción, nunca la causa (host o puerto internos)
+- [X] T050 [US2] Casos de rechazo en `NotificationAttachmentE2ETest`: SC-002, una solicitud por regla de FR-006 que aplique al camino chico (canal sin adjuntos, tipo del canal, tipo global, extensión prohibida `factura.pdf.exe`, tamaño del canal, tope agregado, cantidad, nombre, tipo ausente, tamaño inválido, `content` y `url` a la vez, ninguno, Base64 inválido, embebido > 1 MB, tamaño decodificado distinto, `url` para ≤ 1 MB, tipo real distinto del declarado) → `400` con `attachments[i]` y ningún documento guardado para esos `externalId`; SC-008 embebido: la cadena EICAR en un `.txt` → `400` de software malicioso y nada guardado; cuerpo > 8 MB → `413` — depende de T044, T049 **Desviación de proceso**: la lógica ya existía desde la fase fundacional; la E2E pasó a la primera. Se añade un canal `E2E_STRICT` (solo PDF, ≤ 100 000 bytes, ≤ 2 adjuntos) para las reglas del canal
+- [X] T051 [US2] Crear `infra-test/adapter/in/rest/NotificationAttachmentScannerDownE2ETest.java` (SC-014): contexto con MongoDB y RabbitMQ y `notification.attachments.clamav.port` apuntando a un puerto cerrado; notificación con adjunto embebido → `503` y ningún documento guardado; notificación sin adjuntos por el mismo canal → `202` (control positivo) — depende de T049 Verde a la primera (la regla vive en `AttachmentInspector` desde la fase 2)
+
+---
+
+## Phase 5: User Story 4 - El archivo adjunto nunca queda expuesto (P1)
+
+**Goal**: aceptación, rechazo, emisión, aviso y análisis quedan registrados con nombre, tipo, tamaño y
+huella; ni el contenido ni la dirección de subida aparecen nunca.
+
+**Independent Test**: spec.md, User Story 4, escenarios 1–4; SC-003 (el camino grande en T062).
+
+- [X] T052 [P] [US4] Pruebas con `ListAppender` en `infra-test/adapter/in/rest/NotificationControllerTest.java`: aceptación con adjuntos registra `tenantId`, `externalId`, `notificationId`, `duplicate` y `[fileName|contentType|sizeBytes|sha256]`; rechazo registra `tenantId`, `externalId`, metadatos y motivo; ninguna línea contiene el `content` ni la `url`; un nombre con `\r\n` se registra en una sola línea; sin adjuntos no se registra nada nuevo (reabre v1 T023) Rojo observado: ninguna línea se registraba. Para registrar la huella en la aceptación, `SendNotificationResult` gana `List<AttachmentSummary>` (nombre, tipo, tamaño y huella; nunca bytes ni claves), con un constructor de tres argumentos para los llamadores existentes
+- [X] T053 [US4] Crear `infra-main/adapter/in/rest/AttachmentLogFormatter.java` y registrar aceptación (`doOnSuccess`) y rechazo (`doOnError`) solo con adjuntos en `infra-main/adapter/in/rest/NotificationController.java` (research.md, Decisión 8) (reabre v1 T024) — depende de T042, T052 El tipo de la solicitud se registra normalizado; el motivo del rechazo y el `tenantId`/`externalId` también pasan por el reemplazo de caracteres de control
+- [X] T054 [US4] SC-003, camino chico, en `NotificationAttachmentE2ETest`: un contenido embebido reconocible, una vez aceptado y otra rechazado, no aparece en registros capturados con `ListAppender`, cuerpos de error, eventos leídos de una cola temporal enlazada al exchange de eventos, `GET /notifications/{id}` ni `GET /notifications`; nombre, tipo, tamaño y huella sí aparecen en los registros (control positivo) — depende de T044, T053 Los eventos se capturan con una cola propia enlazada al exchange de eventos; control positivo con nombre, tipo, tamaño y huella en el registro de aceptación y con los metadatos en el de rechazo
+
+---
+
+## Phase 6: User Story 6 - Adjuntar un archivo grande mediante una subida al servicio (P1)
+
+**Goal**: emitir la subida, recibir el archivo en MinIO, analizarlo de forma asíncrona con la máquina de
+estados y aceptar notificaciones que referencian subidas `CLEAN`.
+
+**Independent Test**: spec.md, User Story 6, escenarios 1–8; SC-001 (subida), SC-008 (subida), SC-009,
+SC-011 y SC-013.
+
+- [X] T055 [P] [US6] Pruebas en `core-test/usecase/`: `IssueAttachmentUploadServiceTest` (valida con `validateUploadRequest`, crea la subida en `PENDING_SCAN` con `uploadKey` del tenant y devuelve dirección y vencimiento), `CompleteAttachmentUploadServiceTest` (inexistente u otro tenant → `AttachmentUploadNotFoundException`; objeto ausente → rechazo `409`; tamaño distinto → rechazo `400`, objeto borrado y sigue `PENDING_SCAN`; correcto → `requestScan` y `completedAt`; ya resuelta → estado sin encolar), `GetAttachmentUploadServiceTest` (por tenant; otro tenant → no encontrada) y `ScanAttachmentUploadServiceTest` (estado distinto de `PENDING_SCAN` → sin efecto; `CLEAN` → `copyIfMatch` al `cleanKey`, transición y borrado del `uploadKey`, en ese orden; `INFECTED` → borrado y transición con motivo y firma; precondición del ETag fallida → error para reintentar, sin transición: SC-013; antivirus caído → error para reintentar) Las cuatro pruebas viven en una sola clase con `@Nested`, `core-test/usecase/AttachmentUploadServicesTest.java`. Rojo observado: no compilaba (servicios inexistentes); después, `aFileChangedAfterTheScan...` falló porque la transición se invocaba al armar el `Mono` y no al suscribirse (corregido con `Mono.defer`). Añadido: un archivo reemplazado por otro de distinto tamaño antes del escaneo se descarta y la subida sigue pendiente
+- [X] T056 [US6] Crear `core-main/port/in/IssueAttachmentUploadUseCase.java`, `CompleteAttachmentUploadUseCase.java`, `GetAttachmentUploadUseCase.java`, `ScanAttachmentUploadUseCase.java` y los servicios `core-main/usecase/IssueAttachmentUploadService.java`, `CompleteAttachmentUploadService.java`, `GetAttachmentUploadService.java` y `ScanAttachmentUploadService.java` (research.md, Decisión 13) — depende de T021, T023, T038, T055 `scan` devuelve `Mono<AttachmentUpload>` (vacío si no hay nada que hacer) para que el consumidor registre el veredicto sin que `core` registre. `IssuedUpload.toString()` omite la dirección
+- [X] T057 [US6] Declarar la cola `notification.attachment.scan` y su DLQ en `infra-main/config/RabbitConfig.java` y `RabbitTopologyProperties.java`, y crear `infra-main/adapter/out/rabbit/AttachmentScanRequestRabbitPublisher.java` (implementa `AttachmentScanRequestPort`; mensaje `{tenantId, uploadId}`) — depende de T021 **Desviación**: en lugar de ampliar `RabbitTopologyProperties` (su constructor lo usan pruebas existentes) se crea `AttachmentScanTopologyProperties` (`notification.rabbit.attachment-scan.*`) y `AttachmentScanRabbitConfig`, con su propia fábrica de contenedores, reintento con estado (`scan.max-attempts`) y recuperador hacia la DLQ del escaneo, sin registrar beans que compitan con los del despacho
+- [X] T058 [P] [US6] Pruebas en `infra-test/adapter/in/rabbit/AttachmentScanListenerTest.java` (RabbitMQ con Testcontainers, sin simular el broker): el mensaje se produce con `AttachmentScanRequestPort.requestScan` real; el listener invoca `ScanAttachmentUploadUseCase` con el tenant y la subida; ack solo después de que el caso de uso termina; un segundo mensaje para una subida ya resuelta se confirma sin efecto; un error persistente termina en la DLQ con su causa, tras los reintentos de `RabbitRetryConfig` — depende de T057 **Desviación de proceso**: el consumidor se escribió junto con la prueba; sin rojo observado aparte. El conteo de no confirmados usa `rabbitmqctl` dentro del contenedor ya arrancado
+- [X] T059 [US6] Crear `infra-main/adapter/in/rabbit/AttachmentScanListener.java` (ack manual, concurrencia `scan.consumer-concurrency`, registro del veredicto con `tenantId`, `uploadId`, `sha256`, estado, motivo y firma) — depende de T056, T057, T058 **Desviación**: usa `.block()` en el hilo del contenedor de RabbitMQ, igual que `NotificationDispatchListener`; el hilo no es de eventos y así la confirmación ocurre solo al terminar el escaneo
+- [X] T060 [P] [US6] Pruebas en `infra-test/adapter/in/rest/AttachmentUploadControllerTest.java` (`@WebFluxTest`): `POST /attachment-uploads` → `201` con `Location`, `uploadId`, `uploadUrl` y `expiresAt`; `:complete` → `202` con el estado; `GET` → `200` sin `uploadUrl`; `404`, `409`, `400` y `503` según la excepción; `AttachmentUploadResponse.toString()` sin `uploadUrl`; registros de emisión y aviso sin la dirección Verde a la primera junto con T061
+- [X] T061 [US6] Crear `infra-main/adapter/in/rest/AttachmentUploadController.java`, `IssueAttachmentUploadRequest.java` y `AttachmentUploadResponse.java`, y cablear los cuatro servicios en `infra-main/config/UseCaseConfig.java` — depende de T049, T053, T056, T060 `Location` usa el segmento codificado del `uploadId`; los registros de emisión y aviso omiten la dirección
+- [X] T062 [US6] Crear `infra-test/adapter/in/rest/AttachmentUploadE2ETest.java` (como T044 más el MinIO de T004 con su endpoint público configurado): emitir → PUT real a `uploadUrl` → `:complete` → sondear `GET` hasta `CLEAN` y afirmar ≤ `Duration.ofSeconds(30)` para 10 MB (SC-011) → notificación con esa `url` → `202` → `DELIVERED`, con el emisor recibiendo la misma huella y el `StoredObject` (SC-001); notificación con una subida emitida y no completada → `409` (SC-009); archivo de prueba antivirus → `INFECTED` → notificación → `400` (SC-008), usando un DOCX mínimo generado con `java.util.zip` que contiene una entrada EICAR y una entrada de relleno para superar 1 MB (si ClamAV no lo detecta, anotar la desviación aquí y cambiar de estrategia); `url` https ajena → `400` sin intento de descarga (SC-009); `:complete` sin objeto → `409` y con tamaño distinto → `400` y la subida sigue `PENDING_SCAN` (US6.7); `uploadUrl` ausente de registros, respuestas de error, `GET /attachment-uploads/{id}`, eventos y consultas de notificación, con nombre, tipo, tamaño y huella en los registros (SC-003, control positivo) — depende de T059, T061 Verde a la primera (la lógica se probó por capas antes). El archivo EICAR del camino grande es un DOCX de ~1,2 MB con una entrada `eicar.com`; ClamAV lo detecta dentro del contenedor ZIP. El escaneo de 10 MB tomó muy por debajo de los 30 s
+
+**Checkpoint**: camino grande de punta a punta.
+
+---
+
+## Phase 7: User Story 7 - Ningún tenant ve ni usa los archivos de otro (P1)
+
+**Goal**: aislamiento total entre tenants en subidas, adjuntos, caché de veredictos, errores y registros.
+
+**Independent Test**: spec.md, User Story 7, escenarios 1–4; SC-010.
+
+- [X] T063 [US7] Casos de dos tenants en `AttachmentUploadE2ETest` (SC-010): A deja una subida `CLEAN`; B hace `GET` y `:complete` → `404` idénticos a los de una subida inexistente (se comparan los cuerpos completos); B referencia la `url` de A → `400` idéntico al de una dirección no emitida; ninguna respuesta, registro capturado ni documento de B contiene el `uploadId`, la clave, la huella ni el nombre de A; B sube el mismo archivo y su análisis no reutiliza el veredicto de A (dos entradas en `attachment_scan_verdicts`); A sí puede usar su subida (control positivo) — depende de T062 Verde a la primera; los cuerpos de `404` y `400` de B se comparan completos con los de una subida inexistente
+- [X] T064 [US7] Revisión del aislamiento contra la tabla de plan.md § Aislamiento por tenant: para cada punto, comprobar en el código qué se hace con el resultado del predicado (no solo el predicado), como pide el antecedente de HU2-072, y registrar aquí cualquier corrección hecha — depende de T063 Revisión hecha, sin correcciones necesarias: toda búsqueda y transición de `attachment_uploads` filtra por `tenantId`; la clave de MinIO sale del registro del tenant y `uploadIdFromKey` exige el prefijo del tenant de la solicitud; el resolvedor descarta además una subida de otro tenant aunque el repositorio la devolviera; el mapeo rechaza escribir o leer un adjunto con otro `tenantId`; la caché es por `(tenantId, sha256)`; el consumidor usa el tenant del mensaje que el propio servicio publica
+
+---
+
+## Phase 8: User Story 3 - Cada canal declara qué adjuntos admite (P2)
+
+**Goal**: las reglas por canal viven en `contentSchema`, se aplican tras el refresco del catálogo y se ven
+en `GET /channels`; por defecto ningún canal acepta adjuntos.
+
+**Independent Test**: spec.md, User Story 3, escenarios 1–4; SC-005.
+
+- [X] T065 [US3] Comprobar que ningún cambio de código es necesario más allá de T020: `GET /channels` ya expone `contentSchema` tal cual y `application.yml` no declara `attachments` en ningún canal; si la comprobación encuentra algo distinto, registrarlo aquí como desviación (reabre v1 T025) Comprobado: `ChannelItemResponse` expone `contentSchema` tal cual y en `application.yml` ningún canal declara `attachments` (la única clave `attachments` es el bloque de configuración `notification.attachments`)
+- [X] T066 [US3] Casos en `NotificationAttachmentE2ETest`: US3.1 (`GET /channels` muestra la declaración), US3.3 (un canal con `maximum` sobre el tope global rechaza un adjunto entre ambos), US3.4 (EMAIL por defecto rechaza) y SC-005 (bajar `maximum` en el catálogo y afirmar que el rechazo empieza antes de `Duration.ofSeconds(5)`) — depende de T044, T065 Verde a la primera (la regla vive en `ContentSchemaValidator` y el refresco del catálogo ya existía). SC-005 se mide desde que se guarda el cambio hasta el primer `400`
+
+---
+
+## Phase 9: User Story 5 - Nunca entregar una notificación sin su adjunto (P2)
+
+**Goal**: con adjuntos y un proveedor sin soporte, `FAILED` sin llamar al proveedor ni reintentar.
+
+**Independent Test**: spec.md, User Story 5, escenarios 1–2; SC-006.
+
+- [X] T067 [P] [US5] Pruebas en `core-test/usecase/DispatchNotificationServiceTest.java`: notificación con adjuntos y emisor con `supportsAttachments() == false` → `send` nunca invocado, estado `FAILED`, intento `PERMANENT_FAILURE` a nombre del proveedor, guardado y evento `NotificationFailed` publicado; mismo emisor sin adjuntos → `send` invocado (control positivo); emisor con soporte y adjuntos → `send` invocado (sin cambio respecto de v1 T026) Rojo observado: el emisor sin soporte se invocaba (`send` devolvía `null` en el doble)
+- [X] T068 [US5] Implementar la regla en `sendThrough` de `core-main/usecase/DispatchNotificationService.java` (research.md, Decisión 6) — depende de T067
+- [X] T069 [US5] SC-006 en `NotificationAttachmentE2ETest`: canal con `recording-plain`, con adjuntos → `FAILED` y el emisor no la recibe; sin adjuntos → `DELIVERED` y sí la recibe — depende de T044, T068 Verde tras T068
+
+---
+
+## Phase 10: Polish & Cross-Cutting Concerns
+
+- [X] T070 Indicadores de salud de MinIO y ClamAV en `/actuator/health`, fuera del grupo de *readiness* (research.md, Decisión 15), en `infra-main/config/` y `application.yml`, con una prueba en `infra-test/config/AttachmentHealthIndicatorsTest.java`: con MinIO y ClamAV caídos, `/actuator/health/readiness` sigue `UP` y `/actuator/health` los informa `DOWN` Rojo observado: `/actuator/health/readiness` respondía `404` y `/actuator/health` seguía `UP`. **Decisión**: el proyecto no tenía ninguna configuración de sondas (brecha RNF-11 previa); se habilitan (`management.endpoint.health.probes.enabled`), *readiness* incluye `readinessState`, `mongo` y `rabbit`, *liveness* solo `livenessState`, y `show-components: always` sin detalles. Los indicadores `clamav` (`PING`) y `attachmentStorage` (`bucketExists`) quedan fuera de *readiness*; `/actuator/health` agregado sí pasa a `DOWN` si caen
+- [X] T071 Actualizar `README.md` o la documentación de arranque local si enumera los servicios de `docker compose`: añadir `minio` y `clamav` y sus variables de entorno (sin secretos) Sin cambios: el `README.md` no documenta el arranque local; las variables nuevas ya están en `.env.example` (T002)
+- [X] T072 Revisión de datos sensibles: buscar en el código nuevo cualquier `toString`, mensaje de excepción o registro que pueda incluir `content`, bytes, `url` o `uploadUrl`, y corregirlo; SpotBugs (`EI_EXPOSE_REP` en `byte[]`, inyección en registros) se corrige en el código, nunca con exclusiones sin reportar Revisado: `toString` sin datos sensibles en `AttachmentSubmission`, `Attachment`, `EmbeddedContent`, `AttachmentRequest`, `AttachmentDocument`, `PresignedUpload`, `IssuedUpload`, `AttachmentUploadResponse` y `AttachmentProperties.Storage` (omite credenciales); los `503` exponen solo un mensaje fijo, nunca la causa. SpotBugs se valida en T075
+- [X] T073 Revisión de bloqueo: ninguna llamada bloqueante (`.block()`, E/S síncrona de MinIO, ClamAV o Tika) en un hilo de evento Revisado: el único `.block()` nuevo es el del consumidor de escaneo (ver T059); Tika y la lectura del objeto de MinIO corren en `boundedElastic`; ClamAV usa Reactor Netty y un semáforo no bloqueante
+- [X] T074 Regresión: `ProviderRoutingE2ETest`, `ChannelCatalogQueryE2ETest`, `ChannelCatalogE2ETest`, E2E de proveedores, `NotificationControllerSearchE2ETest`, `NotificationLiveUpdates*E2ETest`, pruebas de los cuatro proveedores (revalida T006), `HexagonalArchitectureTest` y `ModularityTests` en verde Verde dentro del `verify` de T075. El primer `verify` encontró un ciclo `config → adapter` introducido por los indicadores de salud (`ModularityTests`); se movieron a `adapter/out/antivirus` y `adapter/out/storage` (commit aparte)
+- [X] T075 `./mvnw -B -ntp spotless:apply` y `./mvnw -B -ntp verify` completo y en verde (cobertura ≥ 80 % líneas / ≥ 70 % ramas); si solo fallan `DeadLetterQueueE2ETest` y `RabbitRetryConfigCustomAttemptsTest`, repetir excluyéndolas y dejarlo escrito aquí `./mvnw -B -ntp clean verify` en **BUILD SUCCESS**: 476 pruebas en `core` y 444 en `infrastructure`, Spotless, SpotBugs/FindSecBugs (0 hallazgos) y JaCoCo (`core` 99,6 % líneas / 93,4 % ramas; `infrastructure` 98,0 % / 84,6 %). **Entorno**: el 5673 lo ocupa el RabbitMQ de compose del usuario con otras credenciales, y sin `RABBITMQ_USERNAME` las cinco clases que usan un broker externo (`NotificationControllerSearchE2ETest`, `CorsConfigTest`, `CorsConfigCustomOriginTest`, `DeadLetterQueueE2ETest`, `RabbitRetryConfigCustomAttemptsTest`) fallaban por autenticación; se repitió con un broker desechable en 5674 (`RABBITMQ_PORT=5674`, guest/guest), sin excluir ninguna prueba, y se eliminó al terminar
+
+---
+
+## Dependencies & Execution Order
+
+- **Phase 1**: T001 antes que cualquier cambio de controlador (Principio II). T002, T003 en paralelo;
+  T004 depende de T003; T005 después de T003.
+- **Phase 2** bloquea todo:
+  - 2B: T008 → T009; T010 → T011; (T011, T012) → T013 → T014; T015 → T016 (con T009); T017 → T018;
+    T019 → T020.
+  - 2C: T021 tras T011 y T018; T022 → T023; T024 → T025; T026 tras T009; T027 → T028.
+  - 2D: cada prueba antes de su adaptador (T029 → T030, T031 → T032, T033 → T034, T035 → T036,
+    T037 → T038, T039 → T040, T041 → T042); T043 al final de la fase.
+  - Entre T013 y T043 el módulo `infrastructure` puede no compilar: no se commitea en ese intervalo sin
+    que `clean compile` esté en verde.
+- **Historias**: US1 (T044–T045) tras Phase 2. US2 tras T044 (para su E2E). US4 tras T042 y T044. US6
+  tras Phase 2, T049 y T053. US7 tras T062. US3 tras T020 y T044. US5 tras T044.
+- **Phase 10** al final; T075 es lo último.
+
+## Parallel Opportunities
+
+- Phase 1: T002 y T003.
+- Phase 2: las pruebas T008, T010, T012, T015, T017, T019 en paralelo; T022 y T024; las pruebas de
+  adaptador T029, T031, T033, T035, T037, T039 y T041 en paralelo (archivos distintos).
+- US2: T046 y T048 en paralelo. US6: T055, T058 (tras T057) y T060 en paralelo. US5: T067 en paralelo con
+  cualquier tarea de US6 o US7.
+
+## Implementation Strategy
+
+MVP = Phase 1 + Phase 2 + US1: aceptar y despachar adjuntos chicos embebidos y verificados. Después US2 y
+US4 (rechazos y no exposición del camino chico), US6 y US7 (camino grande y aislamiento), US3 y US5 (P2),
+y el cierre. Un commit local por fase o por grupo coherente de tareas, siempre con `clean compile` en
+verde.
+
+## Correspondencia con la lista v1
+
+| v1 | Estado en la v1 | v3 |
+|---|---|---|
+| T001 contrato | hecho (`8c45a4d`) | reabierto → T001 |
+| T002–T003 `supportsAttachments()` | hecho (`0bd17b0`) | conservado → T006 `[X]` |
+| T004–T005 `Attachment` | hecho (`0bd17b0`) | reabierto → T012, T013 (+ T008, T009 `AttachmentSubmission`) |
+| T006–T007 `NotificationContent` | hecho (`0bd17b0`) | forma conservada; pruebas reabiertas → T014 |
+| T008–T009 `AttachmentPolicy` + excepción | hecho (`0bd17b0`) | excepción conservada → T007 `[X]`; política reabierta → T015, T016 |
+| T010–T011 `ContentSchemaValidator` | hecho (`0bd17b0`) | reabierto (entrada) → T019, T020 |
+| T012–T013, T018 `SendNotificationService` | hecho (`dfb462d`) | reabierto → T027, T028 |
+| T014–T015 MongoDB | hecho (`dfb462d`) | reabierto → T039, T040 |
+| T016–T017 REST | hecho (`dfb462d`) | reabierto → T041, T042 |
+| T019–T020 lote | sin commitear | reabierto → T046, T047 |
+| T021–T022 manejador `400` | sin commitear | reabierto → T048, T049 |
+| T023–T024 registros | pendiente | → T052, T053 |
+| T025 catálogo por defecto | pendiente | → T065 |
+| T026 despacho | pendiente | → T067, T068 |
+| T027 E2E | pendiente | → T044, T045, T050, T051, T054, T062, T063, T066, T069 |
+| T028 regresión | pendiente | → T074 |
+| T029 `verify` | pendiente | → T075 |

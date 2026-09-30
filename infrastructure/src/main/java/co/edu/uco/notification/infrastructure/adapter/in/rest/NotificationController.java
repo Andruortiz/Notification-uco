@@ -14,9 +14,12 @@ import co.edu.uco.notification.core.port.in.GetNotificationStatusUseCase;
 import co.edu.uco.notification.core.port.in.SearchNotificationsQuery;
 import co.edu.uco.notification.core.port.in.SearchNotificationsUseCase;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
+import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -32,6 +35,8 @@ import reactor.core.publisher.Mono;
 @RestController
 @RequestMapping("/notifications")
 public class NotificationController {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(NotificationController.class);
 
   private final SendNotificationUseCase sendNotificationUseCase;
   private final GetNotificationStatusUseCase getNotificationStatusUseCase;
@@ -56,10 +61,39 @@ public class NotificationController {
   public Mono<ResponseEntity<SendNotificationResponse>> send(
       @RequestHeader("X-Tenant-Id") final String tenantId,
       @RequestBody final SendNotificationRequest request) {
-    return sendNotificationUseCase
-        .send(toCommand(tenantId, request))
+    return logAttachments(
+            tenantId, request, sendNotificationUseCase.send(toCommand(tenantId, request)))
         .map(SendNotificationResponse::from)
         .map(response -> ResponseEntity.status(HttpStatus.ACCEPTED).body(response));
+  }
+
+  private static Mono<SendNotificationResult> logAttachments(
+      final String tenantId,
+      final SendNotificationRequest request,
+      final Mono<SendNotificationResult> sending) {
+    if (request.attachments().isEmpty()) {
+      return sending;
+    }
+    return sending
+        .doOnSuccess(
+            result ->
+                LOGGER.info(
+                    "Notification accepted with attachments tenantId={} externalId={}"
+                        + " notificationId={} duplicate={} attachments={}",
+                    AttachmentLogFormatter.safe(tenantId),
+                    AttachmentLogFormatter.safe(request.externalId()),
+                    result.notificationId().value(),
+                    result.duplicate(),
+                    AttachmentLogFormatter.ofSummaries(result.attachments())))
+        .doOnError(
+            error ->
+                LOGGER.info(
+                    "Notification with attachments rejected tenantId={} externalId={}"
+                        + " attachments={} reason={}",
+                    AttachmentLogFormatter.safe(tenantId),
+                    AttachmentLogFormatter.safe(request.externalId()),
+                    AttachmentLogFormatter.ofRequests(request.attachments()),
+                    AttachmentLogFormatter.safe(error.getMessage())));
   }
 
   @GetMapping("/{id}")
@@ -102,6 +136,7 @@ public class NotificationController {
         RecipientId.of(request.recipientId()),
         Recipient.of(request.recipientAddress()),
         NotificationContent.of(request.subject(), request.body()),
-        Priority.valueOf(request.priority()));
+        Priority.valueOf(request.priority()),
+        request.attachments().stream().map(AttachmentRequest::toSubmission).toList());
   }
 }

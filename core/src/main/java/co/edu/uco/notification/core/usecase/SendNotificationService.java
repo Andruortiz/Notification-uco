@@ -2,10 +2,15 @@ package co.edu.uco.notification.core.usecase;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
+import co.edu.uco.notification.core.domain.policy.AttachmentPolicy;
 import co.edu.uco.notification.core.domain.policy.ContentSchemaValidator;
+import co.edu.uco.notification.core.domain.valueobject.Attachment;
+import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
+import co.edu.uco.notification.core.port.in.AttachmentSummary;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
@@ -22,11 +27,13 @@ public final class SendNotificationService implements SendNotificationUseCase {
   private final ChannelCatalogPort channelCatalogPort;
   private final NotificationRepository notificationRepository;
   private final NotificationEventPublisherPort eventPublisherPort;
+  private final AttachmentResolver attachmentResolver;
 
   public SendNotificationService(
       final ChannelCatalogPort channelCatalogPort,
       final NotificationRepository notificationRepository,
-      final NotificationEventPublisherPort eventPublisherPort) {
+      final NotificationEventPublisherPort eventPublisherPort,
+      final AttachmentResolver attachmentResolver) {
     this.channelCatalogPort =
         Preconditions.requireNonNull(channelCatalogPort, "channelCatalogPort must not be null");
     this.notificationRepository =
@@ -34,6 +41,8 @@ public final class SendNotificationService implements SendNotificationUseCase {
             notificationRepository, "notificationRepository must not be null");
     this.eventPublisherPort =
         Preconditions.requireNonNull(eventPublisherPort, "eventPublisherPort must not be null");
+    this.attachmentResolver =
+        Preconditions.requireNonNull(attachmentResolver, "attachmentResolver must not be null");
   }
 
   @Override
@@ -48,14 +57,21 @@ public final class SendNotificationService implements SendNotificationUseCase {
 
   private Mono<SendNotificationResult> validateAndProceed(
       final ChannelRoute route, final SendNotificationCommand command) {
-    ContentSchemaValidator.validate(route.channelType(), route.contentSchema(), command.content());
-    return notificationRepository
-        .findByTenantAndExternalId(command.tenantId(), command.externalId())
-        .map(existing -> toResult(existing, true))
-        .switchIfEmpty(Mono.defer(() -> acceptAndDispatch(command)));
+    AttachmentPolicy.validate(command.attachments());
+    ContentSchemaValidator.validate(
+        route.channelType(), route.contentSchema(), command.content(), command.attachments());
+    return attachmentResolver
+        .resolve(command.tenantId(), command.attachments())
+        .flatMap(
+            attachments ->
+                notificationRepository
+                    .findByTenantAndExternalId(command.tenantId(), command.externalId())
+                    .map(existing -> toResult(existing, true))
+                    .switchIfEmpty(Mono.defer(() -> acceptAndDispatch(command, attachments))));
   }
 
-  private Mono<SendNotificationResult> acceptAndDispatch(final SendNotificationCommand command) {
+  private Mono<SendNotificationResult> acceptAndDispatch(
+      final SendNotificationCommand command, final List<Attachment> attachments) {
     final Notification notification =
         Notification.accept(
             new NotificationRouting(
@@ -64,7 +80,10 @@ public final class SendNotificationService implements SendNotificationUseCase {
                 command.channelType(),
                 command.recipientId(),
                 command.recipient()),
-            new NotificationDetails(command.content(), command.priority()));
+            new NotificationDetails(
+                NotificationContent.of(
+                    command.content().subject(), command.content().body(), attachments),
+                command.priority()));
     final List<DomainEvent> events = notification.pullEvents();
 
     return notificationRepository
@@ -74,12 +93,21 @@ public final class SendNotificationService implements SendNotificationUseCase {
                 eventPublisherPort
                     .publish(events)
                     .then(eventPublisherPort.enqueueForDispatch(saved))
-                    .thenReturn(toResult(saved, false)));
+                    .thenReturn(toResult(saved, false)))
+        .onErrorResume(
+            NotificationAlreadyAcceptedException.class,
+            ex ->
+                notificationRepository
+                    .findByTenantAndExternalId(command.tenantId(), command.externalId())
+                    .map(existing -> toResult(existing, true)));
   }
 
   private static SendNotificationResult toResult(
       final Notification notification, final boolean duplicate) {
     return new SendNotificationResult(
-        notification.notificationId(), notification.status(), duplicate);
+        notification.notificationId(),
+        notification.status(),
+        duplicate,
+        notification.content().attachments().stream().map(AttachmentSummary::of).toList());
   }
 }

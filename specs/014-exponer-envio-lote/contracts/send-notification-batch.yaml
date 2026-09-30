@@ -1,0 +1,32 @@
+# Phase 1 Contract: POST /notifications:sendBatch en api-notificaciones.yaml
+#
+# Este archivo NO es el contrato real del componente: es el diseño de lo que /speckit-implement debe
+# aplicar a infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml antes de escribir
+# el controller (Principio II).
+#
+# La operación y sus schemas (SendNotificationBatchRequest, BatchAcceptedResponse, BatchItemResult)
+# ya existen y no cambian. Solo cambian la descripción (queda marcada como implementada) y se agrega
+# la respuesta 400.
+
+paths:
+  /notifications:sendBatch:
+    post:
+      operationId: sendNotificationBatch
+      description: >
+        Implementado. El lote es su propia unidad de seguimiento, no un bucle sobre POST
+        /notifications: cada elemento se valida e idempotiza por separado, y un elemento rechazado
+        por el catálogo (canal inexistente o deshabilitado, contenido que no cumple la forma del
+        canal) aparece como REJECTED sin bloquear a los demás. Los resultados vienen en el mismo
+        orden de los elementos de la solicitud.
+      responses:
+        '202':
+          description: Lote aceptado -- ver el resultado individual de cada elemento.
+        '400':
+          description: >
+            La solicitud no cumple el esquema (lista de elementos vacía o ausente, campo obligatorio
+            ausente o vacío en algún elemento, prioridad desconocida, batchId en blanco). Se rechaza
+            completa y no se acepta ningún elemento.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

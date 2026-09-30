@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: notification-service
+  codec:
+    max-in-memory-size: 8MB
   data:
     mongodb:
       uri: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:localhost}:${MONGO_PORT:27018}/${MONGO_DATABASE:notification}?authSource=admin
@@ -13,6 +15,18 @@ spring:
     port: ${RABBITMQ_PORT:5673}
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-components: always
+      group:
+        readiness:
+          include: readinessState,mongo,rabbit
+        liveness:
+          include: livenessState
 
 springdoc:
   swagger-ui:
@@ -69,5 +83,30 @@ notification:
       routing-key: notification.dispatch.dlq
       queue: notification.dispatch.dlq.queue
     events-exchange: notification.events.exchange
+    attachment-scan:
+      exchange: notification.attachment.scan.exchange
+      routing-key: notification.attachment.scan
+      queue: notification.attachment.scan.queue
+      dlq-exchange: notification.attachment.scan.dlq.exchange
+      dlq-routing-key: notification.attachment.scan.dlq
+      dlq-queue: notification.attachment.scan.dlq.queue
   cors:
     allowed-origins: ${NOTIFICATION_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  attachments:
+    scan:
+      timeout: ${NOTIFICATION_ATTACHMENTS_SCAN_TIMEOUT:10s}
+      clean-verdict-ttl: 24h
+      consumer-concurrency: ${NOTIFICATION_ATTACHMENTS_SCAN_CONCURRENCY:2}
+      max-attempts: ${NOTIFICATION_ATTACHMENTS_SCAN_MAX_ATTEMPTS:3}
+    upload:
+      expiration: ${NOTIFICATION_ATTACHMENTS_UPLOAD_EXPIRATION:15m}
+    storage:
+      bucket: ${MINIO_BUCKET:notification-attachments}
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      public-endpoint: ${MINIO_PUBLIC_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:}
+      secret-key: ${MINIO_SECRET_KEY:}
+    clamav:
+      host: ${CLAMAV_HOST:localhost}
+      port: ${CLAMAV_PORT:3310}
+      max-concurrent-scans: ${CLAMAV_MAX_CONCURRENT_SCANS:4}

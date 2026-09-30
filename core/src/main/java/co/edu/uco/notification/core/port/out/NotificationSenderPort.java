@@ -13,4 +13,6 @@ public interface NotificationSenderPort {
   ProviderId providerId();
 
   Optional<String> disabledReason();
+
+  boolean supportsAttachments();
 }

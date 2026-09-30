@@ -45,6 +45,31 @@ class BatchItemResultTest {
   }
 
   @Test
+  void failedFactorySetsReasonAndNoNotificationId() {
+    final BatchItemResult result = BatchItemResult.failed(EXTERNAL_ID, "clamav down");
+
+    assertEquals(BatchItemOutcome.FAILED, result.outcome());
+    assertNull(result.notificationId());
+    assertEquals("clamav down", result.rejectionReason());
+  }
+
+  @Test
+  void rejectsNotificationIdOnFailedOutcome() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () ->
+            new BatchItemResult(
+                EXTERNAL_ID, BatchItemOutcome.FAILED, NotificationId.newId(), "reason"));
+  }
+
+  @Test
+  void rejectsBlankRejectionReasonOnFailedOutcome() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> new BatchItemResult(EXTERNAL_ID, BatchItemOutcome.FAILED, null, "  "));
+  }
+
+  @Test
   void rejectsNullExternalId() {
     assertThrows(
         NullPointerException.class,

@@ -10,7 +10,10 @@ import static org.mockito.Mockito.when;
 
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.event.NotificationFailed;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
+import co.edu.uco.notification.core.domain.valueobject.Attachment;
+import co.edu.uco.notification.core.domain.valueobject.AttachmentSource;
 import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
@@ -25,6 +28,7 @@ import co.edu.uco.notification.core.domain.valueobject.Priority;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
+import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
@@ -35,6 +39,7 @@ import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -334,5 +339,78 @@ class DispatchNotificationServiceTest {
                 senderRegistry,
                 eventPublisherPort,
                 null));
+  }
+
+  private static Notification pendingNotificationWithAttachment() {
+    final byte[] bytes = "%PDF-1.4".getBytes(StandardCharsets.UTF_8);
+    return Notification.accept(
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-attachment"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(
+            NotificationContent.of(
+                "Subject",
+                "Body",
+                List.of(
+                    new Attachment(
+                        TenantId.of("tenant-1"),
+                        "invoice.pdf",
+                        "application/pdf",
+                        bytes.length,
+                        Sha256Digest.of(bytes),
+                        new AttachmentSource.EmbeddedContent(bytes)))),
+            Priority.NORMAL));
+  }
+
+  @Test
+  void aNotificationWithAttachmentsFailsWithoutCallingAProviderThatCannotSendThem() {
+    final Notification notification = pendingNotificationWithAttachment();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.supportsAttachments()).thenReturn(false);
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(notificationSenderPort, never()).send(any());
+    assertEquals(NotificationStatus.FAILED, notification.status());
+    assertEquals(1, notification.deliveryAttempts().size());
+    assertEquals(AttemptResult.PERMANENT_FAILURE, notification.deliveryAttempts().get(0).result());
+    assertEquals(ProviderId.of("brevo"), notification.deliveryAttempts().get(0).providerId());
+    verify(notificationRepository).save(notification);
+    verify(eventPublisherPort)
+        .publish(
+            Mockito.argThat(
+                events -> events.stream().anyMatch(event -> event instanceof NotificationFailed)));
+  }
+
+  @Test
+  void theSameProviderStillSendsNotificationsWithoutAttachments() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.supportsAttachments()).thenReturn(false);
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(notificationSenderPort).send(notification);
+    assertEquals(NotificationStatus.DELIVERED, notification.status());
+  }
+
+  @Test
+  void aProviderThatSupportsAttachmentsReceivesThem() {
+    final Notification notification = pendingNotificationWithAttachment();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.supportsAttachments()).thenReturn(true);
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(notificationSenderPort).send(notification);
+    assertEquals(NotificationStatus.DELIVERED, notification.status());
   }
 }

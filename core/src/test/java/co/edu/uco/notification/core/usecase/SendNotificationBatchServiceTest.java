@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import co.edu.uco.notification.core.domain.AttachmentUpload;
@@ -24,7 +25,6 @@ import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.ScanVerdict;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
-import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.port.in.BatchAcceptedResult;
@@ -43,6 +43,7 @@ import co.edu.uco.notification.core.port.out.MalwareScannerPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
+import co.edu.uco.notification.core.repository.NotificationBatchRepository;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -51,9 +52,9 @@ import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import reactor.core.publisher.Mono;
-import reactor.test.StepVerifier;
 
 class SendNotificationBatchServiceTest {
 
@@ -61,12 +62,16 @@ class SendNotificationBatchServiceTest {
 
   private final SendNotificationUseCase sendNotificationUseCase =
       Mockito.mock(SendNotificationUseCase.class);
+  private final NotificationBatchRepository notificationBatchRepository =
+      Mockito.mock(NotificationBatchRepository.class);
 
   private SendNotificationBatchService service;
 
   @BeforeEach
   void setUp() {
-    service = new SendNotificationBatchService(sendNotificationUseCase);
+    when(notificationBatchRepository.save(any(), any())).thenReturn(Mono.empty());
+    service =
+        new SendNotificationBatchService(sendNotificationUseCase, notificationBatchRepository);
   }
 
   private static BatchNotificationItem item(final String externalId) {
@@ -169,7 +174,59 @@ class SendNotificationBatchServiceTest {
 
   @Test
   void constructorRejectsNullSendNotificationUseCase() {
-    assertThrows(NullPointerException.class, () -> new SendNotificationBatchService(null));
+    assertThrows(
+        NullPointerException.class,
+        () -> new SendNotificationBatchService(null, notificationBatchRepository));
+  }
+
+  @Test
+  void constructorRejectsNullNotificationBatchRepository() {
+    assertThrows(
+        NullPointerException.class,
+        () -> new SendNotificationBatchService(sendNotificationUseCase, null));
+  }
+
+  @Test
+  void sendBatchPersistsTheBatchRecordWithTheTenantAndTheResult() {
+    final BatchNotificationItem accepted = item("order-1");
+    when(sendNotificationUseCase.send(toCommand(accepted)))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    NotificationId.newId(), NotificationStatus.PENDING, false)));
+
+    final SendNotificationBatchCommand command =
+        new SendNotificationBatchCommand(TENANT_ID, BatchId.of("batch-1"), List.of(accepted));
+
+    final BatchAcceptedResult result = service.sendBatch(command).block();
+
+    final ArgumentCaptor<BatchAcceptedResult> resultCaptor =
+        ArgumentCaptor.forClass(BatchAcceptedResult.class);
+    final ArgumentCaptor<TenantId> tenantCaptor = ArgumentCaptor.forClass(TenantId.class);
+    verify(notificationBatchRepository).save(resultCaptor.capture(), tenantCaptor.capture());
+    assertEquals(result, resultCaptor.getValue());
+    assertEquals(TENANT_ID, tenantCaptor.getValue());
+  }
+
+  @Test
+  void sendBatchStillReturnsTheResultWhenPersistingTheBatchRecordFails() {
+    when(notificationBatchRepository.save(any(), any()))
+        .thenReturn(Mono.error(new IllegalStateException("mongo is unreachable")));
+    final BatchNotificationItem accepted = item("order-1");
+    final NotificationId acceptedId = NotificationId.newId();
+    when(sendNotificationUseCase.send(toCommand(accepted)))
+        .thenReturn(
+            Mono.just(new SendNotificationResult(acceptedId, NotificationStatus.PENDING, false)));
+
+    final SendNotificationBatchCommand command =
+        new SendNotificationBatchCommand(TENANT_ID, BatchId.of("batch-1"), List.of(accepted));
+
+    final BatchAcceptedResult result = service.sendBatch(command).block();
+
+    assertNotNull(result);
+    assertEquals(BatchId.of("batch-1"), result.batchId());
+    assertEquals(BatchItemOutcome.ACCEPTED, result.results().get(0).outcome());
+    assertEquals(acceptedId, result.results().get(0).notificationId());
   }
 
   private static final String ATTACHMENTS_SCHEMA =
@@ -212,20 +269,62 @@ class SendNotificationBatchServiceTest {
   }
 
   @Test
-  void anUnavailableInspectionIsNotTurnedIntoAnItemRejection() {
+  void anUnavailableInspectionBecomesAFailedItemInsteadOfFailingTheBatch() {
     final RealPipeline pipeline = new RealPipeline();
     pipeline.givenScannerVerdict(Mono.error(new IllegalStateException("clamav down")));
 
-    StepVerifier.create(
-            pipeline
-                .service()
-                .sendBatch(
-                    new SendNotificationBatchCommand(
-                        TENANT_ID,
-                        BatchId.of("batch-scanner-down"),
-                        List.of(itemWith("order-1", embeddedPdf(PDF.length))))))
-        .expectError(AttachmentInspectionUnavailableException.class)
-        .verify();
+    final BatchAcceptedResult result =
+        pipeline
+            .service()
+            .sendBatch(
+                new SendNotificationBatchCommand(
+                    TENANT_ID,
+                    BatchId.of("batch-scanner-down"),
+                    List.of(itemWith("order-1", embeddedPdf(PDF.length)))))
+            .block();
+
+    assertNotNull(result);
+    assertEquals(1, result.results().size());
+    assertEquals(BatchItemOutcome.FAILED, result.results().get(0).outcome());
+  }
+
+  @Test
+  void anUnavailableInspectionFailsOnlyItsOwnItemWhileOthersAreAccepted() {
+    final RealPipeline pipeline = new RealPipeline();
+    final byte[] failingContent = "%PDF-1.4 failing".getBytes(StandardCharsets.UTF_8);
+    pipeline.givenScannerVerdict(
+        content ->
+            java.util.Arrays.equals(content, failingContent)
+                ? Mono.error(new IllegalStateException("clamav down"))
+                : Mono.just(ScanVerdict.clean("1")));
+
+    final BatchAcceptedResult result =
+        pipeline
+            .service()
+            .sendBatch(
+                new SendNotificationBatchCommand(
+                    TENANT_ID,
+                    BatchId.of("batch-mixed"),
+                    List.of(
+                        itemWith("order-1", embeddedPdf(PDF.length)),
+                        itemWith(
+                            "order-2",
+                            AttachmentSubmission.embedded(
+                                "broken.pdf",
+                                "application/pdf",
+                                (long) failingContent.length,
+                                Base64.getEncoder().encodeToString(failingContent))),
+                        itemWith("order-3", embeddedPdf(PDF.length)))))
+            .block();
+
+    assertNotNull(result);
+    assertEquals(3, result.results().size());
+    assertEquals("order-1", result.results().get(0).externalId().value());
+    assertEquals(BatchItemOutcome.ACCEPTED, result.results().get(0).outcome());
+    assertEquals("order-2", result.results().get(1).externalId().value());
+    assertEquals(BatchItemOutcome.FAILED, result.results().get(1).outcome());
+    assertEquals("order-3", result.results().get(2).externalId().value());
+    assertEquals(BatchItemOutcome.ACCEPTED, result.results().get(2).outcome());
   }
 
   private static AttachmentSubmission embeddedPdf(final long declaredSize) {
@@ -269,8 +368,11 @@ class SendNotificationBatchServiceTest {
     private final AttachmentUploadRepository uploads =
         Mockito.mock(AttachmentUploadRepository.class);
     private final AttachmentStoragePort storage = Mockito.mock(AttachmentStoragePort.class);
+    private final NotificationBatchRepository notificationBatchRepository =
+        Mockito.mock(NotificationBatchRepository.class);
 
     RealPipeline() {
+      when(notificationBatchRepository.save(any(), any())).thenReturn(Mono.empty());
       when(channelCatalogPort.findActiveRoute(ChannelType.of("EMAIL"), TENANT_ID))
           .thenReturn(
               Mono.just(
@@ -310,6 +412,12 @@ class SendNotificationBatchServiceTest {
       when(scanner.scan(any())).thenReturn(verdict);
     }
 
+    void givenScannerVerdict(
+        final java.util.function.Function<byte[], Mono<ScanVerdict>> verdictFn) {
+      when(scanner.scan(any()))
+          .thenAnswer(invocation -> verdictFn.apply(invocation.getArgument(0)));
+    }
+
     SendNotificationBatchService service() {
       return new SendNotificationBatchService(
           new SendNotificationService(
@@ -317,7 +425,8 @@ class SendNotificationBatchServiceTest {
               notificationRepository,
               eventPublisherPort,
               new AttachmentResolver(
-                  new AttachmentInspector(detector, scanner, cache), uploads, storage)));
+                  new AttachmentInspector(detector, scanner, cache), uploads, storage)),
+          notificationBatchRepository);
     }
   }
 }

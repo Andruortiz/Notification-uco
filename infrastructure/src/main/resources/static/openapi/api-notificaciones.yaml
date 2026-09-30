@@ -207,7 +207,9 @@ paths:
         inválido no bloquea a los demás. Un elemento con un adjunto inválido, o que referencia una
         subida todavía en PENDING_SCAN, o rechazado por el catálogo (canal inexistente o
         deshabilitado, contenido que no cumple la forma del canal), se rechaza solo, con su motivo;
-        los demás siguen. Los resultados vienen en el mismo orden de los elementos de la solicitud.
+        los demás siguen. Un elemento que falla por un problema transitorio de infraestructura (por
+        ejemplo el escaner de adjuntos no responde) queda como FAILED en vez de tumbar el lote
+        completo. Los resultados vienen en el mismo orden de los elementos de la solicitud.
       operationId: sendNotificationBatch
       parameters:
         - $ref: '#/components/parameters/TenantId'
@@ -827,16 +829,20 @@ components:
           type: string
         outcome:
           type: string
-          enum: [ACCEPTED, DUPLICATE, REJECTED]
+          enum: [ACCEPTED, DUPLICATE, REJECTED, FAILED]
+          description: >
+            REJECTED es un rechazo de negocio (canal, contenido o adjunto invalido). FAILED es un
+            problema transitorio de infraestructura (por ejemplo el escaner de adjuntos no responde);
+            el cliente puede reintentar ese elemento.
         notificationId:
           type: string
           format: uuid
           nullable: true
-          description: Nulo cuando outcome es REJECTED.
+          description: Nulo cuando outcome es REJECTED o FAILED.
         rejectionReason:
           type: string
           nullable: true
-          description: Solo presente cuando outcome es REJECTED.
+          description: Solo presente cuando outcome es REJECTED o FAILED.
 
     NotificationStatusResponse:
       type: object

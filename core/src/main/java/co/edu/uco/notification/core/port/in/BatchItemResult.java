@@ -13,16 +13,17 @@ public record BatchItemResult(
   public BatchItemResult {
     Preconditions.requireNonNull(externalId, "externalId must not be null");
     Preconditions.requireNonNull(outcome, "outcome must not be null");
-    if (outcome == BatchItemOutcome.REJECTED) {
+    if (outcome == BatchItemOutcome.REJECTED || outcome == BatchItemOutcome.FAILED) {
       Preconditions.requireTrue(
-          notificationId == null, "notificationId must be null when outcome is REJECTED");
+          notificationId == null, "notificationId must be null when outcome is REJECTED or FAILED");
       Preconditions.requireNonBlank(
-          rejectionReason, "rejectionReason must not be blank when outcome is REJECTED");
+          rejectionReason, "rejectionReason must not be blank when outcome is REJECTED or FAILED");
     } else {
       Preconditions.requireNonNull(
-          notificationId, "notificationId must not be null unless outcome is REJECTED");
+          notificationId, "notificationId must not be null unless outcome is REJECTED or FAILED");
       Preconditions.requireTrue(
-          rejectionReason == null, "rejectionReason must be null unless outcome is REJECTED");
+          rejectionReason == null,
+          "rejectionReason must be null unless outcome is REJECTED or FAILED");
     }
   }
 
@@ -38,5 +39,9 @@ public record BatchItemResult(
 
   public static BatchItemResult rejected(final ExternalId externalId, final String reason) {
     return new BatchItemResult(externalId, BatchItemOutcome.REJECTED, null, reason);
+  }
+
+  public static BatchItemResult failed(final ExternalId externalId, final String reason) {
+    return new BatchItemResult(externalId, BatchItemOutcome.FAILED, null, reason);
   }
 }

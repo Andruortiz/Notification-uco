@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.port.in.SendNotificationBatchCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchUseCase;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
+import co.edu.uco.notification.core.repository.NotificationBatchRepository;
 import co.edu.uco.notification.utils.Preconditions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -21,11 +22,17 @@ public final class SendNotificationBatchService implements SendNotificationBatch
   private static final int MAX_CONCURRENT_ITEMS = 16;
 
   private final SendNotificationUseCase sendNotificationUseCase;
+  private final NotificationBatchRepository notificationBatchRepository;
 
-  public SendNotificationBatchService(final SendNotificationUseCase sendNotificationUseCase) {
+  public SendNotificationBatchService(
+      final SendNotificationUseCase sendNotificationUseCase,
+      final NotificationBatchRepository notificationBatchRepository) {
     this.sendNotificationUseCase =
         Preconditions.requireNonNull(
             sendNotificationUseCase, "sendNotificationUseCase must not be null");
+    this.notificationBatchRepository =
+        Preconditions.requireNonNull(
+            notificationBatchRepository, "notificationBatchRepository must not be null");
   }
 
   @Override
@@ -37,7 +44,16 @@ public final class SendNotificationBatchService implements SendNotificationBatch
     return Flux.fromIterable(command.items())
         .flatMapSequential(item -> processItem(command, item), MAX_CONCURRENT_ITEMS)
         .collectList()
-        .map(results -> new BatchAcceptedResult(batchId, results));
+        .map(results -> new BatchAcceptedResult(batchId, results))
+        .flatMap(result -> persistBatchRecord(command, result));
+  }
+
+  private Mono<BatchAcceptedResult> persistBatchRecord(
+      final SendNotificationBatchCommand command, final BatchAcceptedResult result) {
+    return notificationBatchRepository
+        .save(result, command.tenantId())
+        .onErrorResume(ex -> Mono.empty())
+        .thenReturn(result);
   }
 
   private Mono<BatchItemResult> processItem(
@@ -62,7 +78,10 @@ public final class SendNotificationBatchService implements SendNotificationBatch
                     : BatchItemResult.accepted(item.externalId(), result.notificationId()))
         .onErrorResume(
             SendNotificationBatchService::isItemRejection,
-            ex -> Mono.just(BatchItemResult.rejected(item.externalId(), ex.getMessage())));
+            ex -> Mono.just(BatchItemResult.rejected(item.externalId(), ex.getMessage())))
+        .onErrorResume(
+            Throwable.class,
+            ex -> Mono.just(BatchItemResult.failed(item.externalId(), ex.getMessage())));
   }
 
   private static boolean isItemRejection(final Throwable error) {

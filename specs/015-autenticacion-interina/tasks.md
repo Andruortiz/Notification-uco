@@ -52,7 +52,16 @@ infraestructura.
 - [X] T003 [P] Añadir `notification.auth.jwt.hs256-secret` (`${AUTH_JWT_HS256_SECRET}`, sin valor por
   defecto) y `notification.auth.jwt.ttl-minutes` (`${AUTH_JWT_TTL_MINUTES:720}`) a
   `infrastructure/src/main/resources/application.yml`, siguiendo la convención ya usada por
-  `notification.*` en ese archivo.
+  `notification.*` en ese archivo. **Desviación (aplicada durante US2, al migrar las ~24 clases de
+  prueba `@SpringBootTest`/`@WebFluxTest` existentes)**: `hs256-secret` sí lleva un valor por defecto
+  (`notification-uco-dev-only-secret-change-me-0123456789abcdef`, igual al documentado en
+  `.env.example`), mismo patrón que `notification.cors.allowed-origins` (que también tiene un
+  default no sensible). Sin este default, cada una de las ~24 clases `@SpringBootTest` existentes
+  habría necesitado declarar la propiedad explícitamente solo para que el contexto de Spring
+  arrancara (siguiendo el patrón ya usado para `MONGO_USERNAME`/`MONGO_PASSWORD` en esos tests), lo
+  que habría sido un cambio mecánico masivo sin valor añadido. El valor por defecto es un marcador
+  explícito de solo-desarrollo, no un secreto real; producción sigue exigiendo `AUTH_JWT_HS256_SECRET`
+  por variable de entorno para cualquier valor distinto al placeholder.
 - [X] T004 [P] Documentar `AUTH_JWT_HS256_SECRET` en `.env.example` con un valor de ejemplo marcado
   explícitamente como solo-desarrollo (nunca un secreto real), junto a las demás variables ya
   documentadas ahí.
@@ -180,6 +189,11 @@ invocar `chain.filter(...)`, mientras que un token válido sí lo invoca — sin
   `TokenValidationPort.validate(...)`; en error, clasifica el `RejectionReason`, registra con
   `AuthenticationLogFormatter` y responde `401`; en éxito, coloca el `AuthenticatedPrincipal` en un
   atributo del `ServerWebExchange` y continúa la cadena (todavía sin verificar rol — eso es US3).
+  **Desviación**: detectado durante US2 (`CorsConfigTest`/`CorsConfigCustomOriginTest` empezaron a
+  fallar, 403 esperado vs 401 real) que `CorsWebFilter` no declaraba una precedencia explícita y
+  corría después de este filtro pese a la intención de research Decisión 4. Corregido en
+  `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/CorsConfig.java`
+  anotando su `@Bean` con `@Order(Ordered.HIGHEST_PRECEDENCE)`.
   Orden posterior a `CorsWebFilter` (depende de T010, T011, T012, T015).
 - [X] T023 [US1] Registrar `AuthenticationWebFilter` como `@Bean` en `SecurityConfig`
   (`infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/SecurityConfig.java`,
@@ -213,11 +227,11 @@ siempre a `A`.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T025 [P] [US2] Unit test `AuthenticatedPrincipalArgumentResolverTest` en
+- [X] T025 [P] [US2] Unit test `AuthenticatedPrincipalArgumentResolverTest` en
   `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/in/web/AuthenticatedPrincipalArgumentResolverTest.java`
   — `supportsParameter` reconoce un parámetro de tipo `AuthenticatedPrincipal`; `resolveArgument`
   devuelve el valor puesto por el filtro en el atributo del exchange. Escribir primero.
-- [ ] T026 [US2] E2E `AuthenticationInterinaE2ETest` (primera tanda de escenarios,
+- [X] T026 [US2] E2E `AuthenticationInterinaE2ETest` (primera tanda de escenarios,
   `@SpringBootTest(webEnvironment = RANDOM_PORT)` + Testcontainers Mongo/RabbitMQ + `WebTestClient`)
   en
   `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/e2e/AuthenticationInterinaE2ETest.java`
@@ -229,30 +243,30 @@ siempre a `A`.
 
 ### Implementation for User Story 2
 
-- [ ] T027 [US2] Crear `AuthenticatedPrincipalArgumentResolver implements HandlerMethodArgumentResolver`
+- [X] T027 [US2] Crear `AuthenticatedPrincipalArgumentResolver implements HandlerMethodArgumentResolver`
   en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/web/AuthenticatedPrincipalArgumentResolver.java`
   — resuelve por tipo (`AuthenticatedPrincipal`) leyendo el atributo que deja `AuthenticationWebFilter`
   en el `ServerWebExchange` (depende de T006, T022).
-- [ ] T028 [US2] Crear `WebFluxConfig implements WebFluxConfigurer` en
+- [X] T028 [US2] Crear `WebFluxConfig implements WebFluxConfigurer` en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/WebFluxConfig.java` que
   registra `AuthenticatedPrincipalArgumentResolver` vía `configureArgumentResolvers` (depende de T027).
-- [ ] T029 [P] [US2] Modificar `NotificationController`
+- [X] T029 [P] [US2] Modificar `NotificationController`
   (`infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/rest/NotificationController.java`)
   — reemplazar cada `@RequestHeader("X-Tenant-Id") final String tenantId` por
   `final AuthenticatedPrincipal principal`, usando `principal.tenantId()` donde antes se envolvía
   `TenantId.of(tenantId)`.
-- [ ] T030 [P] [US2] Modificar `NotificationBatchController`
+- [X] T030 [P] [US2] Modificar `NotificationBatchController`
   (`infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/rest/NotificationBatchController.java`)
   — mismo reemplazo.
-- [ ] T031 [P] [US2] Modificar `AttachmentUploadController`
+- [X] T031 [P] [US2] Modificar `AttachmentUploadController`
   (`infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/rest/AttachmentUploadController.java`)
   — mismo reemplazo en sus tres métodos.
-- [ ] T032 [P] [US2] Modificar `ChannelCatalogController`
+- [X] T032 [P] [US2] Modificar `ChannelCatalogController`
   (`infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/rest/ChannelCatalogController.java`)
   — reemplazar el parámetro opcional `X-Tenant-Id` y el método privado `requireTenant` (ya innecesario,
   el filtro garantiza la presencia) por `final AuthenticatedPrincipal principal` en ambos métodos.
-- [ ] T033 [P] [US2] Modificar `NotificationLiveUpdatesController`
+- [X] T033 [P] [US2] Modificar `NotificationLiveUpdatesController`
   (`infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/rest/NotificationLiveUpdatesController.java`)
   — mismo reemplazo; el log de debug usa `principal.tenantId().value()` en vez de `tenantId`.
 - [ ] T034 [US2] Confirmar cobertura ≥80 %/≥70 % de los archivos nuevos/modificados de esta historia.
@@ -274,33 +288,33 @@ superior; el resto de operaciones expuestas alcanza con `CLIENTE`).
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T035 [P] [US3] Unit test `RouteAuthorizationPolicyTest` en
+- [X] T035 [P] [US3] Unit test `RouteAuthorizationPolicyTest` en
   `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/in/web/RouteAuthorizationPolicyTest.java`
   — `GET /notifications` exige `OPERADOR`; `POST /notifications`, `POST /notifications:sendBatch`,
   `GET /notifications/{id}`, el ciclo de `/attachment-uploads`, `GET /notifications:subscribe`,
   `GET /channels` y `GET /providers` exigen como mínimo `CLIENTE`; una ruta no reconocida no debe
   autorizar por omisión (falla cerrada también aquí). Escribir primero.
-- [ ] T036 [P] [US3] Ampliar `AuthenticationWebFilterTest` con los casos de rol insuficiente (token
+- [X] T036 [P] [US3] Ampliar `AuthenticationWebFilterTest` con los casos de rol insuficiente (token
   `CLIENTE` contra `GET /notifications` → `403` + log `INSUFFICIENT_ROLE`/`tenantId` conocido) y de
   rol suficiente (`OPERADOR` y `ADMINISTRADOR` → `chain.filter(...)` invocado). Escribir primero.
-- [ ] T037 [US3] Completar `AuthenticationInterinaE2ETest` con los escenarios de `quickstart.md`
+- [X] T037 [US3] Completar `AuthenticationInterinaE2ETest` con los escenarios de `quickstart.md`
   pendientes: rechazo `403` de `GET /notifications` con token `CLIENTE` y éxito con token `OPERADOR`
   (reutilizando el E2E de T026); suscripción SSE con `access_token` en query (`GET
   /notifications:subscribe?access_token=...`) recibiendo la foto inicial; y una aserción explícita de
   que ningún log emitido durante la prueba contiene el valor crudo de ningún token usado (SC-006).
-- [ ] T038 [US3] Confirmar en `AuthenticationInterinaE2ETest` que una solicitud sin token a cualquiera
+- [X] T038 [US3] Confirmar en `AuthenticationInterinaE2ETest` que una solicitud sin token a cualquiera
   de los endpoints cubiertos por esta historia responde `401` y que ninguna notificación/adjunto queda
   creado como efecto secundario (control positivo + negativo en la misma suite, no solo "no llega
   nada").
 
 ### Implementation for User Story 3
 
-- [ ] T039 [US3] Crear `RouteAuthorizationPolicy` en
+- [X] T039 [US3] Crear `RouteAuthorizationPolicy` en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/web/RouteAuthorizationPolicy.java`
   — tabla estática método+path → `Role` mínimo (FR-009/FR-010: `GET /notifications` → `OPERADOR`; el
   resto de rutas ya expuestas → `CLIENTE`); método `minimumRoleFor(HttpMethod method, String path)`
   que no autoriza por omisión ante una ruta no reconocida.
-- [ ] T040 [US3] Extender `AuthenticationWebFilter` (T022) para, tras validar el token, consultar
+- [X] T040 [US3] Extender `AuthenticationWebFilter` (T022) para, tras validar el token, consultar
   `RouteAuthorizationPolicy` y, si `principal.role().satisfies(minimo)` es falso, registrar el rechazo
   (`RejectionReason.INSUFFICIENT_ROLE`) y responder `403` en vez de continuar la cadena.
 - [ ] T041 [US3] Confirmar cobertura ≥80 %/≥70 % de los archivos nuevos/modificados de esta historia.

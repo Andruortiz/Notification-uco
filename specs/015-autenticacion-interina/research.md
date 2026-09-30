@@ -39,6 +39,16 @@ dos `[NEEDS CLARIFICATION]` dejados abiertos en `spec.md`. Se presenta aquí con
 tradeoffs, tal como lo pidió el encargo de la historia, y queda sujeta a la aprobación del plan
 (Principio VI) — no es una decisión unilateral definitiva hasta que el usuario apruebe este documento.
 
+**Addendum (durante la implementación de US2)**: `notification.auth.jwt.hs256-secret` sí lleva un
+valor por defecto en `application.yml`
+(`notification-uco-dev-only-secret-change-me-0123456789abcdef`, igual al de `.env.example`), a
+diferencia de lo escrito arriba ("sin valor por defecto" en el diseño original). Se decidió así para
+no tener que declarar la propiedad explícitamente en cada una de las ~24 clases `@SpringBootTest`
+existentes en el repositorio, solo para que el contexto de Spring arrancara — mismo patrón que
+`notification.cors.allowed-origins`, que también tiene un default no sensible. El valor es un
+marcador explícito de solo-desarrollo (nunca un secreto real); producción sigue exigiendo
+`AUTH_JWT_HS256_SECRET` por variable de entorno para cualquier valor que no sea ese placeholder.
+
 ## Decisión 2 — Mecanismo de tokens para desarrollo y pruebas
 
 **Decisión**: una clase Java reutilizable en código de producción —
@@ -125,6 +135,15 @@ salud ya están pensadas para consultarse sin fricción, Principio IX).
 **Orden de filtros**: `AuthenticationWebFilter` implementa `Ordered` con una precedencia posterior a
 `CorsWebFilter`, de forma que una solicitud `OPTIONS` de preflight se resuelve por CORS antes de llegar
 al filtro de autenticación (que además la exime explícitamente, como cinturón y tirantes).
+
+**Addendum (durante la implementación de US2)**: `CorsWebFilter` (bean de `CorsConfig`) no
+implementaba `Ordered` por su cuenta — sin una precedencia explícita, Spring lo coloca en
+`Ordered.LOWEST_PRECEDENCE`, lo que hacía que `AuthenticationWebFilter` (declarado con
+`Ordered.HIGHEST_PRECEDENCE + 10`) corriera primero en la práctica, rechazando con `401` solicitudes
+de origen no permitido que antes CORS rechazaba con `403` (detectado por `CorsConfigTest` y
+`CorsConfigCustomOriginTest`, ya existentes). Corregido anotando el método `@Bean corsWebFilter` con
+`@Order(Ordered.HIGHEST_PRECEDENCE)` en `CorsConfig`, para que CORS siga corriendo primero como se
+diseñó.
 
 ## Decisión 5 — `GET /notifications:subscribe` (SSE) sin soporte de headers custom
 

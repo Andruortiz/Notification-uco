@@ -55,7 +55,7 @@ Implementa `TokenValidationPort` con JJWT (Decisión 1 de `research.md`). Config
 
 | Propiedad | Origen | Notas |
 |---|---|---|
-| `AUTH_JWT_HS256_SECRET` | variable de entorno | Nunca versionado; `.env.example` documenta solo un valor de ejemplo marcado como no-productivo. |
+| `AUTH_JWT_HS256_SECRET` | variable de entorno, con default de solo-desarrollo en `application.yml` | El default (`notification-uco-dev-only-secret-change-me-0123456789abcdef`) es un marcador, nunca un secreto real; `.env.example` documenta el mismo valor. Producción exige sobrescribirlo. |
 | `AUTH_JWT_TTL_MINUTES` | variable de entorno, opcional | Solo lo usa `LocalJwtTokenIssuer` al acuñar; el adaptador de validación no lo necesita, valida `exp` tal como venga en el token. Por defecto 720. |
 
 ## `LocalJwtTokenIssuer` (nuevo, `infrastructure/adapter/out/security/local/`)

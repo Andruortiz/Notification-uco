@@ -21,6 +21,13 @@ import co.edu.uco.notification.core.port.in.BatchItemResult;
 import co.edu.uco.notification.core.port.in.BatchNotificationItem;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchUseCase;
+import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
+import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
+import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
+import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.config.SecurityConfig;
+import co.edu.uco.notification.infrastructure.config.WebFluxConfig;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -31,12 +38,21 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
 @WebFluxTest(controllers = NotificationBatchController.class)
+@Import({
+  SecurityConfig.class,
+  AuthenticationWebFilter.class,
+  LocalJwtTokenValidationAdapter.class,
+  RouteAuthorizationPolicy.class,
+  AuthenticatedPrincipalArgumentResolver.class,
+  WebFluxConfig.class
+})
 class NotificationBatchControllerTest {
 
   private static final String VALID_ITEM =
@@ -72,7 +88,7 @@ class NotificationBatchControllerTest {
     return webTestClient
         .post()
         .uri("/notifications:sendBatch")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(body)
         .exchange();
@@ -217,7 +233,7 @@ class NotificationBatchControllerTest {
   }
 
   @Test
-  void sendBatchRejectsARequestWithoutTenantHeader() {
+  void sendBatchRejectsARequestWithoutAToken() {
     webTestClient
         .post()
         .uri("/notifications:sendBatch")
@@ -225,7 +241,7 @@ class NotificationBatchControllerTest {
         .bodyValue("{\"items\": [" + VALID_ITEM + "]}")
         .exchange()
         .expectStatus()
-        .isBadRequest();
+        .isUnauthorized();
 
     verify(sendNotificationBatchUseCase, never()).sendBatch(any());
   }

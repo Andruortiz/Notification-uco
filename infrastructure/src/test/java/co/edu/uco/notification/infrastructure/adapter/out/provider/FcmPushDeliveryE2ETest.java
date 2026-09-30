@@ -18,6 +18,7 @@ import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URLDecoder;
@@ -195,7 +196,7 @@ class FcmPushDeliveryE2ETest {
         webTestClient
             .post()
             .uri("/notifications")
-            .header("X-Tenant-Id", TENANT)
+            .header("Authorization", TestTokens.bearer(TENANT))
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(request)
             .exchange()
@@ -214,7 +215,7 @@ class FcmPushDeliveryE2ETest {
         webTestClient
             .post()
             .uri("/notifications")
-            .header("X-Tenant-Id", TENANT)
+            .header("Authorization", TestTokens.bearer(TENANT))
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(request)
             .exchange()
@@ -236,7 +237,7 @@ class FcmPushDeliveryE2ETest {
     return webTestClient
         .get()
         .uri("/notifications/{id}", notificationId)
-        .header("X-Tenant-Id", TENANT)
+        .header("Authorization", TestTokens.bearer(TENANT))
         .exchange()
         .expectStatus()
         .isOk()

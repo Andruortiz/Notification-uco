@@ -1,5 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
+import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.BatchId;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
@@ -7,7 +8,6 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.Priority;
 import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
-import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.in.BatchNotificationItem;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchUseCase;
@@ -16,7 +16,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
@@ -34,21 +33,21 @@ public class NotificationBatchController {
 
   @PostMapping("/notifications:sendBatch")
   public Mono<ResponseEntity<BatchAcceptedResponse>> sendBatch(
-      @RequestHeader("X-Tenant-Id") final String tenantId,
+      final AuthenticatedPrincipal principal,
       @RequestBody final SendNotificationBatchRequest request) {
     return sendNotificationBatchUseCase
-        .sendBatch(toCommand(tenantId, request))
+        .sendBatch(toCommand(principal, request))
         .map(BatchAcceptedResponse::from)
         .map(response -> ResponseEntity.status(HttpStatus.ACCEPTED).body(response));
   }
 
   private static SendNotificationBatchCommand toCommand(
-      final String tenantId, final SendNotificationBatchRequest request) {
+      final AuthenticatedPrincipal principal, final SendNotificationBatchRequest request) {
     if (request.items() == null || request.items().isEmpty()) {
       throw new IllegalArgumentException("items must not be empty");
     }
     return new SendNotificationBatchCommand(
-        TenantId.of(tenantId),
+        principal.tenantId(),
         request.batchId() == null ? null : BatchId.of(request.batchId()),
         request.items().stream().map(NotificationBatchController::toItem).toList());
   }

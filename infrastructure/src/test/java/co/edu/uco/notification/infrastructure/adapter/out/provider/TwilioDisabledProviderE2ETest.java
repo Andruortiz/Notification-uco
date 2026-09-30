@@ -15,6 +15,7 @@ import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -116,7 +117,7 @@ class TwilioDisabledProviderE2ETest {
         webTestClient
             .post()
             .uri("/notifications")
-            .header("X-Tenant-Id", TENANT)
+            .header("Authorization", TestTokens.bearer(TENANT))
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(
                 Map.of(
@@ -140,7 +141,7 @@ class TwilioDisabledProviderE2ETest {
     return webTestClient
         .get()
         .uri("/notifications/{id}", notificationId)
-        .header("X-Tenant-Id", TENANT)
+        .header("Authorization", TestTokens.bearer(TENANT))
         .exchange()
         .expectStatus()
         .isOk()

@@ -1,7 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import co.edu.uco.notification.core.domain.AttachmentUpload;
-import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
 import co.edu.uco.notification.core.port.in.CompleteAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.GetAttachmentUploadUseCase;
@@ -17,7 +17,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
@@ -44,12 +43,12 @@ public class AttachmentUploadController {
 
   @PostMapping
   public Mono<ResponseEntity<AttachmentUploadResponse>> issue(
-      @RequestHeader("X-Tenant-Id") final String tenantId,
+      final AuthenticatedPrincipal principal,
       @RequestBody final IssueAttachmentUploadRequest request) {
     return Mono.defer(
             () ->
                 issueUseCase.issue(
-                    TenantId.of(tenantId),
+                    principal.tenantId(),
                     request.fileName(),
                     request.contentType(),
                     request.sizeBytes()))
@@ -62,10 +61,9 @@ public class AttachmentUploadController {
 
   @PostMapping("/{uploadId}:complete")
   public Mono<ResponseEntity<AttachmentUploadResponse>> complete(
-      @RequestHeader("X-Tenant-Id") final String tenantId,
-      @PathVariable("uploadId") final String uploadId) {
+      final AuthenticatedPrincipal principal, @PathVariable("uploadId") final String uploadId) {
     return completeUseCase
-        .complete(TenantId.of(tenantId), UploadId.of(uploadId))
+        .complete(principal.tenantId(), UploadId.of(uploadId))
         .doOnNext(upload -> log("completed", upload))
         .map(
             upload ->
@@ -75,10 +73,9 @@ public class AttachmentUploadController {
 
   @GetMapping("/{uploadId}")
   public Mono<AttachmentUploadResponse> get(
-      @RequestHeader("X-Tenant-Id") final String tenantId,
-      @PathVariable("uploadId") final String uploadId) {
+      final AuthenticatedPrincipal principal, @PathVariable("uploadId") final String uploadId) {
     return getUseCase
-        .get(TenantId.of(tenantId), UploadId.of(uploadId))
+        .get(principal.tenantId(), UploadId.of(uploadId))
         .map(AttachmentUploadResponse::of);
   }
 

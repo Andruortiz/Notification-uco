@@ -9,6 +9,7 @@ import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationDocument;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -95,7 +96,7 @@ class NotificationLiveUpdatesFilteredE2ETest {
     return webTestClient
         .get()
         .uri("/notifications:subscribe?status=" + status)
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()

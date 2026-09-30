@@ -23,6 +23,7 @@ import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogProperties;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
@@ -144,7 +145,7 @@ class ChannelCatalogQueryE2ETest {
     return webTestClient
         .get()
         .uri(path)
-        .header("X-Tenant-Id", tenant)
+        .header("Authorization", TestTokens.bearer(tenant))
         .exchange()
         .expectStatus()
         .isOk()
@@ -213,7 +214,7 @@ class ChannelCatalogQueryE2ETest {
         webTestClient
             .post()
             .uri("/notifications")
-            .header("X-Tenant-Id", TENANT)
+            .header("Authorization", TestTokens.bearer(TENANT))
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(
                 Map.of(
@@ -247,7 +248,7 @@ class ChannelCatalogQueryE2ETest {
     return webTestClient
         .get()
         .uri("/notifications/{id}", notificationId)
-        .header("X-Tenant-Id", TENANT)
+        .header("Authorization", TestTokens.bearer(TENANT))
         .exchange()
         .expectStatus()
         .isOk()
@@ -442,15 +443,15 @@ class ChannelCatalogQueryE2ETest {
   }
 
   @Test
-  void rejectsARequestWithoutTenant() {
+  void rejectsARequestWithoutAToken() {
     webTestClient
         .get()
         .uri("/providers")
         .exchange()
         .expectStatus()
-        .isBadRequest()
+        .isUnauthorized()
         .expectBody()
         .jsonPath("$.message")
-        .isEqualTo("TenantId must not be blank");
+        .isEqualTo("missing or invalid bearer token");
   }
 }

@@ -525,7 +525,12 @@ paths:
     get:
       tags: [Preferencias]
       summary: Consultar las preferencias de un destinatario
-      description: CU-09. Lectura antes de escribir -- el actor consulta lo vigente antes de modificarlo.
+      description: >
+        CU-09. Devuelve las preferencias vigentes del destinatario dentro del tenant del encabezado.
+        Un destinatario que nunca declaró preferencias no es un error: se devuelve el valor por
+        defecto (optedOutAll false, acceptedChannels vacía -- todos los canales aceptados -- y
+        updatedAt nulo). Las preferencias de un tenant nunca son visibles desde otro, aunque usen el
+        mismo recipientId.
       operationId: getRecipientPreferences
       parameters:
         - $ref: '#/components/parameters/TenantId'
@@ -543,9 +548,12 @@ paths:
       tags: [Preferencias]
       summary: Actualizar las preferencias de un destinatario
       description: >
-        CU-09. Declara por qué canales acepta ser contactado, o solicita su baja total
-        (optedOutAll). Una baja total hace que CU-03 descarte (DISCARDED) sus notificaciones
-        futuras en vez de intentarlas.
+        CU-09. Reemplaza por completo las preferencias del destinatario dentro del tenant del
+        encabezado: por qué canales acepta ser contactado, o su baja total (optedOutAll). Desde el
+        siguiente despacho -- incluidas las notificaciones ya aceptadas que aún no se enviaron y los
+        reintentos --, una notificación de ese destinatario termina en DISCARDED sin contactar a
+        ningún proveedor si está dado de baja o si su canal no está entre los aceptados. La aceptación
+        de notificaciones no cambia, y las notificaciones ya terminales no se modifican.
       operationId: updateRecipientPreferences
       parameters:
         - $ref: '#/components/parameters/TenantId'
@@ -558,11 +566,19 @@ paths:
               $ref: '#/components/schemas/UpdatePreferencesRequest'
       responses:
         '200':
-          description: Preferencias actualizadas.
+          description: Preferencias actualizadas, tal como quedaron guardadas.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipientPreferencesResponse'
+        '400':
+          description: >
+            Cuerpo ausente o una entrada de acceptedChannels vacía o solo con espacios. Las
+            preferencias vigentes no cambian.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   parameters:
@@ -976,6 +992,7 @@ components:
 
     RecipientPreferencesResponse:
       type: object
+      required: [recipientId, optedOutAll, acceptedChannels]
       properties:
         recipientId:
           type: string
@@ -985,10 +1002,14 @@ components:
           type: array
           items:
             type: string
-          description: Ignorado si optedOutAll es true.
+          description: >
+            Canales aceptados, en mayúsculas y sin duplicados. Vacía significa sin restricción (todos
+            los canales aceptados). Siempre vacía si optedOutAll es true.
         updatedAt:
           type: string
           format: date-time
+          nullable: true
+          description: Nulo si el destinatario nunca declaró preferencias en este tenant.
 
     UpdatePreferencesRequest:
       type: object
@@ -1000,7 +1021,10 @@ components:
           type: array
           items:
             type: string
-          description: Ignorado si optedOutAll es true.
+          description: >
+            Vacía o ausente significa que acepta todos los canales. Cada entrada se normaliza (sin
+            espacios alrededor, en mayúsculas, sin duplicados); una entrada vacía rechaza la
+            actualización con 400. Ignorada si optedOutAll es true.
 
     ProviderStatus:
       type: string

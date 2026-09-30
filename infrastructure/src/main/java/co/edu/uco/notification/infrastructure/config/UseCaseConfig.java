@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
 import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
+import co.edu.uco.notification.core.repository.NotificationBatchRepository;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.usecase.*;
 import java.time.Clock;
@@ -139,8 +140,9 @@ public class UseCaseConfig {
 
   @Bean
   SendNotificationBatchUseCase sendNotificationBatchUseCase(
-      final SendNotificationUseCase sendNotificationUseCase) {
-    return new SendNotificationBatchService(sendNotificationUseCase);
+      final SendNotificationUseCase sendNotificationUseCase,
+      final NotificationBatchRepository notificationBatchRepository) {
+    return new SendNotificationBatchService(sendNotificationUseCase, notificationBatchRepository);
   }
 
   @Bean

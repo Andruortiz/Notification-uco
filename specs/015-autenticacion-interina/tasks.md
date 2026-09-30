@@ -66,63 +66,73 @@ de registro de rechazos — todo lo que las tres historias comparten.
 
 **⚠️ CRITICAL**: Ninguna historia empieza hasta que esta fase esté completa.
 
-- [ ] T005 [P] Crear el enum `Role` en
+- [X] T005 [P] Crear el enum `Role` en
   `core/src/main/java/co/edu/uco/notification/core/domain/valueobject/Role.java`
   (`ADMINISTRADOR`, `OPERADOR`, `CLIENTE`, en ese orden; método `satisfies(Role required)`; método
   estático `of(String)` que valida el nombre exacto).
-- [ ] T006 [P] Crear el value object `AuthenticatedPrincipal` en
+- [X] T006 [P] Crear el value object `AuthenticatedPrincipal` en
   `core/src/main/java/co/edu/uco/notification/core/domain/valueobject/AuthenticatedPrincipal.java`
   (record con `subject: String`, `tenantId: TenantId`, `role: Role`; validación de `subject` no vacío
   con `Preconditions.requireNonBlank`, igual que el resto de value objects del proyecto).
-- [ ] T007 [P] Crear `InvalidTokenException` en
+- [X] T007 [P] Crear `InvalidTokenException` en
   `core/src/main/java/co/edu/uco/notification/core/exception/InvalidTokenException.java`
   (`RuntimeException` simple, sin más jerarquía, siguiendo la forma de las excepciones ya existentes
   en ese paquete).
-- [ ] T008 [P] [US1] Unit test `RoleTest` en
+- [X] T008 [P] [US1] Unit test `RoleTest` en
   `core/src/test/java/co/edu/uco/notification/core/domain/valueobject/RoleTest.java` — verificar la
   jerarquía completa `ADMINISTRADOR.satisfies(OPERADOR)==true`,
   `CLIENTE.satisfies(OPERADOR)==false`, `Role.of("invalido")` lanza excepción. Escribir primero,
   confirmar que falla por no existir `Role` todavía.
-- [ ] T009 [P] [US1] Unit test `AuthenticatedPrincipalTest` en
+- [X] T009 [P] [US1] Unit test `AuthenticatedPrincipalTest` en
   `core/src/test/java/co/edu/uco/notification/core/domain/valueobject/AuthenticatedPrincipalTest.java`
   — `subject` en blanco lanza excepción. Escribir primero.
-- [ ] T010 Crear `TokenValidationPort` en
+- [X] T010 Crear `TokenValidationPort` en
   `core/src/main/java/co/edu/uco/notification/core/port/out/TokenValidationPort.java`
   (`Mono<AuthenticatedPrincipal> validate(String rawToken)`, sin importar JJWT ni Spring — depende de
   T006).
-- [ ] T011 [P] Crear `RejectionReason` en
+- [X] T011 [P] Crear `RejectionReason` en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/web/RejectionReason.java`
   (enum: `MISSING_TOKEN`, `MALFORMED_TOKEN`, `INVALID_SIGNATURE`, `EXPIRED`, `MISSING_CLAIMS`,
   `UNKNOWN_ROLE`, `INSUFFICIENT_ROLE`).
-- [ ] T012 [P] Crear `AuthenticationLogFormatter` en
+- [X] T012 [P] Crear `AuthenticationLogFormatter` en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/web/AuthenticationLogFormatter.java`
   — misma forma que `AttachmentLogFormatter` (sanitiza `tenantId`, que puede ser `null`; compone la
   línea de log con `RejectionReason`; nunca recibe el token ni el secreto como parámetro).
-- [ ] T013 [P] Unit test `AuthenticationLogFormatterTest` en
+- [X] T013 [P] Unit test `AuthenticationLogFormatterTest` en
   `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/in/web/AuthenticationLogFormatterTest.java`
   — `tenantId` nulo se formatea sin lanzar excepción; caracteres de control se sanitizan igual que
   `AttachmentLogFormatter`. Escribir primero.
-- [ ] T014 Crear `LocalJwtTokenIssuer` en
+- [X] T014 Crear `LocalJwtTokenIssuer` en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/security/local/LocalJwtTokenIssuer.java`
   — clase Java plana (sin anotaciones Spring), constructor con el secreto HS256, método
   `issue(TenantId tenantId, Role role, String subject, Duration ttl)` que produce un JWT firmado con
   claims `sub`, `tenantId`, `role`, `iat`, `exp` (JJWT).
-- [ ] T015 Crear `LocalJwtTokenValidationAdapter implements TokenValidationPort` en
+- [X] T015 Crear `LocalJwtTokenValidationAdapter implements TokenValidationPort` en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/out/security/local/LocalJwtTokenValidationAdapter.java`
   — verifica firma HS256, expiración y presencia/validez de `sub`/`tenantId`/`role`; cualquier fallo
   termina el `Mono` en error con `InvalidTokenException` (depende de T007, T010, T014).
-- [ ] T016 [US1] Unit test `LocalJwtTokenValidationAdapterTest` en
+- [X] T016 [US1] Unit test `LocalJwtTokenValidationAdapterTest` en
   `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/security/local/LocalJwtTokenValidationAdapterTest.java`
   — casos: token válido (emitido con `LocalJwtTokenIssuer`, nunca JSON armado a mano) → completa con
   el `AuthenticatedPrincipal` esperado; firma con secreto distinto, expirado, `tenantId`/`role`
   faltante, `role` desconocido → cada uno termina en `InvalidTokenException`. Escribir primero,
   confirmar que falla por no existir el adaptador.
-- [ ] T017 Crear `SecurityConfig` en
+- [X] T017 Crear `SecurityConfig` en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/SecurityConfig.java`
   — expone `TokenValidationPort` (bean `LocalJwtTokenValidationAdapter`, leyendo
   `notification.auth.jwt.hs256-secret`) y, si se decide exponerlo para conveniencia de desarrollo
   manual, `LocalJwtTokenIssuer` (depende de T014, T015).
-- [ ] T018 Confirmar que `HexagonalArchitectureTest`/`ModularityTests`
+  **Desviación**: `ModularityTests` (Spring Modulith) rechaza que `config` dependa directamente de un
+  tipo no expuesto de un paquete anidado de `adapter` (mismo patrón que ya aplica a
+  `MinioAttachmentStorageAdapter`/`TwilioNotificationProvider`). En vez de un método `@Bean` en
+  `SecurityConfig` que instancia `LocalJwtTokenValidationAdapter`, la clase se anota `@Component`
+  directamente (constructor `AuthJwtProperties`, con un segundo constructor `String` para uso directo
+  desde pruebas) y Spring la descubre por component scan; `SecurityConfig` solo registra
+  `AuthJwtProperties` nueva (`@ConfigurationProperties(prefix = "notification.auth.jwt")`) vía
+  `@EnableConfigurationProperties`, igual que el resto de adaptadores del repositorio. `LocalJwtTokenIssuer`
+  no se expone como bean (no lo necesita ningún componente productivo); las pruebas lo instancian
+  directamente con `new`.
+- [X] T018 Confirmar que `HexagonalArchitectureTest`/`ModularityTests`
   (`./mvnw -B -ntp -pl infrastructure -am test -Dtest='HexagonalArchitectureTest,ModularityTests' -Dsurefire.failIfNoSpecifiedTests=false`)
   siguen en verde con los tipos nuevos de `core` y `infrastructure`.
 

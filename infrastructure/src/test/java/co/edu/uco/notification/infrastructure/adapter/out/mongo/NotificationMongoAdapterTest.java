@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
@@ -30,7 +31,6 @@ import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.index.CompoundIndexDefinition;
 import org.testcontainers.containers.MongoDBContainer;
@@ -122,7 +122,9 @@ class NotificationMongoAdapterTest {
   void saveRejectsADuplicateTenantAndExternalId() {
     adapter.save(aNotification("order-4")).block();
 
-    assertThrows(DuplicateKeyException.class, () -> adapter.save(aNotification("order-4")).block());
+    assertThrows(
+        NotificationAlreadyAcceptedException.class,
+        () -> adapter.save(aNotification("order-4")).block());
   }
 
   @Test

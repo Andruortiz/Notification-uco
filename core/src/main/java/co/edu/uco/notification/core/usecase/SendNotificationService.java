@@ -9,6 +9,7 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.port.in.AttachmentSummary;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
@@ -92,7 +93,13 @@ public final class SendNotificationService implements SendNotificationUseCase {
                 eventPublisherPort
                     .publish(events)
                     .then(eventPublisherPort.enqueueForDispatch(saved))
-                    .thenReturn(toResult(saved, false)));
+                    .thenReturn(toResult(saved, false)))
+        .onErrorResume(
+            NotificationAlreadyAcceptedException.class,
+            ex ->
+                notificationRepository
+                    .findByTenantAndExternalId(command.tenantId(), command.externalId())
+                    .map(existing -> toResult(existing, true)));
   }
 
   private static SendNotificationResult toResult(

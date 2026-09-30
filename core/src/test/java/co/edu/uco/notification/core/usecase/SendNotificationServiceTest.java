@@ -19,6 +19,7 @@ import co.edu.uco.notification.core.exception.AttachmentNotReadyException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
+import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.port.in.AttachmentSummary;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
@@ -121,6 +122,36 @@ class SendNotificationServiceTest {
     assertTrue(result.duplicate());
 
     verify(notificationRepository, never()).save(any(Notification.class));
+    verify(eventPublisherPort, never()).publish(any());
+    verify(eventPublisherPort, never()).enqueueForDispatch(any(Notification.class));
+  }
+
+  @Test
+  void sendReturnsTheExistingNotificationWhenAConcurrentSaveLosesTheIdempotencyRace() {
+    final Notification existing =
+        Notification.accept(
+            new NotificationRouting(
+                TENANT_ID,
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
+    existing.pullEvents();
+
+    when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID))
+        .thenReturn(Mono.just(activeRoute()));
+    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
+        .thenReturn(Mono.empty(), Mono.just(existing));
+    when(notificationRepository.save(any(Notification.class)))
+        .thenReturn(Mono.error(new NotificationAlreadyAcceptedException(TENANT_ID, EXTERNAL_ID)));
+
+    final SendNotificationResult result = service.send(command()).block();
+
+    assertNotNull(result);
+    assertEquals(existing.notificationId(), result.notificationId());
+    assertTrue(result.duplicate());
+
     verify(eventPublisherPort, never()).publish(any());
     verify(eventPublisherPort, never()).enqueueForDispatch(any(Notification.class));
   }

@@ -31,7 +31,7 @@
         <springdoc.version>2.6.0</springdoc.version>
         <json-schema-validator.version>1.4.0</json-schema-validator.version>
         <tika.version>3.2.3</tika.version>
-        <minio.version>8.5.17</minio.version>
+        <minio.version>8.6.0</minio.version>
 
         <spotless-maven-plugin.version>2.43.0</spotless-maven-plugin.version>
         <spotbugs-maven-plugin.version>4.8.6.4</spotbugs-maven-plugin.version>

@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.in.web;
 
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
+import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.utils.Preconditions;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -34,10 +35,16 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
   private static final String ACCESS_TOKEN_PARAM = "access_token";
 
   private final TokenValidationPort tokenValidationPort;
+  private final RouteAuthorizationPolicy routeAuthorizationPolicy;
 
-  public AuthenticationWebFilter(final TokenValidationPort tokenValidationPort) {
+  public AuthenticationWebFilter(
+      final TokenValidationPort tokenValidationPort,
+      final RouteAuthorizationPolicy routeAuthorizationPolicy) {
     this.tokenValidationPort =
         Preconditions.requireNonNull(tokenValidationPort, "tokenValidationPort must not be null");
+    this.routeAuthorizationPolicy =
+        Preconditions.requireNonNull(
+            routeAuthorizationPolicy, "routeAuthorizationPolicy must not be null");
   }
 
   @Override
@@ -64,6 +71,12 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       final ServerWebExchange exchange,
       final WebFilterChain chain,
       final AuthenticatedPrincipal principal) {
+    final Role minimumRole =
+        routeAuthorizationPolicy.minimumRoleFor(
+            exchange.getRequest().getMethod(), exchange.getRequest().getPath().value());
+    if (!principal.role().satisfies(minimumRole)) {
+      return rejectForbidden(exchange, principal.tenantId().value());
+    }
     exchange.getAttributes().put(PRINCIPAL_ATTRIBUTE, principal);
     return chain.filter(exchange);
   }
@@ -123,6 +136,14 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       final ServerWebExchange exchange, final String tenantId, final RejectionReason reason) {
     LOGGER.warn(AuthenticationLogFormatter.rejection(tenantId, reason));
     return writeJson(exchange, HttpStatus.UNAUTHORIZED, "missing or invalid bearer token");
+  }
+
+  private Mono<Void> rejectForbidden(final ServerWebExchange exchange, final String tenantId) {
+    LOGGER.warn(AuthenticationLogFormatter.rejection(tenantId, RejectionReason.INSUFFICIENT_ROLE));
+    return writeJson(
+        exchange,
+        HttpStatus.FORBIDDEN,
+        "role does not satisfy the minimum role required for this operation");
   }
 
   private static Mono<Void> writeJson(

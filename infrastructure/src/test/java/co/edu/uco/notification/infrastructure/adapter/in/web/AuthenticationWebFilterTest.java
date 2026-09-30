@@ -36,7 +36,8 @@ class AuthenticationWebFilterTest {
   private final LocalJwtTokenIssuer issuer = new LocalJwtTokenIssuer(SECRET);
   private final TokenValidationPort tokenValidationPort =
       new LocalJwtTokenValidationAdapter(SECRET);
-  private final AuthenticationWebFilter filter = new AuthenticationWebFilter(tokenValidationPort);
+  private final AuthenticationWebFilter filter =
+      new AuthenticationWebFilter(tokenValidationPort, new RouteAuthorizationPolicy());
 
   @Test
   void rejectsRequestWithoutAuthorizationHeader() {
@@ -139,6 +140,62 @@ class AuthenticationWebFilterTest {
     StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
 
     assertTrue(chainInvoked.get());
+  }
+
+  @Test
+  void rejectsInsufficientRoleWithForbidden() {
+    final String token =
+        issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
+    final ServerWebExchange exchange =
+        exchangeWithHeader(HttpMethod.GET, "/notifications", "Bearer " + token);
+    final AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+    StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
+
+    assertEquals(HttpStatus.FORBIDDEN, exchange.getResponse().getStatusCode());
+    assertFalse(chainInvoked.get());
+  }
+
+  @Test
+  void acceptsSufficientRoleAndContinuesChain() {
+    final String operadorToken =
+        issuer.issue(TenantId.of("tenant-a"), Role.OPERADOR, "client-1", Duration.ofMinutes(5));
+    final ServerWebExchange operadorExchange =
+        exchangeWithHeader(HttpMethod.GET, "/notifications", "Bearer " + operadorToken);
+    final AtomicBoolean operadorChainInvoked = new AtomicBoolean(false);
+    StepVerifier.create(filter.filter(operadorExchange, recordingChain(operadorChainInvoked)))
+        .verifyComplete();
+    assertTrue(operadorChainInvoked.get());
+
+    final String adminToken =
+        issuer.issue(
+            TenantId.of("tenant-a"), Role.ADMINISTRADOR, "client-1", Duration.ofMinutes(5));
+    final ServerWebExchange adminExchange =
+        exchangeWithHeader(HttpMethod.GET, "/notifications", "Bearer " + adminToken);
+    final AtomicBoolean adminChainInvoked = new AtomicBoolean(false);
+    StepVerifier.create(filter.filter(adminExchange, recordingChain(adminChainInvoked)))
+        .verifyComplete();
+    assertTrue(adminChainInvoked.get());
+  }
+
+  @Test
+  void insufficientRoleRejectionIsLoggedWithTheKnownTenant() {
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      final String token =
+          issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
+      final ServerWebExchange exchange =
+          exchangeWithHeader(HttpMethod.GET, "/notifications", "Bearer " + token);
+
+      StepVerifier.create(filter.filter(exchange, recordingChain(new AtomicBoolean())))
+          .verifyComplete();
+
+      final List<String> lines = lines(logs);
+      assertTrue(lines.stream().anyMatch(line -> line.contains("INSUFFICIENT_ROLE")));
+      assertTrue(lines.stream().anyMatch(line -> line.contains("tenant-a")));
+    } finally {
+      release(logs);
+    }
   }
 
   @Test

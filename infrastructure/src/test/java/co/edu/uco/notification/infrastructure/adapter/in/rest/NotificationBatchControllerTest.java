@@ -132,12 +132,7 @@ class NotificationBatchControllerTest {
                         BatchItemResult.accepted(
                             ExternalId.of("order-1"), NotificationId.newId())))));
 
-    post(
-            "{\"batchId\": \"batch-1\", \"items\": ["
-                + VALID_ITEM
-                + ","
-                + ITEM_WITHOUT_SUBJECT
-                + "]}")
+    post("{\"batchId\": \"batch-1\", \"items\": [" + VALID_ITEM + "," + ITEM_WITHOUT_SUBJECT + "]}")
         .expectStatus()
         .isEqualTo(HttpStatus.ACCEPTED);
 

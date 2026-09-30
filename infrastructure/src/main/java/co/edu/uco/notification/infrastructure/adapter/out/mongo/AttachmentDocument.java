@@ -1,5 +1,8 @@
 package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
+import java.util.Arrays;
+import java.util.Objects;
+
 public record AttachmentDocument(
     String tenantId,
     String fileName,
@@ -21,6 +24,33 @@ public record AttachmentDocument(
   @Override
   public byte[] content() {
     return content == null ? null : content.clone();
+  }
+
+  @Override
+  public boolean equals(final Object other) {
+    if (this == other) {
+      return true;
+    }
+    if (!(other instanceof AttachmentDocument that)) {
+      return false;
+    }
+    return sizeBytes == that.sizeBytes
+        && Objects.equals(tenantId, that.tenantId)
+        && Objects.equals(fileName, that.fileName)
+        && Objects.equals(contentType, that.contentType)
+        && Objects.equals(sha256, that.sha256)
+        && Objects.equals(storage, that.storage)
+        && Arrays.equals(content, that.content)
+        && Objects.equals(uploadId, that.uploadId)
+        && Objects.equals(objectKey, that.objectKey);
+  }
+
+  @Override
+  public int hashCode() {
+    return 31
+            * Objects.hash(
+                tenantId, fileName, contentType, sizeBytes, sha256, storage, uploadId, objectKey)
+        + Arrays.hashCode(content);
   }
 
   @Override

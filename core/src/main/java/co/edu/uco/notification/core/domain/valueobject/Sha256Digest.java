@@ -8,11 +8,11 @@ import java.util.regex.Pattern;
 
 public record Sha256Digest(String hex) {
 
-  private static final Pattern HEX = Pattern.compile("[0-9a-f]{64}");
+  private static final Pattern HEX_PATTERN = Pattern.compile("[0-9a-f]{64}");
 
   public Sha256Digest {
     Preconditions.requireTrue(
-        hex != null && HEX.matcher(hex).matches(),
+        hex != null && HEX_PATTERN.matcher(hex).matches(),
         "Sha256Digest must be 64 lower-case hexadecimal characters");
   }
 

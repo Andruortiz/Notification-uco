@@ -26,7 +26,6 @@ import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFi
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
-import co.edu.uco.notification.infrastructure.config.WebFluxConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.util.List;
 import java.util.stream.Stream;
@@ -50,8 +49,7 @@ import reactor.core.publisher.Mono;
   AuthenticationWebFilter.class,
   LocalJwtTokenValidationAdapter.class,
   RouteAuthorizationPolicy.class,
-  AuthenticatedPrincipalArgumentResolver.class,
-  WebFluxConfig.class
+  AuthenticatedPrincipalArgumentResolver.class
 })
 class NotificationBatchControllerTest {
 

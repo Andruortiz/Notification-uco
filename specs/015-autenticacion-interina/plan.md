@@ -144,11 +144,12 @@ infrastructure/src/main/java/co/edu/uco/notification/infrastructure/
 ├── adapter/in/web/
 │   ├── AuthenticationWebFilter.java             # nuevo
 │   ├── RouteAuthorizationPolicy.java            # nuevo
-│   ├── AuthenticatedPrincipalArgumentResolver.java  # nuevo
+│   ├── AuthenticatedPrincipalArgumentResolver.java  # nuevo, implementa WebFluxConfigurer
+│   │                                                  # directamente (se registra a sí mismo; evita
+│   │                                                  # un ciclo adapter<->config detectado por
+│   │                                                  # ModularityTests, ver desviación en tasks.md)
 │   ├── RejectionReason.java                     # nuevo (FR-015)
 │   └── AuthenticationLogFormatter.java          # nuevo (FR-015)
-├── config/
-│   └── WebFluxConfig.java (o equivalente ya existente)  # registra el argument resolver
 └── adapter/in/rest/
     ├── NotificationController.java            # modificado: firma de tenant
     ├── NotificationBatchController.java       # modificado: firma de tenant

@@ -251,6 +251,13 @@ siempre a `A`.
 - [X] T028 [US2] Crear `WebFluxConfig implements WebFluxConfigurer` en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/WebFluxConfig.java` que
   registra `AuthenticatedPrincipalArgumentResolver` vía `configureArgumentResolvers` (depende de T027).
+  **Desviación**: `ModularityTests` detectó un ciclo `adapter -> config -> adapter` (el `config`
+  original dependía de `AuthenticatedPrincipalArgumentResolver`, un tipo de `adapter`, mientras varios
+  adaptadores ya dependen de tipos de `config` como `AttachmentProperties`/`TwilioProviderProperties`).
+  `WebFluxConfig.java` se elimina; `AuthenticatedPrincipalArgumentResolver` implementa
+  `WebFluxConfigurer` directamente (`configureArgumentResolvers` se registra a sí mismo) — Spring
+  descubre cualquier bean `WebFluxConfigurer` automáticamente, sin necesitar una clase `config`
+  separada que cree la dependencia cruzada.
 - [X] T029 [P] [US2] Modificar `NotificationController`
   (`infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/rest/NotificationController.java`)
   — reemplazar cada `@RequestHeader("X-Tenant-Id") final String tenantId` por

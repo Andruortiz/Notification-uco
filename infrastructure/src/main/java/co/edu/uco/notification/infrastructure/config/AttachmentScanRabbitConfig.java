@@ -1,13 +1,14 @@
 package co.edu.uco.notification.infrastructure.config;
 
+import org.springframework.amqp.core.AcknowledgeMode;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.rabbit.config.RetryInterceptorBuilder;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
@@ -60,11 +61,16 @@ public class AttachmentScanRabbitConfig {
   }
 
   @Bean
+  MessageRecoverer attachmentScanDlqRecoverer(
+      final RabbitTemplate rabbitTemplate, final AttachmentScanTopologyProperties topology) {
+    return new RepublishMessageRecoverer(
+        rabbitTemplate, topology.dlqExchange(), topology.dlqRoutingKey());
+  }
+
+  @Bean
   SimpleRabbitListenerContainerFactory attachmentScanListenerContainerFactory(
       final SimpleRabbitListenerContainerFactoryConfigurer configurer,
       final ConnectionFactory connectionFactory,
-      final RabbitTemplate rabbitTemplate,
-      final AttachmentScanTopologyProperties topology,
       final AttachmentProperties attachmentProperties) {
     final SimpleRabbitListenerContainerFactory factory = new SimpleRabbitListenerContainerFactory();
     configurer.configure(factory, connectionFactory);
@@ -72,13 +78,7 @@ public class AttachmentScanRabbitConfig {
     factory.setConcurrentConsumers(concurrency);
     factory.setMaxConcurrentConsumers(concurrency);
     factory.setPrefetchCount(1);
-    factory.setAdviceChain(
-        RetryInterceptorBuilder.stateful()
-            .maxAttempts(Math.max(1, attachmentProperties.scan().maxAttempts()))
-            .recoverer(
-                new RepublishMessageRecoverer(
-                    rabbitTemplate, topology.dlqExchange(), topology.dlqRoutingKey()))
-            .build());
+    factory.setAcknowledgeMode(AcknowledgeMode.MANUAL);
     return factory;
   }
 }

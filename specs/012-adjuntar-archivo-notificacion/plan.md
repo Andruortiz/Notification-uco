@@ -246,10 +246,14 @@ decisión de arquitectura sobre MinIO y ClamAV fuera de desarrollo.
     cómo se operan fuera de desarrollo. El usuario decide dónde registrarla.
   - **Extensibilidad por catálogo (ADR-0009)** — PASS: habilitar adjuntos en un canal sigue siendo editar
     su `contentSchema`; un proveedor nuevo declara `supportsAttachments()` sin tocar el núcleo.
-- **Ack manual y DLQ de RabbitMQ** — **sin excepción que justificar**. El consumidor de despacho no cambia.
-  El consumidor nuevo de escaneo (`AttachmentScanListener`) usa ack manual, los reintentos de
-  `RabbitRetryConfig` y su propia DLQ; confirma solo después de persistir el veredicto; un reenvío de un
-  mensaje ya resuelto se confirma sin efecto (la transición exige `PENDING_SCAN`).
+- **Ack manual y DLQ de RabbitMQ** — **sin excepción que justificar**. El consumidor de despacho no cambia
+  (sigue en modo `AUTO`, brecha preexistente ajena a esta historia). El consumidor nuevo de escaneo
+  (`AttachmentScanListener`) usa `AcknowledgeMode.MANUAL` explícito (`Channel`/`deliveryTag`,
+  `channel.basicAck` en el propio `onMessage`) con su propio conteo de intentos por encabezado
+  (`x-scan-attempt`, ya que el interceptor de reintento con estado no reinvoca el método cuando se agotan
+  los intentos) y su propia DLQ vía `RepublishMessageRecoverer`; confirma solo después de persistir el
+  veredicto o de reencolar/enviar a la DLQ; un reenvío de un mensaje ya resuelto se confirma sin efecto (la
+  transición exige `PENDING_SCAN`).
 
 No violations requiring justification — Complexity Tracking section left empty. El crecimiento del alcance
 (de M a XL) no es una violación de la constitución, pero se registra como riesgo.

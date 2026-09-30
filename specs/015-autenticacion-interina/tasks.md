@@ -157,23 +157,23 @@ invocar `chain.filter(...)`, mientras que un token válido sí lo invoca — sin
 
 > **Escribir estas pruebas PRIMERO, confirmar que fallan antes de implementar**
 
-- [ ] T019 [P] [US1] Unit test `AuthenticationWebFilterTest` (casos de rechazo) en
+- [X] T019 [P] [US1] Unit test `AuthenticationWebFilterTest` (casos de rechazo) en
   `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/in/web/AuthenticationWebFilterTest.java`
   — sin header `Authorization` → `401` + log `MISSING_TOKEN`/`tenantId=null`; header sin prefijo
   `Bearer ` → `401`; token sintácticamente inválido → `401` + log `MALFORMED_TOKEN`; token expirado →
   `401` + log `EXPIRED`; token con claim faltante → `401` + log `MISSING_CLAIMS`; token con `role`
   desconocido → `401` + log `UNKNOWN_ROLE`; ninguno de estos casos invoca `chain.filter(...)` ni
   expone el token/secreto en el log capturado.
-- [ ] T020 [P] [US1] Ampliar `AuthenticationWebFilterTest` con los casos de ruta exenta: `OPTIONS` a
+- [X] T020 [P] [US1] Ampliar `AuthenticationWebFilterTest` con los casos de ruta exenta: `OPTIONS` a
   cualquier path, `GET /actuator/health`, `GET /v3/api-docs` (o la ruta real que sirva springdoc) y
   `GET /openapi/api-notificaciones.yaml` completan sin exigir token.
-- [ ] T021 [P] [US1] Ampliar `AuthenticationWebFilterTest` con el caso `GET /notifications:subscribe`
+- [X] T021 [P] [US1] Ampliar `AuthenticationWebFilterTest` con el caso `GET /notifications:subscribe`
   sin header `Authorization` pero con `?access_token=<token-válido>` → completa (invoca
   `chain.filter(...)`), y con el caso en que ambos están presentes → el header tiene prioridad.
 
 ### Implementation for User Story 1
 
-- [ ] T022 [US1] Implementar `AuthenticationWebFilter` (`implements WebFilter, Ordered`) en
+- [X] T022 [US1] Implementar `AuthenticationWebFilter` (`implements WebFilter, Ordered`) en
   `infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/web/AuthenticationWebFilter.java`
   — excluye `OPTIONS` y las rutas exentas (T020); extrae el token del header `Authorization` o, solo
   para `GET /notifications:subscribe`, del parámetro `access_token` si falta el header (T021); invoca
@@ -181,10 +181,15 @@ invocar `chain.filter(...)`, mientras que un token válido sí lo invoca — sin
   `AuthenticationLogFormatter` y responde `401`; en éxito, coloca el `AuthenticatedPrincipal` en un
   atributo del `ServerWebExchange` y continúa la cadena (todavía sin verificar rol — eso es US3).
   Orden posterior a `CorsWebFilter` (depende de T010, T011, T012, T015).
-- [ ] T023 [US1] Registrar `AuthenticationWebFilter` como `@Bean` en `SecurityConfig`
+- [X] T023 [US1] Registrar `AuthenticationWebFilter` como `@Bean` en `SecurityConfig`
   (`infrastructure/src/main/java/co/edu/uco/notification/infrastructure/config/SecurityConfig.java`,
-  T017).
-- [ ] T024 [US1] Confirmar cobertura ≥80 %/≥70 % (Principio IV) de los archivos nuevos de esta
+  T017). **Desviación**: misma razón que T017 — `AuthenticationWebFilter` se anota `@Component`
+  directamente (constructor con `TokenValidationPort`, inyectado por tipo) en vez de un método
+  `@Bean` en `SecurityConfig`, para que `ModularityTests` no lo trate como una dependencia de
+  `config` hacia un tipo no expuesto de `adapter`. `getOrder()` devuelve
+  `Ordered.HIGHEST_PRECEDENCE + 10` para correr después de `CorsWebFilter` (que Spring Boot registra
+  con `HIGHEST_PRECEDENCE` por defecto).
+- [X] T024 [US1] Confirmar cobertura ≥80 %/≥70 % (Principio IV) de los archivos nuevos de esta
   historia con `./mvnw -B -ntp -pl infrastructure -am test -Dtest=AuthenticationWebFilterTest -Dsurefire.failIfNoSpecifiedTests=false`
   y revisión del reporte JaCoCo.
 

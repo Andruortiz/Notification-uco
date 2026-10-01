@@ -24,6 +24,12 @@ public final class ContentSchemaValidator {
       JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
   private static final String ATTACHMENTS = "attachments";
 
+  /**
+   * Suma del tamano de todos los adjuntos. Se agrega al contenido que se valida para que el esquema
+   * de un canal pueda acotar el total, algo que un esquema JSON no puede calcular por si solo.
+   */
+  private static final String ATTACHMENTS_TOTAL_BYTES = "attachmentsTotalBytes";
+
   private ContentSchemaValidator() {}
 
   public static void validate(
@@ -65,8 +71,17 @@ public final class ContentSchemaValidator {
     if (!attachments.isEmpty()) {
       final ArrayNode attachmentsNode = contentNode.putArray(ATTACHMENTS);
       attachments.forEach(attachment -> attachmentsNode.add(toNode(attachment)));
+      contentNode.put(ATTACHMENTS_TOTAL_BYTES, totalSize(attachments));
     }
     return contentNode;
+  }
+
+  private static long totalSize(final List<AttachmentSubmission> attachments) {
+    return attachments.stream()
+        .map(AttachmentSubmission::sizeBytes)
+        .filter(java.util.Objects::nonNull)
+        .mapToLong(Long::longValue)
+        .sum();
   }
 
   private static JsonNode toNode(final AttachmentSubmission attachment) {

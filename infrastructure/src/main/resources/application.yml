@@ -45,7 +45,7 @@ notification:
     channels:
       EMAIL:
         providers: ${NOTIFICATION_EMAIL_PROVIDERS:simulated,brevo}
-        content-schema:
+        content-schema: '{"type":"object","properties":{"attachments":{"type":"array","maxItems":5,"items":{"type":"object","properties":{"sizeBytes":{"type":"integer","maximum":4000000}}}},"attachmentsTotalBytes":{"type":"integer","maximum":4000000}}}'
       SMS:
         providers: ${NOTIFICATION_SMS_PROVIDERS:simulated,twilio}
         content-schema: '{"type":"object","required":["body"],"properties":{"body":{"type":"string","maxLength":160}}}'

@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.valueobject.Attachment;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
@@ -24,16 +25,28 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
   private static final ProviderId PROVIDER_ID = ProviderId.of("brevo");
   private static final String SEND_PATH = "/v3/smtp/email";
 
+  /**
+   * Limite de Brevo para los adjuntos de un correo transaccional (documentacion de Brevo: "less
+   * than 4 MB"). Se toma en bytes decimales y como suma de todos los adjuntos de la notificacion,
+   * que es la lectura mas estricta y la que evita que Brevo rechace un correo ya aceptado.
+   */
+  static final long MAX_ATTACHMENTS_BYTES = 4_000_000L;
+
   private final WebClient webClient;
   private final BrevoProviderProperties properties;
+  private final AttachmentContentLoader attachmentContentLoader;
   private final Optional<String> disabledReason;
 
   public BrevoNotificationProvider(
       @Qualifier("brevoWebClient") final WebClient brevoWebClient,
-      final BrevoProviderProperties properties) {
+      final BrevoProviderProperties properties,
+      final AttachmentContentLoader attachmentContentLoader) {
     this.webClient =
         Preconditions.requireNonNull(brevoWebClient, "brevoWebClient must not be null");
     this.properties = Preconditions.requireNonNull(properties, "properties must not be null");
+    this.attachmentContentLoader =
+        Preconditions.requireNonNull(
+            attachmentContentLoader, "attachmentContentLoader must not be null");
     this.disabledReason = properties.disabledReason();
     disabledReason.ifPresent(reason -> ProviderLogs.disabled(LOGGER, PROVIDER_ID, reason));
   }
@@ -49,7 +62,32 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
       ProviderLogs.rejectedBeforeCall(LOGGER, notification, PROVIDER_ID, "missing-subject");
       return Mono.just(AttemptResult.PERMANENT_FAILURE);
     }
-    final BrevoEmailRequest request = toRequest(notification, subject);
+    final List<Attachment> attachments = notification.content().attachments();
+    if (attachments.stream().mapToLong(Attachment::sizeBytes).sum() > MAX_ATTACHMENTS_BYTES) {
+      ProviderLogs.rejectedBeforeCall(LOGGER, notification, PROVIDER_ID, "attachments-too-large");
+      return Mono.just(AttemptResult.PERMANENT_FAILURE);
+    }
+    return attachmentContentLoader
+        .load(attachments)
+        .map(files -> toRequest(notification, subject, files))
+        .flatMap(request -> post(notification, request))
+        .onErrorResume(
+            AttachmentContentLoader.AttachmentContentException.class,
+            error -> {
+              ProviderLogs.rejectedBeforeCall(
+                  LOGGER, notification, PROVIDER_ID, "attachment-content-unavailable");
+              return Mono.just(AttemptResult.PERMANENT_FAILURE);
+            })
+        .onErrorResume(
+            error -> {
+              final AttemptResult result = BrevoResponseClassifier.classifyError(error);
+              logOutcome(notification, result, error);
+              return Mono.just(result);
+            });
+  }
+
+  private Mono<AttemptResult> post(
+      final Notification notification, final BrevoEmailRequest request) {
     return webClient
         .post()
         .uri(SEND_PATH)
@@ -76,7 +114,10 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
     }
   }
 
-  private BrevoEmailRequest toRequest(final Notification notification, final String subject) {
+  private BrevoEmailRequest toRequest(
+      final Notification notification,
+      final String subject,
+      final List<AttachmentContentLoader.LoadedAttachment> files) {
     final BrevoEmailRequest.Sender sender =
         new BrevoEmailRequest.Sender(
             properties.senderEmail(), blankToNull(properties.senderName()));
@@ -84,7 +125,12 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
         List.of(new BrevoEmailRequest.Contact(notification.recipient().address()));
     final Map<String, String> headers =
         Map.of("Idempotency-Key", notification.notificationId().value());
-    return new BrevoEmailRequest(sender, to, subject, notification.content().body(), headers);
+    final List<BrevoEmailRequest.Attachment> attachment =
+        files.stream()
+            .map(file -> new BrevoEmailRequest.Attachment(file.fileName(), file.contentBase64()))
+            .toList();
+    return new BrevoEmailRequest(
+        sender, to, subject, notification.content().body(), headers, attachment);
   }
 
   private static String blankToNull(final String value) {
@@ -103,6 +149,6 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
 
   @Override
   public boolean supportsAttachments() {
-    return false;
+    return true;
   }
 }

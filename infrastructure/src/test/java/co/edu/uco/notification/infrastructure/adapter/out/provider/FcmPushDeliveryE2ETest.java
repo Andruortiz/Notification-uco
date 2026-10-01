@@ -135,7 +135,15 @@ class FcmPushDeliveryE2ETest {
     fakeFcm.reset();
     fakeFcm.nextResponse(200, "{\"name\":\"projects/demo-project/messages/0:e2e-0001\"}");
 
-    logAppender = new ListAppender<>();
+    logAppender =
+        new ListAppender<>() {
+          @Override
+          protected void append(final ILoggingEvent event) {
+            synchronized (list) {
+              super.append(event);
+            }
+          }
+        };
     logAppender.start();
     rootLogger().addAppender(logAppender);
 
@@ -278,7 +286,11 @@ class FcmPushDeliveryE2ETest {
   }
 
   private String logs() {
-    return logAppender.list.stream().map(LogLines::render).collect(Collectors.joining("\n"));
+    final List<ILoggingEvent> events;
+    synchronized (logAppender.list) {
+      events = new ArrayList<>(logAppender.list);
+    }
+    return events.stream().map(LogLines::render).collect(Collectors.joining("\n"));
   }
 
   private List<String> publishedEvents() {

@@ -669,12 +669,26 @@ class NotificationAttachmentE2ETest {
   }
 
   @Test
-  void theDefaultEmailChannelDoesNotAcceptAttachments() {
-    assertRejected(
-        "us3-default-email",
-        "EMAIL",
-        List.of(embedded("a.pdf", "application/pdf", SampleFiles.pdf("email"))),
-        "channel does not accept attachments");
+  void theDefaultEmailChannelAcceptsAttachmentsWithinTheBrevoLimit() {
+    accepted(
+        request(
+            "us3-default-email",
+            "EMAIL",
+            List.of(embedded("a.pdf", "application/pdf", SampleFiles.pdf("email")))));
+  }
+
+  @Test
+  void theDefaultEmailChannelRejectsAttachmentsAboveTheBrevoTotal() {
+    final List<Map<String, Object>> attachments =
+        java.util.stream.IntStream.range(0, 5)
+            .mapToObj(
+                index ->
+                    embedded(
+                        "f" + index + ".pdf",
+                        "application/pdf",
+                        SampleFiles.pdfOfSize(900_000, 40 + index)))
+            .toList();
+    assertRejected("us3-email-over-total", "EMAIL", attachments, "attachmentsTotalBytes");
   }
 
   @Test

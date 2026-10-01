@@ -279,7 +279,7 @@ class ChannelCatalogQueryE2ETest {
             .toList());
 
     final JsonNode email = channel(channels, "EMAIL");
-    assertTrue(email.get("contentSchema").isNull());
+    assertTrue(email.get("contentSchema").asText().contains("attachmentsTotalBytes"));
     final JsonNode simulated = email.get("providers").get(0);
     assertEquals("simulated", simulated.get("providerId").asText());
     assertEquals(1, simulated.get("preferenceOrder").asInt());

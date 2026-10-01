@@ -187,4 +187,43 @@ class ContentSchemaValidatorTest {
 
     assertNoSensitiveData(exception);
   }
+
+  private static final String TOTAL_LIMIT_SCHEMA =
+      "{\"type\":\"object\",\"properties\":{\"attachments\":{\"type\":\"array\"},"
+          + "\"attachmentsTotalBytes\":{\"type\":\"integer\",\"maximum\":4000000}}}";
+
+  @Test
+  void theSchemaCanBoundTheTotalSizeOfAllTheAttachments() {
+    final InvalidContentException exception =
+        assertThrows(
+            InvalidContentException.class,
+            () ->
+                validate(
+                    TOTAL_LIMIT_SCHEMA,
+                    attachment("application/pdf", 2_500_000),
+                    attachment("application/pdf", 2_500_000)));
+
+    assertTrue(exception.getMessage().contains("attachmentsTotalBytes"), exception.getMessage());
+  }
+
+  @Test
+  void aTotalExactlyAtTheLimitIsAccepted() {
+    assertDoesNotThrow(
+        () ->
+            validate(
+                TOTAL_LIMIT_SCHEMA,
+                attachment("application/pdf", 3_000_000),
+                attachment("application/pdf", 1_000_000)));
+  }
+
+  @Test
+  void theTotalIsNotSentWhenThereAreNoAttachments() {
+    assertDoesNotThrow(
+        () ->
+            ContentSchemaValidator.validate(
+                CHANNEL_TYPE,
+                "{\"type\":\"object\",\"not\":{\"required\":[\"attachmentsTotalBytes\"]}}",
+                SUBJECT_AND_BODY,
+                List.of()));
+  }
 }

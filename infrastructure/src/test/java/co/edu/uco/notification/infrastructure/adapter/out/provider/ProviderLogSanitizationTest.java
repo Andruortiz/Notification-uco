@@ -112,7 +112,10 @@ class ProviderLogSanitizationTest {
                 "Notification UCO",
                 fakeServer.baseUrl(),
                 10_000L,
-                5_000L));
+                5_000L),
+            new AttachmentContentLoader(
+                org.mockito.Mockito.mock(
+                    co.edu.uco.notification.core.port.out.AttachmentStoragePort.class)));
     fakeServer.nextResponse(
         401,
         "{\"message\":\"api-key "
@@ -143,7 +146,10 @@ class ProviderLogSanitizationTest {
                 "Notification UCO",
                 fakeServer.baseUrl(),
                 10_000L,
-                5_000L));
+                5_000L),
+            new AttachmentContentLoader(
+                org.mockito.Mockito.mock(
+                    co.edu.uco.notification.core.port.out.AttachmentStoragePort.class)));
 
     try (LogCapture capture = LogCapture.of(BrevoNotificationProvider.class)) {
       StepVerifier.create(provider.send(notification("EMAIL", EMAIL, " ")))

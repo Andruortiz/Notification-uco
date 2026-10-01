@@ -1,7 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -11,6 +10,7 @@ import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
+import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.infrastructure.config.BrevoProviderProperties;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -36,6 +36,9 @@ class BrevoNotificationProviderTest {
 
   private static FakeProviderServer fakeServer;
   private static WebClient webClient;
+
+  private static final AttachmentContentLoader LOADER =
+      new AttachmentContentLoader(org.mockito.Mockito.mock(AttachmentStoragePort.class));
 
   @BeforeAll
   static void startServer() {
@@ -77,7 +80,7 @@ class BrevoNotificationProviderTest {
   @Test
   void sendRejectsNullNotification() {
     final BrevoNotificationProvider provider =
-        new BrevoNotificationProvider(webClient, enabledProperties());
+        new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
 
     org.junit.jupiter.api.Assertions.assertThrows(
         NullPointerException.class, () -> provider.send(null));
@@ -86,7 +89,7 @@ class BrevoNotificationProviderTest {
   @Test
   void declaresTheBrevoProviderId() {
     final BrevoNotificationProvider provider =
-        new BrevoNotificationProvider(webClient, enabledProperties());
+        new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
 
     assertEquals(ProviderId.of("brevo"), provider.providerId());
   }
@@ -94,7 +97,7 @@ class BrevoNotificationProviderTest {
   @Test
   void exposesNoDisabledReasonWhenCredentialsAreComplete() {
     final BrevoNotificationProvider provider =
-        new BrevoNotificationProvider(webClient, enabledProperties());
+        new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
 
     assertTrue(provider.disabledReason().isEmpty());
   }
@@ -102,9 +105,9 @@ class BrevoNotificationProviderTest {
   @Test
   void doesNotSupportAttachmentsYet() {
     final BrevoNotificationProvider provider =
-        new BrevoNotificationProvider(webClient, enabledProperties());
+        new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
 
-    assertFalse(provider.supportsAttachments());
+    assertTrue(provider.supportsAttachments());
   }
 
   @Test
@@ -112,7 +115,8 @@ class BrevoNotificationProviderTest {
     final BrevoProviderProperties properties =
         new BrevoProviderProperties(
             null, "sender@example.com", null, fakeServer.baseUrl(), 10_000L, 5_000L);
-    final BrevoNotificationProvider provider = new BrevoNotificationProvider(webClient, properties);
+    final BrevoNotificationProvider provider =
+        new BrevoNotificationProvider(webClient, properties, LOADER);
 
     assertEquals(
         Optional.of("missing notification.provider.brevo.api-key (BREVO_API_KEY)"),
@@ -122,7 +126,7 @@ class BrevoNotificationProviderTest {
   @Test
   void happyPathBuildsTheExpectedRequestAndReturnsAccepted() throws Exception {
     final BrevoNotificationProvider provider =
-        new BrevoNotificationProvider(webClient, enabledProperties());
+        new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
     final Notification notification = notificationWith("Subject", "Body");
 
     StepVerifier.create(provider.send(notification))
@@ -149,7 +153,8 @@ class BrevoNotificationProviderTest {
     final BrevoProviderProperties properties =
         new BrevoProviderProperties(
             null, "sender@example.com", null, fakeServer.baseUrl(), 10_000L, 5_000L);
-    final BrevoNotificationProvider provider = new BrevoNotificationProvider(webClient, properties);
+    final BrevoNotificationProvider provider =
+        new BrevoNotificationProvider(webClient, properties, LOADER);
 
     StepVerifier.create(provider.send(notificationWith("Subject", "Body")))
         .expectError(ProviderDisabledException.class)
@@ -169,7 +174,7 @@ class BrevoNotificationProviderTest {
           new BrevoProviderProperties(
               "super-secret-key", null, null, fakeServer.baseUrl(), 10_000L, 5_000L);
 
-      new BrevoNotificationProvider(webClient, properties);
+      new BrevoNotificationProvider(webClient, properties, LOADER);
 
       final List<ILoggingEvent> warnings =
           appender.list.stream()
@@ -190,7 +195,8 @@ class BrevoNotificationProviderTest {
     final BrevoProviderProperties properties =
         new BrevoProviderProperties(
             "test-api-key", null, null, fakeServer.baseUrl(), 10_000L, 5_000L);
-    final BrevoNotificationProvider provider = new BrevoNotificationProvider(webClient, properties);
+    final BrevoNotificationProvider provider =
+        new BrevoNotificationProvider(webClient, properties, LOADER);
 
     StepVerifier.create(provider.send(notificationWith("Subject", "Body")))
         .expectError(ProviderDisabledException.class)
@@ -202,7 +208,7 @@ class BrevoNotificationProviderTest {
   @Test
   void missingSubjectReturnsPermanentFailureWithoutCallingProvider() {
     final BrevoNotificationProvider provider =
-        new BrevoNotificationProvider(webClient, enabledProperties());
+        new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
 
     StepVerifier.create(provider.send(notificationWith(null, "Body")))
         .expectNext(AttemptResult.PERMANENT_FAILURE)
@@ -214,7 +220,7 @@ class BrevoNotificationProviderTest {
   @Test
   void blankSubjectReturnsPermanentFailureWithoutCallingProvider() {
     final BrevoNotificationProvider provider =
-        new BrevoNotificationProvider(webClient, enabledProperties());
+        new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
 
     StepVerifier.create(provider.send(notificationWith("   ", "Body")))
         .expectNext(AttemptResult.PERMANENT_FAILURE)
@@ -238,7 +244,7 @@ class BrevoNotificationProviderTest {
         new BrevoProviderProperties(
             "test-api-key", "sender@example.com", null, fakeServer.baseUrl(), 300L, 5_000L);
     final BrevoNotificationProvider provider =
-        new BrevoNotificationProvider(shortTimeoutClient, properties);
+        new BrevoNotificationProvider(shortTimeoutClient, properties, LOADER);
     fakeServer.nextDelay(3_000);
 
     final Instant start = Instant.now();
@@ -254,7 +260,7 @@ class BrevoNotificationProviderTest {
   void idempotencyKeyIsStableForTheSameNotificationAndDistinctBetweenNotifications()
       throws Exception {
     final BrevoNotificationProvider provider =
-        new BrevoNotificationProvider(webClient, enabledProperties());
+        new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
     final Notification first = notificationWith("Subject", "Body");
     final Notification second = notificationWith("Subject", "Body");
 

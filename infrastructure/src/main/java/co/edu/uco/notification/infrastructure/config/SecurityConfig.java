@@ -4,5 +4,5 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-@EnableConfigurationProperties(AuthJwtProperties.class)
+@EnableConfigurationProperties({AuthJwtProperties.class, AuthPlatformProperties.class})
 public class SecurityConfig {}

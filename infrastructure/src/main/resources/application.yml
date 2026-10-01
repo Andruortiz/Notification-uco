@@ -34,6 +34,17 @@ springdoc:
 
 notification:
   auth:
+    # local: JWT firmado con un secreto compartido (desarrollo). platform: tokens de la plataforma central
+    # de seguridad, validados con su clave publica (ver README, "Autenticacion").
+    mode: ${NOTIFICATION_AUTH_MODE:local}
+    platform:
+      public-key: ${AUTH_PLATFORM_PUBLIC_KEY:}
+      issuer: ${AUTH_PLATFORM_ISSUER:}
+      audience: ${AUTH_PLATFORM_AUDIENCE:}
+      subject-claim: ${AUTH_PLATFORM_SUBJECT_CLAIM:sub}
+      tenant-claim: ${AUTH_PLATFORM_TENANT_CLAIM:tenantId}
+      role-claim: ${AUTH_PLATFORM_ROLE_CLAIM:role}
+      clock-skew-seconds: ${AUTH_PLATFORM_CLOCK_SKEW_SECONDS:30}
     jwt:
       hs256-secret: ${AUTH_JWT_HS256_SECRET:notification-uco-dev-only-secret-change-me-0123456789abcdef}
       ttl-minutes: ${AUTH_JWT_TTL_MINUTES:720}

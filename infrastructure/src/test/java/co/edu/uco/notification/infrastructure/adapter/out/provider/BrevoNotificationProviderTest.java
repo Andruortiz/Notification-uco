@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.infrastructure.config.BrevoProviderProperties;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
@@ -175,7 +176,7 @@ class BrevoNotificationProviderTest {
               .filter(event -> event.getLevel().toString().equals("WARN"))
               .toList();
       assertEquals(1, warnings.size());
-      final String message = warnings.get(0).getFormattedMessage();
+      final String message = LogLines.render(warnings.get(0));
       assertTrue(message.contains("brevo"));
       assertTrue(message.contains("sender-email"));
       assertTrue(!message.contains("super-secret-key"));

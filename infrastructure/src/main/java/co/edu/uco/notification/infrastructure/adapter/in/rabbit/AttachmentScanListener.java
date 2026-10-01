@@ -9,7 +9,10 @@ import co.edu.uco.notification.infrastructure.config.AttachmentProperties;
 import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyProperties;
 import co.edu.uco.notification.infrastructure.config.CorrelationContext;
 import co.edu.uco.notification.infrastructure.config.LogContext;
+import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.CorrelationId;
+import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
 import co.edu.uco.notification.utils.TraceParent;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -122,13 +125,25 @@ public class AttachmentScanListener {
     final int attempt = attemptCount(message) + 1;
     if (attempt >= maxAttempts) {
       LOGGER.warn(
-          "Attachment scan exhausted {} attempts, sending the message to the dead-letter queue",
-          attempt,
+          LogFields.fields(
+              "attempt",
+              attempt,
+              LogFields.FAILURE_CATEGORY,
+              FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          "Attachment scan exhausted attempts, sending the message to the dead-letter queue",
           cause);
       deadLetterRecoverer.recover(message, cause);
     } else {
       LOGGER.warn(
-          "Attachment scan attempt {} of {} failed, requeueing", attempt, maxAttempts, cause);
+          LogFields.fields(
+              "attempt",
+              attempt,
+              "maxAttempts",
+              maxAttempts,
+              LogFields.FAILURE_CATEGORY,
+              FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          "Attachment scan attempt failed, requeueing",
+          cause);
       rabbitTemplate.send(
           topology.exchange(), topology.routingKey(), withAttempt(message, attempt));
     }
@@ -145,28 +160,26 @@ public class AttachmentScanListener {
   }
 
   private static void logVerdict(final AttachmentUpload upload) {
-    LOGGER.info(
-        "Attachment upload scanned tenantId={} uploadId={} fileName={} contentType={} sizeBytes={}"
-            + " sha256={} state={} reason={} signature={}",
-        upload.tenantId().value(),
-        upload.uploadId().value(),
-        sanitize(upload.fileName()),
-        upload.contentType(),
-        upload.sizeBytes(),
-        upload.sha256() == null ? null : upload.sha256().hex(),
-        upload.state(),
-        upload.rejectionReason(),
-        sanitize(upload.signature()));
-  }
-
-  private static String sanitize(final String value) {
-    if (value == null) {
-      return null;
+    try (LogContext ignored = LogContext.open(null, upload.tenantId().value(), null)) {
+      LOGGER.info(
+          LogFields.fields(
+              "uploadId",
+              upload.uploadId().value(),
+              "fileName",
+              LogSanitizer.safe(upload.fileName()),
+              "contentType",
+              upload.contentType(),
+              "sizeBytes",
+              upload.sizeBytes(),
+              "sha256",
+              upload.sha256() == null ? null : upload.sha256().hex(),
+              "state",
+              upload.state(),
+              "reason",
+              upload.rejectionReason(),
+              "signature",
+              LogSanitizer.safe(upload.signature())),
+          "Attachment upload scanned");
     }
-    final StringBuilder safe = new StringBuilder(value.length());
-    value
-        .codePoints()
-        .forEach(code -> safe.appendCodePoint(Character.isISOControl(code) ? '_' : code));
-    return safe.toString();
   }
 }

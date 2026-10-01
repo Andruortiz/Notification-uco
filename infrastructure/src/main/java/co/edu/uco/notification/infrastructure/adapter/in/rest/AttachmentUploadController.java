@@ -7,6 +7,9 @@ import co.edu.uco.notification.core.port.in.CompleteAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.GetAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.IssueAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.IssuedUpload;
+import co.edu.uco.notification.infrastructure.config.LogContext;
+import co.edu.uco.notification.infrastructure.config.LogFields;
+import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
 import java.net.URI;
 import org.slf4j.Logger;
@@ -84,15 +87,23 @@ public class AttachmentUploadController {
   }
 
   private static void log(final String action, final AttachmentUpload upload) {
-    LOGGER.info(
-        "Attachment upload {} tenantId={} uploadId={} fileName={} contentType={} sizeBytes={}"
-            + " state={}",
-        action,
-        AttachmentLogFormatter.safe(upload.tenantId().value()),
-        upload.uploadId().value(),
-        AttachmentLogFormatter.safe(upload.fileName()),
-        upload.contentType(),
-        upload.sizeBytes(),
-        upload.state());
+    try (LogContext ignored =
+        LogContext.open(null, LogSanitizer.safe(upload.tenantId().value()), null)) {
+      LOGGER.info(
+          LogFields.fields(
+              "action",
+              action,
+              "uploadId",
+              upload.uploadId().value(),
+              "fileName",
+              LogSanitizer.safe(upload.fileName()),
+              "contentType",
+              upload.contentType(),
+              "sizeBytes",
+              upload.sizeBytes(),
+              "state",
+              upload.state()),
+          "Attachment upload");
+    }
   }
 }

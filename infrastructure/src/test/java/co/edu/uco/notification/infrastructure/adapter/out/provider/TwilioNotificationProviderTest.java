@@ -22,6 +22,7 @@ import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.TwilioProviderProperties;
 import io.netty.channel.ChannelOption;
 import java.net.URLDecoder;
@@ -127,9 +128,7 @@ class TwilioNotificationProviderTest {
   }
 
   private String logs() {
-    return logAppender.list.stream()
-        .map(ILoggingEvent::getFormattedMessage)
-        .collect(Collectors.joining("\n"));
+    return logAppender.list.stream().map(LogLines::render).collect(Collectors.joining("\n"));
   }
 
   private List<ILoggingEvent> warnings() {
@@ -252,7 +251,7 @@ class TwilioNotificationProviderTest {
     new TwilioNotificationProvider(webClient, properties(ACCOUNT_SID, null, "not-a-number"));
 
     assertEquals(1, warnings().size());
-    final String message = warnings().get(0).getFormattedMessage();
+    final String message = LogLines.render(warnings().get(0));
     assertTrue(message.contains("providerId=twilio"));
     assertTrue(message.contains("TWILIO_AUTH_TOKEN"));
     assertFalse(message.contains(ACCOUNT_SID));

@@ -19,6 +19,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.infrastructure.support.AttachmentTestContainers;
 import co.edu.uco.notification.infrastructure.support.RecordingAttachmentSender;
@@ -600,8 +601,7 @@ class NotificationAttachmentE2ETest {
         eventBodies.add(new String(message.getBody(), StandardCharsets.UTF_8));
         message = rabbitTemplate.receive(events.getName(), 500);
       }
-      final List<String> logLines =
-          logs.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+      final List<String> logLines = logs.list.stream().map(LogLines::render).toList();
 
       final List<String> everything = new ArrayList<>(logLines);
       everything.add(errorBody);

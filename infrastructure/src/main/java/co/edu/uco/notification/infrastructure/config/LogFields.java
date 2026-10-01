@@ -2,7 +2,11 @@ package co.edu.uco.notification.infrastructure.config;
 
 import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.TraceParent;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import net.logstash.logback.marker.Markers;
+import org.slf4j.Marker;
 
 public final class LogFields {
 
@@ -16,4 +20,12 @@ public final class LogFields {
       List.of(CORRELATION_ID, TENANT_ID, NOTIFICATION_ID, TRACE_PARENT);
 
   private LogFields() {}
+
+  public static Marker fields(final Object... keyValues) {
+    final Map<String, Object> entries = new LinkedHashMap<>();
+    for (int i = 0; i + 1 < keyValues.length; i += 2) {
+      entries.put(String.valueOf(keyValues[i]), keyValues[i + 1]);
+    }
+    return Markers.appendEntries(entries);
+  }
 }

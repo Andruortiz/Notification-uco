@@ -24,6 +24,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.infrastructure.config.FcmCredentials;
 import co.edu.uco.notification.infrastructure.config.FcmProviderProperties;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
@@ -148,9 +149,7 @@ class FcmNotificationProviderTest {
   }
 
   private String logs() {
-    return logAppender.list.stream()
-        .map(ILoggingEvent::getFormattedMessage)
-        .collect(Collectors.joining("\n"));
+    return logAppender.list.stream().map(LogLines::render).collect(Collectors.joining("\n"));
   }
 
   private List<ILoggingEvent> warnings() {
@@ -295,7 +294,7 @@ class FcmNotificationProviderTest {
     provider(webClient, properties(CREDENTIALS.jsonWith("type", "authorized_user"), null));
 
     assertEquals(1, warnings().size());
-    final String message = warnings().get(0).getFormattedMessage();
+    final String message = LogLines.render(warnings().get(0));
     assertTrue(message.contains("providerId=fcm"));
     assertTrue(message.contains("FCM_CREDENTIALS_JSON"));
     assertNoSecretsIn(message);
@@ -543,6 +542,6 @@ class FcmNotificationProviderTest {
         .expectNext(AttemptResult.ACCEPTED)
         .verifyComplete();
 
-    assertTrue(logs().lines().anyMatch(line -> line.endsWith("recipient=***")), logs());
+    assertTrue(logs().lines().anyMatch(line -> line.contains("recipient=***}")), logs());
   }
 }

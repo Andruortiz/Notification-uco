@@ -36,6 +36,7 @@ import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrinci
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import co.edu.uco.notification.utils.CorrelationId;
@@ -422,7 +423,7 @@ class NotificationControllerTest {
   }
 
   private static List<String> lines(final ListAppender<ILoggingEvent> appender) {
-    return appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+    return appender.list.stream().map(LogLines::render).toList();
   }
 
   private void post(final String body, final HttpStatus expected) {

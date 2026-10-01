@@ -35,12 +35,7 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
         Preconditions.requireNonNull(brevoWebClient, "brevoWebClient must not be null");
     this.properties = Preconditions.requireNonNull(properties, "properties must not be null");
     this.disabledReason = properties.disabledReason();
-    disabledReason.ifPresent(
-        reason ->
-            LOGGER.warn(
-                "Notification sender disabled providerId={} reason={}",
-                PROVIDER_ID.value(),
-                reason));
+    disabledReason.ifPresent(reason -> ProviderLogs.disabled(LOGGER, PROVIDER_ID, reason));
   }
 
   @Override
@@ -51,12 +46,7 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
     }
     final String subject = notification.content().subject();
     if (subject == null || subject.isBlank()) {
-      LOGGER.info(
-          "Notification rejected before calling provider notificationId={} tenantId={} "
-              + "providerId={} reason=missing-subject",
-          notification.notificationId().value(),
-          notification.tenantId().value(),
-          PROVIDER_ID.value());
+      ProviderLogs.rejectedBeforeCall(LOGGER, notification, PROVIDER_ID, "missing-subject");
       return Mono.just(AttemptResult.PERMANENT_FAILURE);
     }
     final BrevoEmailRequest request = toRequest(notification, subject);
@@ -80,21 +70,9 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
   private void logOutcome(
       final Notification notification, final AttemptResult result, final Throwable error) {
     if (error == null) {
-      LOGGER.info(
-          "Notification dispatched notificationId={} tenantId={} providerId={} result={}",
-          notification.notificationId().value(),
-          notification.tenantId().value(),
-          PROVIDER_ID.value(),
-          result);
+      ProviderLogs.dispatchedWithoutDetails(LOGGER, notification, PROVIDER_ID, result);
     } else {
-      LOGGER.warn(
-          "Notification dispatch failed notificationId={} tenantId={} providerId={} result={} "
-              + "errorType={}",
-          notification.notificationId().value(),
-          notification.tenantId().value(),
-          PROVIDER_ID.value(),
-          result,
-          error.getClass().getSimpleName());
+      ProviderLogs.dispatchFailed(LOGGER, notification, PROVIDER_ID, result, error);
     }
   }
 

@@ -10,6 +10,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
@@ -286,10 +287,7 @@ class BrevoEmailDeliveryE2ETest {
     final String notificationId = acceptNotification("brevo-noleak-1", secretSubject, secretBody);
     awaitStatus(notificationId, "DELIVERED");
 
-    final String logs =
-        logAppender.list.stream()
-            .map(ILoggingEvent::getFormattedMessage)
-            .reduce("", String::concat);
+    final String logs = logAppender.list.stream().map(LogLines::render).reduce("", String::concat);
     assertFalse(logs.contains(secretApiKey), "logs must not contain the api key");
     assertFalse(logs.contains(secretSubject), "logs must not contain the subject");
     assertFalse(logs.contains(secretBody), "logs must not contain the body");

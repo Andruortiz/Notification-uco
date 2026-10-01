@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.nio.charset.StandardCharsets;
@@ -199,10 +200,7 @@ class BrevoDisabledProviderE2ETest {
     assertTrue(stored.deliveryAttempts().isEmpty());
     assertEquals("PENDING", status(notificationId).get("status"));
 
-    final String logs =
-        logAppender.list.stream()
-            .map(ILoggingEvent::getFormattedMessage)
-            .reduce("", String::concat);
+    final String logs = logAppender.list.stream().map(LogLines::render).reduce("", String::concat);
     assertFalse(logs.contains("Hola"), "logs must not contain the subject");
     assertFalse(logs.contains("Contenido"), "logs must not contain the body");
     assertFalse(logs.contains("alice@example.com"), "logs must not contain the recipient address");

@@ -33,6 +33,10 @@ springdoc:
     url: /openapi/api-notificaciones.yaml
 
 notification:
+  auth:
+    jwt:
+      hs256-secret: ${AUTH_JWT_HS256_SECRET:notification-uco-dev-only-secret-change-me-0123456789abcdef}
+      ttl-minutes: ${AUTH_JWT_TTL_MINUTES:720}
   scheduler:
     requeue-interval-ms: ${NOTIFICATION_REQUEUE_INTERVAL_MS:30000}
     pending-orphan-threshold-ms: ${NOTIFICATION_PENDING_ORPHAN_THRESHOLD_MS:60000}

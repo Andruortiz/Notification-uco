@@ -5,6 +5,7 @@ import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationDocument;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Instant;
 import java.util.List;
 import org.bson.Document;
@@ -120,7 +121,7 @@ class NotificationControllerSearchE2ETest {
         .get()
         .uri(
             "/notifications?recipientId=recipient-a&status=FAILED&from=2026-06-01T00:00:00Z&to=2026-06-30T00:00:00Z")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -163,7 +164,7 @@ class NotificationControllerSearchE2ETest {
     webTestClient
         .get()
         .uri("/notifications?limit=1")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -178,7 +179,7 @@ class NotificationControllerSearchE2ETest {
     webTestClient
         .get()
         .uri("/notifications?limit=1&offset=1")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -194,7 +195,7 @@ class NotificationControllerSearchE2ETest {
     webTestClient
         .get()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -210,7 +211,7 @@ class NotificationControllerSearchE2ETest {
     webTestClient
         .get()
         .uri("/notifications?from=2026-09-20T00:00:00Z&to=2026-09-01T00:00:00Z")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isBadRequest();
@@ -221,7 +222,7 @@ class NotificationControllerSearchE2ETest {
     webTestClient
         .get()
         .uri("/notifications?limit=500")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isBadRequest();
@@ -252,7 +253,7 @@ class NotificationControllerSearchE2ETest {
     webTestClient
         .get()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -275,7 +276,7 @@ class NotificationControllerSearchE2ETest {
     webTestClient
         .get()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()

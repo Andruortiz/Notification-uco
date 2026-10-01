@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -93,7 +94,7 @@ class NotificationBatchE2ETest {
     return webTestClient
         .post()
         .uri("/notifications:sendBatch")
-        .header("X-Tenant-Id", tenant)
+        .header("Authorization", TestTokens.bearer(tenant))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(body)
         .exchange()
@@ -113,7 +114,7 @@ class NotificationBatchE2ETest {
     return webTestClient
         .get()
         .uri("/notifications/{id}", notificationId)
-        .header("X-Tenant-Id", tenant)
+        .header("Authorization", TestTokens.bearer(tenant))
         .exchange()
         .expectStatus()
         .isOk()
@@ -224,14 +225,14 @@ class NotificationBatchE2ETest {
     webTestClient
         .get()
         .uri("/notifications/{id}", notificationIdA)
-        .header("X-Tenant-Id", tenantB)
+        .header("Authorization", TestTokens.bearer(tenantB))
         .exchange()
         .expectStatus()
         .isNotFound();
     webTestClient
         .get()
         .uri("/notifications/{id}", notificationIdB)
-        .header("X-Tenant-Id", tenantA)
+        .header("Authorization", TestTokens.bearer(tenantA))
         .exchange()
         .expectStatus()
         .isNotFound();
@@ -251,7 +252,7 @@ class NotificationBatchE2ETest {
     webTestClient
         .post()
         .uri("/notifications:sendBatch")
-        .header("X-Tenant-Id", tenant)
+        .header("Authorization", TestTokens.bearer(tenant))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(Map.of("items", List.of(itemWithoutPriority)))
         .exchange()

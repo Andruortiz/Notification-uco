@@ -23,6 +23,7 @@ import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.infrastructure.support.AttachmentTestContainers;
 import co.edu.uco.notification.infrastructure.support.RecordingAttachmentSender;
 import co.edu.uco.notification.infrastructure.support.SampleFiles;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -201,7 +202,7 @@ class NotificationAttachmentE2ETest {
     return webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", TENANT)
+        .header("Authorization", TestTokens.bearer(TENANT))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(body)
         .exchange();
@@ -227,7 +228,7 @@ class NotificationAttachmentE2ETest {
           webTestClient
               .get()
               .uri("/notifications/{id}", notificationId)
-              .header("X-Tenant-Id", TENANT)
+              .header("Authorization", TestTokens.bearer(TENANT))
               .exchange()
               .expectStatus()
               .isOk()
@@ -637,7 +638,7 @@ class NotificationAttachmentE2ETest {
     return webTestClient
         .get()
         .uri(uri)
-        .header("X-Tenant-Id", TENANT)
+        .header("Authorization", TestTokens.bearer(TENANT))
         .exchange()
         .expectStatus()
         .isOk()

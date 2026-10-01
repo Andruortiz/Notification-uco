@@ -22,6 +22,12 @@ import co.edu.uco.notification.core.port.in.CompleteAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.GetAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.IssueAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.IssuedUpload;
+import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
+import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
+import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
+import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.config.SecurityConfig;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import org.junit.jupiter.api.AfterEach;
@@ -31,12 +37,20 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
 @WebFluxTest(controllers = AttachmentUploadController.class)
+@Import({
+  SecurityConfig.class,
+  AuthenticationWebFilter.class,
+  LocalJwtTokenValidationAdapter.class,
+  RouteAuthorizationPolicy.class,
+  AuthenticatedPrincipalArgumentResolver.class
+})
 class AttachmentUploadControllerTest {
 
   private static final TenantId TENANT = TenantId.of("tenant-1");
@@ -94,7 +108,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .post()
         .uri("/attachment-uploads")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(BODY)
         .exchange()
@@ -124,7 +138,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .post()
         .uri("/attachment-uploads/upload-1:complete")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isAccepted()
@@ -149,7 +163,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .get()
         .uri("/attachment-uploads/upload-1")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -180,21 +194,21 @@ class AttachmentUploadControllerTest {
     webTestClient
         .get()
         .uri("/attachment-uploads/upload-1")
-        .header("X-Tenant-Id", "tenant-2")
+        .header("Authorization", TestTokens.bearer("tenant-2"))
         .exchange()
         .expectStatus()
         .isNotFound();
     webTestClient
         .post()
         .uri("/attachment-uploads/upload-1:complete")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isEqualTo(HttpStatus.CONFLICT);
     webTestClient
         .post()
         .uri("/attachment-uploads")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(BODY)
         .exchange()
@@ -210,7 +224,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .post()
         .uri("/attachment-uploads")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(BODY.replace("contract.pdf", "setup.exe"))
         .exchange()

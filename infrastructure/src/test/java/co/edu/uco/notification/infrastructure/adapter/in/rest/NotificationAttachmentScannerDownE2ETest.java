@@ -9,6 +9,7 @@ import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.support.SampleFiles;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.time.Duration;
@@ -141,7 +142,7 @@ class NotificationAttachmentScannerDownE2ETest {
         webTestClient
             .post()
             .uri("/notifications")
-            .header("X-Tenant-Id", TENANT)
+            .header("Authorization", TestTokens.bearer(TENANT))
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(request("sc014-with-attachment", true))
             .exchange()
@@ -160,7 +161,7 @@ class NotificationAttachmentScannerDownE2ETest {
     webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", TENANT)
+        .header("Authorization", TestTokens.bearer(TENANT))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(request("sc014-control", false))
         .exchange()

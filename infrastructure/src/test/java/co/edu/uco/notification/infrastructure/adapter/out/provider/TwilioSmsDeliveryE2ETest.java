@@ -18,6 +18,7 @@ import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -188,7 +189,7 @@ class TwilioSmsDeliveryE2ETest {
         webTestClient
             .post()
             .uri("/notifications")
-            .header("X-Tenant-Id", TENANT)
+            .header("Authorization", TestTokens.bearer(TENANT))
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(request)
             .exchange()
@@ -205,7 +206,7 @@ class TwilioSmsDeliveryE2ETest {
     return webTestClient
         .get()
         .uri("/notifications/{id}", notificationId)
-        .header("X-Tenant-Id", TENANT)
+        .header("Authorization", TestTokens.bearer(TENANT))
         .exchange()
         .expectStatus()
         .isOk()
@@ -318,7 +319,7 @@ class TwilioSmsDeliveryE2ETest {
         webTestClient
             .post()
             .uri("/notifications")
-            .header("X-Tenant-Id", TENANT)
+            .header("Authorization", TestTokens.bearer(TENANT))
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(smsRequest("sms-161-1", RECIPIENT, null, "a".repeat(161)))
             .exchange()

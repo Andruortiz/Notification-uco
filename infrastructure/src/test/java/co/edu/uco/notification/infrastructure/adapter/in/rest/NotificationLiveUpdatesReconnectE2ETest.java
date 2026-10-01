@@ -6,6 +6,7 @@ import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationDocument;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
@@ -81,7 +82,7 @@ class NotificationLiveUpdatesReconnectE2ETest {
     return webTestClient
         .get()
         .uri("/notifications:subscribe")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()

@@ -7,13 +7,21 @@ info:
     el path (patrón "custom methods", ej. Google AIP-136) en vez de forzar un verbo HTTP que no
     encaja; los que sí son CRUD natural (crear, consultar) usan REST estándar. CU-03 (despachar) no
     tiene endpoint propio -- es un proceso interno disparado por el consumidor de RabbitMQ, nunca
-    invocado directamente por un cliente.
+    invocado directamente por un cliente. Autenticación (HU2-096): toda operación exige
+    `Authorization: Bearer <JWT>` -- un token interino, emitido y firmado por este mismo servicio,
+    con las claims `sub`, `tenantId` y `role` (`ADMINISTRADOR`, `OPERADOR` o `CLIENTE`, jerárquico).
+    El tenant y el rol del solicitante salen siempre del token, nunca de un encabezado. Se
+    reemplazará por la identidad resuelta contra la plataforma de Seguridad externa cuando DEP-01 se
+    cierre, sin cambiar la forma de las claims.
   version: 1.0.0
 servers:
   - url: /
     description: >
       Relativo al host donde se sirve este contrato -- funciona igual en local, dev y prod sin
       editar este archivo cuando cambie el puerto o el dominio.
+
+security:
+  - BearerAuth: []
 
 tags:
   - name: Notificaciones
@@ -39,8 +47,6 @@ paths:
         asíncrono. Si ya existe una notificación con el mismo (tenantId, externalId), devuelve esa
         misma notificación en vez de crear una segunda (idempotencia).
       operationId: sendNotification
-      parameters:
-        - $ref: '#/components/parameters/TenantId'
       requestBody:
         required: true
         content:
@@ -54,6 +60,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SendNotificationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '400':
           description: >
             El canal no existe/está deshabilitado, el contenido no cumple el esquema del canal, o un adjunto
@@ -91,10 +99,10 @@ paths:
       summary: Consultar histórico y trazabilidad
       description: >
         CU-05. Busca notificaciones por filtros combinables. Cada resultado incluye su recorrido
-        completo de intentos, no solo el estado actual (a diferencia de GET /notifications/{id}).
+        completo de intentos, no solo el estado actual (a diferencia de GET /notifications/{id}, que
+        solo exige rol CLIENTE). Requiere rol OPERADOR o ADMINISTRADOR.
       operationId: searchNotifications
       parameters:
-        - $ref: '#/components/parameters/TenantId'
         - name: recipientId
           in: query
           schema:
@@ -141,6 +149,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NotificationSearchResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           description: >
             Parámetros inválidos -- from posterior a to, o limit/offset fuera de su rango válido.
@@ -159,9 +171,22 @@ paths:
         cambio relevante mientras la conexión permanezca abierta. Una reconexión (ej. tras una caída
         de red) es, para el servidor, una solicitud nueva -- siempre reproduce la foto vigente antes
         de retomar el flujo en vivo, sin necesitar ningún encabezado ni parámetro de reanudación.
+        Excepción de autenticación: el `EventSource` nativo del navegador no permite enviar headers
+        custom, así que esta operación acepta también el token como parámetro de consulta
+        `access_token` -- la única operación del contrato con esta excepción. Si el header
+        `Authorization` está presente, tiene prioridad sobre `access_token`. Un token en la URL puede
+        quedar registrado en logs de acceso de intermediarios fuera del control de este servicio; el
+        servicio mismo no registra esta query string en sus propios logs.
       operationId: subscribeToNotificationUpdates
       parameters:
-        - $ref: '#/components/parameters/TenantId'
+        - name: access_token
+          in: query
+          required: false
+          description: >
+            Token JWT, equivalente a `Authorization: Bearer <token>`. Solo para esta operación
+            (limitación de EventSource). Ignorado si el header Authorization está presente.
+          schema:
+            type: string
         - name: recipientId
           in: query
           schema:
@@ -196,6 +221,8 @@ paths:
             text/event-stream:
               schema:
                 $ref: '#/components/schemas/NotificationLiveUpdate'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /notifications:sendBatch:
     post:
@@ -211,8 +238,6 @@ paths:
         ejemplo el escaner de adjuntos no responde) queda como FAILED en vez de tumbar el lote
         completo. Los resultados vienen en el mismo orden de los elementos de la solicitud.
       operationId: sendNotificationBatch
-      parameters:
-        - $ref: '#/components/parameters/TenantId'
       requestBody:
         required: true
         content:
@@ -226,6 +251,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/BatchAcceptedResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '400':
           description: >
             La solicitud no cumple el esquema (lista de elementos vacía o ausente, campo obligatorio
@@ -243,7 +270,6 @@ paths:
       description: CU-04. Devuelve el estado actual, canal, proveedor y marca de tiempo del último intento.
       operationId: getNotificationStatus
       parameters:
-        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/NotificationId'
       responses:
         '200':
@@ -252,6 +278,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NotificationStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           description: >
             No existe una notificación con ese id, o no pertenece al tenant del solicitante --
@@ -268,9 +296,10 @@ paths:
       description: >
         CU-06. Solo válido si el estado actual es FAILED o RECOVERABLE. Reencola la notificación y
         registra el reintento como manual (distinto del automático) para efectos de auditoría.
+        Requiere rol OPERADOR o ADMINISTRADOR. Planificada: sin controlador REST todavía (el mapeo de
+        rol queda documentado para cuando exista).
       operationId: retryNotification
       parameters:
-        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/NotificationId'
       responses:
         '202':
@@ -279,6 +308,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/NotificationStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           description: El estado actual no admite reintento (ej. ya está DELIVERED).
           content:
@@ -302,8 +335,6 @@ paths:
         (antes de expiresAt), avisar con POST /attachment-uploads/{uploadId}:complete. uploadUrl es una
         credencial temporal: solo aparece en esta respuesta.
       operationId: issueAttachmentUpload
-      parameters:
-        - $ref: '#/components/parameters/TenantId'
       requestBody:
         required: true
         content:
@@ -322,6 +353,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AttachmentUploadResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '400':
           description: >
             Nombre, tipo, extensión o tamaño inválidos, o tamaño de hasta 1 MB (ese archivo va embebido en
@@ -347,7 +380,6 @@ paths:
         Si la subida ya está resuelta, devuelve su estado sin volver a analizar.
       operationId: completeAttachmentUpload
       parameters:
-        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/UploadId'
       responses:
         '202':
@@ -356,6 +388,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AttachmentUploadResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '400':
           description: >
             El tamaño del archivo subido no coincide con el declarado. El archivo se descarta y la subida
@@ -389,7 +423,6 @@ paths:
       summary: Consultar el estado de una subida
       operationId: getAttachmentUpload
       parameters:
-        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/UploadId'
       responses:
         '200':
@@ -398,6 +431,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AttachmentUploadResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '404':
           description: La subida no existe para este tenant.
           content:
@@ -413,12 +448,11 @@ paths:
         CU-07 (lectura). Devuelve los canales que el enrutamiento está usando en este momento, cada uno
         con sus proveedores en orden de preferencia y el estado de cada proveedor. Hoy el despacho usa
         solo el proveedor en la posición 1; los demás se listan en su orden pero no se usan como
-        respaldo automático. El catálogo es del despliegue, no del tenant: la respuesta es la misma para
-        cualquier X-Tenant-Id. Un cambio guardado en el catálogo aparece aquí en el mismo refresco en que
-        el enrutamiento empieza a usarlo. Ningún campo contiene el valor de una credencial.
+        respaldo automático. El catálogo es del despliegue, no del tenant: la respuesta es la misma
+        para cualquier identidad autenticada. Un cambio guardado en el catálogo aparece aquí en el
+        mismo refresco en que el enrutamiento empieza a usarlo. Ningún campo contiene el valor de una
+        credencial.
       operationId: listChannels
-      parameters:
-        - $ref: '#/components/parameters/TenantId'
       responses:
         '200':
           description: Canales ordenados por channelType (items vacío si el catálogo está vacío).
@@ -426,12 +460,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ChannelCatalogResponse'
-        '400':
-          description: Falta el X-Tenant-Id o está vacío.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /providers:
     get:
@@ -442,11 +472,9 @@ paths:
         nombra el catálogo, cada uno con su estado y los canales en que aparece. MISSING_ADAPTER indica
         que el catálogo nombra un proveedor para el que el despliegue no tiene adaptador. El estado de
         habilitación es el de configuración de la réplica que responde, no la salud actual del
-        proveedor. Misma respuesta para cualquier X-Tenant-Id; ningún campo contiene el valor de una
-        credencial.
+        proveedor. Misma respuesta para cualquier identidad autenticada; ningún campo contiene el
+        valor de una credencial.
       operationId: listProviders
-      parameters:
-        - $ref: '#/components/parameters/TenantId'
       responses:
         '200':
           description: Proveedores ordenados por providerId.
@@ -454,12 +482,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProviderCatalogResponse'
-        '400':
-          description: Falta el X-Tenant-Id o está vacío.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /channels:register:
     post:
@@ -471,8 +495,6 @@ paths:
         Bloqueado: el catálogo dinámico ya existe, pero su escritura por API aún no está
         habilitada.
       operationId: registerChannel
-      parameters:
-        - $ref: '#/components/parameters/TenantId'
       requestBody:
         required: true
         content:
@@ -482,6 +504,10 @@ paths:
       responses:
         '200':
           description: Canal registrado o actualizado.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           description: El esquema de validación del canal está mal formado.
           content:
@@ -499,8 +525,6 @@ paths:
         requerida, el proveedor queda registrado pero deshabilitado -- nunca a medias en silencio.
         Bloqueado hasta que exista el catálogo dinámico (Fase 6).
       operationId: registerProvider
-      parameters:
-        - $ref: '#/components/parameters/TenantId'
       requestBody:
         required: true
         content:
@@ -514,6 +538,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RegisterProviderResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '404':
           description: No existe un adaptador de código para ese providerId.
           content:
@@ -530,10 +558,10 @@ paths:
         Un destinatario que nunca declaró preferencias no es un error: se devuelve el valor por
         defecto (optedOutAll false, acceptedChannels vacía -- todos los canales aceptados -- y
         updatedAt nulo). Las preferencias de un tenant nunca son visibles desde otro, aunque usen el
-        mismo recipientId.
+        mismo recipientId. Requiere rol CLIENTE o superior. Planificada: sin controlador REST todavía
+        (el mapeo de rol queda documentado para cuando exista).
       operationId: getRecipientPreferences
       parameters:
-        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/RecipientId'
       responses:
         '200':
@@ -542,6 +570,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipientPreferencesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
 
   /recipients/{recipientId}:updatePreferences:
     post:
@@ -553,10 +583,11 @@ paths:
         siguiente despacho -- incluidas las notificaciones ya aceptadas que aún no se enviaron y los
         reintentos --, una notificación de ese destinatario termina en DISCARDED sin contactar a
         ningún proveedor si está dado de baja o si su canal no está entre los aceptados. La aceptación
-        de notificaciones no cambia, y las notificaciones ya terminales no se modifican.
+        de notificaciones no cambia, y las notificaciones ya terminales no se modifican. Requiere rol
+        CLIENTE o superior. Planificada: sin controlador REST todavía (el mapeo de rol queda
+        documentado para cuando exista).
       operationId: updateRecipientPreferences
       parameters:
-        - $ref: '#/components/parameters/TenantId'
         - $ref: '#/components/parameters/RecipientId'
       requestBody:
         required: true
@@ -571,6 +602,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/RecipientPreferencesResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
         '400':
           description: >
             Cuerpo ausente o una entrada de acceptedChannels vacía o solo con espacios. Las
@@ -581,17 +614,35 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
 components:
-  parameters:
-    TenantId:
-      name: X-Tenant-Id
-      in: header
-      required: true
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
       description: >
-        Identificador del tenant solicitante. Placeholder mientras CU-10 (autenticación) sigue
-        bloqueado por DEP-01 -- se reemplazará por la identidad resuelta desde el token una vez
-        se cierre esa dependencia con el equipo de Seguridad.
-      schema:
-        type: string
+        Token interino emitido y firmado por este mismo servicio (HS256), con las claims sub,
+        tenantId y role. Se reemplazará por la identidad resuelta contra la plataforma de Seguridad
+        externa cuando DEP-01 se cierre -- la forma de las claims es la misma que usará el adaptador
+        definitivo.
+
+  responses:
+    Unauthorized:
+      description: >
+        Sin token, token mal formado, firma inválida, expirado, o con alguna claim obligatoria (sub,
+        tenantId, role) ausente o con role fuera de ADMINISTRADOR/OPERADOR/CLIENTE. El cuerpo nunca
+        detalla la causa criptográfica exacta del rechazo.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Token válido, pero el rol no alcanza el mínimo requerido por esta operación.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  parameters:
     NotificationId:
       name: id
       in: path

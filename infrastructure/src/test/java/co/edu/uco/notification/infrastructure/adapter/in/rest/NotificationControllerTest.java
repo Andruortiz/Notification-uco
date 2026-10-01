@@ -31,6 +31,12 @@ import co.edu.uco.notification.core.port.in.SearchNotificationsUseCase;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
+import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
+import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
+import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
+import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.config.SecurityConfig;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
@@ -40,12 +46,20 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
 @WebFluxTest(controllers = NotificationController.class)
+@Import({
+  SecurityConfig.class,
+  AuthenticationWebFilter.class,
+  LocalJwtTokenValidationAdapter.class,
+  RouteAuthorizationPolicy.class,
+  AuthenticatedPrincipalArgumentResolver.class
+})
 class NotificationControllerTest {
 
   @Autowired private WebTestClient webTestClient;
@@ -78,7 +92,7 @@ class NotificationControllerTest {
     webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(REQUEST_BODY)
         .exchange()
@@ -101,7 +115,7 @@ class NotificationControllerTest {
     webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(REQUEST_BODY)
         .exchange()
@@ -119,7 +133,7 @@ class NotificationControllerTest {
     webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(REQUEST_BODY)
         .exchange()
@@ -143,7 +157,7 @@ class NotificationControllerTest {
     webTestClient
         .get()
         .uri("/notifications/{id}", id.value())
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -163,7 +177,7 @@ class NotificationControllerTest {
     webTestClient
         .get()
         .uri("/notifications/{id}", id.value())
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isNotFound();
@@ -177,7 +191,7 @@ class NotificationControllerTest {
     webTestClient
         .get()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -195,7 +209,7 @@ class NotificationControllerTest {
     webTestClient
         .get()
         .uri("/notifications?status=NOT_A_REAL_STATUS")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isBadRequest();
@@ -244,7 +258,7 @@ class NotificationControllerTest {
     webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(body)
         .exchange()
@@ -309,7 +323,7 @@ class NotificationControllerTest {
     webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(REQUEST_WITH_ATTACHMENTS)
         .exchange()
@@ -334,7 +348,7 @@ class NotificationControllerTest {
     webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(REQUEST_WITH_ATTACHMENTS)
         .exchange()
@@ -385,7 +399,7 @@ class NotificationControllerTest {
     webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(REQUEST_BODY.replace("\"Body\"", "\"" + huge + "\""))
         .exchange()
@@ -412,7 +426,7 @@ class NotificationControllerTest {
     webTestClient
         .post()
         .uri("/notifications")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(body)
         .exchange()

@@ -11,6 +11,12 @@ import co.edu.uco.notification.core.port.in.ProviderChannelView;
 import co.edu.uco.notification.core.port.in.ProviderStatus;
 import co.edu.uco.notification.core.port.in.ProviderView;
 import co.edu.uco.notification.core.port.in.QueryChannelCatalogUseCase;
+import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
+import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
+import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
+import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.config.SecurityConfig;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -18,10 +24,18 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
 @WebFluxTest(controllers = ChannelCatalogController.class)
+@Import({
+  SecurityConfig.class,
+  AuthenticationWebFilter.class,
+  LocalJwtTokenValidationAdapter.class,
+  RouteAuthorizationPolicy.class,
+  AuthenticatedPrincipalArgumentResolver.class
+})
 class ChannelCatalogControllerTest {
 
   private static final String DISABLED_REASON =
@@ -61,7 +75,7 @@ class ChannelCatalogControllerTest {
     webTestClient
         .get()
         .uri("/channels")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -106,7 +120,7 @@ class ChannelCatalogControllerTest {
     webTestClient
         .get()
         .uri("/channels")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -127,7 +141,7 @@ class ChannelCatalogControllerTest {
     webTestClient
         .get()
         .uri("/channels")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -152,7 +166,7 @@ class ChannelCatalogControllerTest {
     webTestClient
         .get()
         .uri("/providers")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()
@@ -171,33 +185,16 @@ class ChannelCatalogControllerTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"/channels", "/providers"})
-  void rejectsARequestWithoutTenantWithoutQueryingTheCatalog(final String path) {
+  void rejectsARequestWithoutATokenWithoutQueryingTheCatalog(final String path) {
     webTestClient
         .get()
         .uri(path)
         .exchange()
         .expectStatus()
-        .isBadRequest()
+        .isUnauthorized()
         .expectBody()
         .jsonPath("$.message")
-        .isEqualTo("TenantId must not be blank");
-
-    verifyNoInteractions(queryChannelCatalogUseCase);
-  }
-
-  @ParameterizedTest
-  @ValueSource(strings = {"/channels", "/providers"})
-  void rejectsARequestWithABlankTenantWithoutQueryingTheCatalog(final String path) {
-    webTestClient
-        .get()
-        .uri(path)
-        .header("X-Tenant-Id", "   ")
-        .exchange()
-        .expectStatus()
-        .isBadRequest()
-        .expectBody()
-        .jsonPath("$.message")
-        .isEqualTo("TenantId must not be blank");
+        .isEqualTo("missing or invalid bearer token");
 
     verifyNoInteractions(queryChannelCatalogUseCase);
   }

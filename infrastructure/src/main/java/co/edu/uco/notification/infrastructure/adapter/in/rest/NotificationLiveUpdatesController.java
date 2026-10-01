@@ -1,9 +1,9 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
+import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
-import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.in.SubscribeToNotificationUpdatesQuery;
 import co.edu.uco.notification.core.port.in.SubscribeToNotificationUpdatesUseCase;
 import co.edu.uco.notification.utils.Preconditions;
@@ -14,7 +14,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
@@ -38,7 +37,7 @@ public class NotificationLiveUpdatesController {
 
   @GetMapping(value = "/notifications:subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   public Flux<ServerSentEvent<NotificationLiveUpdateResponse>> subscribe(
-      @RequestHeader("X-Tenant-Id") final String tenantId,
+      final AuthenticatedPrincipal principal,
       @RequestParam(name = "recipientId", required = false) final String recipientId,
       @RequestParam(name = "channelType", required = false) final String channelType,
       @RequestParam(name = "status", required = false) final String status,
@@ -46,7 +45,7 @@ public class NotificationLiveUpdatesController {
       @RequestParam(name = "to", required = false) final Instant to) {
     final SubscribeToNotificationUpdatesQuery query =
         new SubscribeToNotificationUpdatesQuery(
-            TenantId.of(tenantId),
+            principal.tenantId(),
             recipientId == null ? null : RecipientId.of(recipientId),
             channelType == null ? null : ChannelType.of(channelType),
             status == null ? null : NotificationStatus.valueOf(status),
@@ -60,7 +59,7 @@ public class NotificationLiveUpdatesController {
                 update ->
                     LOGGER.debug(
                         "Live update tenantId={} notificationId={} action={}",
-                        tenantId,
+                        principal.tenantId().value(),
                         update.notification().notificationId().value(),
                         update.action()))
             .map(NotificationLiveUpdateResponse::from)

@@ -8,6 +8,7 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusUseCase;
 import co.edu.uco.notification.core.port.in.NotificationStatusView;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -45,7 +46,7 @@ class CorsConfigTest {
         .get()
         .uri("/notifications/{id}", id.value())
         .header(HttpHeaders.ORIGIN, "http://localhost:5173")
-        .header("X-Tenant-Id", "tenant-1")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
         .isOk()

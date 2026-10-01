@@ -1,5 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
+import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
@@ -8,7 +9,6 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.Priority;
 import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
-import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusQuery;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusUseCase;
 import co.edu.uco.notification.core.port.in.SearchNotificationsQuery;
@@ -26,7 +26,6 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -59,10 +58,10 @@ public class NotificationController {
 
   @PostMapping
   public Mono<ResponseEntity<SendNotificationResponse>> send(
-      @RequestHeader("X-Tenant-Id") final String tenantId,
-      @RequestBody final SendNotificationRequest request) {
+      final AuthenticatedPrincipal principal, @RequestBody final SendNotificationRequest request) {
+    final String tenantId = principal.tenantId().value();
     return logAttachments(
-            tenantId, request, sendNotificationUseCase.send(toCommand(tenantId, request)))
+            tenantId, request, sendNotificationUseCase.send(toCommand(principal, request)))
         .map(SendNotificationResponse::from)
         .map(response -> ResponseEntity.status(HttpStatus.ACCEPTED).body(response));
   }
@@ -98,15 +97,15 @@ public class NotificationController {
 
   @GetMapping("/{id}")
   public Mono<NotificationStatusResponse> getStatus(
-      @RequestHeader("X-Tenant-Id") final String tenantId, @PathVariable("id") final String id) {
+      final AuthenticatedPrincipal principal, @PathVariable("id") final String id) {
     final GetNotificationStatusQuery query =
-        new GetNotificationStatusQuery(TenantId.of(tenantId), NotificationId.of(id));
+        new GetNotificationStatusQuery(principal.tenantId(), NotificationId.of(id));
     return getNotificationStatusUseCase.getStatus(query).map(NotificationStatusResponse::from);
   }
 
   @GetMapping
   public Mono<NotificationSearchResponse> search(
-      @RequestHeader("X-Tenant-Id") final String tenantId,
+      final AuthenticatedPrincipal principal,
       @RequestParam(name = "recipientId", required = false) final String recipientId,
       @RequestParam(name = "channelType", required = false) final String channelType,
       @RequestParam(name = "status", required = false) final String status,
@@ -116,7 +115,7 @@ public class NotificationController {
       @RequestParam(name = "offset", defaultValue = "0") final int offset) {
     final SearchNotificationsQuery query =
         new SearchNotificationsQuery(
-            TenantId.of(tenantId),
+            principal.tenantId(),
             recipientId == null ? null : RecipientId.of(recipientId),
             channelType == null ? null : ChannelType.of(channelType),
             status == null ? null : NotificationStatus.valueOf(status),
@@ -128,9 +127,9 @@ public class NotificationController {
   }
 
   private static SendNotificationCommand toCommand(
-      final String tenantId, final SendNotificationRequest request) {
+      final AuthenticatedPrincipal principal, final SendNotificationRequest request) {
     return new SendNotificationCommand(
-        TenantId.of(tenantId),
+        principal.tenantId(),
         ExternalId.of(request.externalId()),
         ChannelType.of(request.channelType()),
         RecipientId.of(request.recipientId()),

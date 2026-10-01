@@ -55,16 +55,39 @@ class ChannelCatalogE2ETest {
   }
 
   @Test
-  void migrationDoesNothingWhenTheCollectionAlreadyHasData() {
+  void seedingAddsTheMissingChannelsAndNeverModifiesTheStoredOnes() {
     mongoTemplate.save(new ChannelCatalogDocument("SMS", List.of("otro"), null)).block();
+    final ChannelCatalogProperties properties =
+        new ChannelCatalogProperties(
+            Map.of(
+                "EMAIL",
+                new ChannelCatalogProperties.ChannelEntry(List.of("simulated"), null),
+                "SMS",
+                new ChannelCatalogProperties.ChannelEntry(List.of("twilio"), null)));
+    final ChannelCatalogSeeder seeder = new ChannelCatalogSeeder(mongoTemplate, properties);
+
+    seeder.seed().block();
+
+    StepVerifier.create(mongoTemplate.findById("EMAIL", ChannelCatalogDocument.class))
+        .expectNext(new ChannelCatalogDocument("EMAIL", List.of("simulated"), null))
+        .verifyComplete();
+    StepVerifier.create(mongoTemplate.findById("SMS", ChannelCatalogDocument.class))
+        .expectNext(new ChannelCatalogDocument("SMS", List.of("otro"), null))
+        .verifyComplete();
+  }
+
+  @Test
+  void seedingTwiceDoesNotDuplicateOrFail() {
     final ChannelCatalogProperties properties =
         new ChannelCatalogProperties(
             Map.of("EMAIL", new ChannelCatalogProperties.ChannelEntry(List.of("simulated"), null)));
     final ChannelCatalogSeeder seeder = new ChannelCatalogSeeder(mongoTemplate, properties);
 
     seeder.seed().block();
+    seeder.seed().block();
 
-    StepVerifier.create(mongoTemplate.findById("EMAIL", ChannelCatalogDocument.class))
+    StepVerifier.create(mongoTemplate.findAll(ChannelCatalogDocument.class))
+        .expectNextCount(1)
         .verifyComplete();
   }
 

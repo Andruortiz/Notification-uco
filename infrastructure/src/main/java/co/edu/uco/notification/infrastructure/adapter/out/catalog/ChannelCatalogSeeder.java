@@ -1,20 +1,28 @@
 package co.edu.uco.notification.infrastructure.adapter.out.catalog;
 
 import co.edu.uco.notification.utils.Preconditions;
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
-import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
+/**
+ * Siembra en Mongo los canales de {@code application.yml} que todavía no existen en el catálogo.
+ * Nunca modifica un canal ya guardado: lo guardado en Mongo es la fuente de verdad.
+ */
 @Component
 @EnableConfigurationProperties(ChannelCatalogProperties.class)
 public class ChannelCatalogSeeder implements ApplicationRunner {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(ChannelCatalogSeeder.class);
 
   private final ReactiveMongoTemplate mongoTemplate;
   private final ChannelCatalogProperties properties;
@@ -27,28 +35,56 @@ public class ChannelCatalogSeeder implements ApplicationRunner {
   }
 
   Mono<Void> seed() {
-    return mongoTemplate
-        .count(new Query(), ChannelCatalogDocument.class)
-        .filter(count -> count == 0)
-        .flatMap(count -> Flux.fromIterable(seedDocuments()).flatMap(mongoTemplate::save).then())
+    final Map<String, ChannelCatalogProperties.ChannelEntry> channels = properties.channels();
+    if (channels == null) {
+      return Mono.empty();
+    }
+    return Flux.fromIterable(channels.entrySet())
+        .concatMap(entry -> seedIfMissing(entry.getKey(), entry.getValue()))
         .then();
   }
 
-  private List<ChannelCatalogDocument> seedDocuments() {
-    final Map<String, ChannelCatalogProperties.ChannelEntry> channels = properties.channels();
-    if (channels == null) {
-      return List.of();
+  private Mono<Void> seedIfMissing(
+      final String channelType, final ChannelCatalogProperties.ChannelEntry entry) {
+    final ChannelCatalogDocument configured =
+        new ChannelCatalogDocument(channelType, entry.providers(), entry.contentSchema());
+    return mongoTemplate
+        .findById(channelType, ChannelCatalogDocument.class)
+        .doOnNext(stored -> logStoredChannel(configured, stored))
+        .switchIfEmpty(Mono.defer(() -> insert(configured)))
+        .then();
+  }
+
+  private Mono<ChannelCatalogDocument> insert(final ChannelCatalogDocument configured) {
+    return mongoTemplate
+        .insert(configured)
+        .doOnNext(
+            seeded -> LOGGER.info("Catalog channel seeded channelType={}", seeded.channelType()))
+        .onErrorResume(DuplicateKeyException.class, error -> Mono.empty());
+  }
+
+  private static void logStoredChannel(
+      final ChannelCatalogDocument configured, final ChannelCatalogDocument stored) {
+    if (Objects.equals(configured.providers(), stored.providers())
+        && Objects.equals(configured.contentSchema(), stored.contentSchema())) {
+      return;
     }
-    return channels.entrySet().stream()
-        .map(
-            entry ->
-                new ChannelCatalogDocument(
-                    entry.getKey(), entry.getValue().providers(), entry.getValue().contentSchema()))
-        .toList();
+    LOGGER.info(
+        "Catalog channel already stored, application.yml differs and is not applied channelType={}",
+        stored.channelType());
   }
 
   @Override
   public void run(final ApplicationArguments args) {
-    seed().onErrorResume(error -> Mono.empty()).block();
+    seed()
+        .doOnError(
+            error ->
+                LOGGER.error(
+                    "Catalog seeding failed, the stored catalog may be incomplete errorType={}"
+                        + " message={}",
+                    error.getClass().getSimpleName(),
+                    error.getMessage()))
+        .onErrorResume(error -> Mono.empty())
+        .block();
   }
 }

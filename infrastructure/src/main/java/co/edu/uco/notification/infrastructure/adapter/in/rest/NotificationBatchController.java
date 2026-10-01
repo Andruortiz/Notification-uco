@@ -11,6 +11,8 @@ import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.port.in.BatchNotificationItem;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchUseCase;
+import co.edu.uco.notification.infrastructure.config.CorrelationContext;
+import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.Preconditions;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -35,21 +37,26 @@ public class NotificationBatchController {
   public Mono<ResponseEntity<BatchAcceptedResponse>> sendBatch(
       final AuthenticatedPrincipal principal,
       @RequestBody final SendNotificationBatchRequest request) {
-    return sendNotificationBatchUseCase
-        .sendBatch(toCommand(principal, request))
+    return Mono.deferContextual(
+            context ->
+                sendNotificationBatchUseCase.sendBatch(
+                    toCommand(principal, request, CorrelationContext.from(context))))
         .map(BatchAcceptedResponse::from)
         .map(response -> ResponseEntity.status(HttpStatus.ACCEPTED).body(response));
   }
 
   private static SendNotificationBatchCommand toCommand(
-      final AuthenticatedPrincipal principal, final SendNotificationBatchRequest request) {
+      final AuthenticatedPrincipal principal,
+      final SendNotificationBatchRequest request,
+      final CorrelationId correlationId) {
     if (request.items() == null || request.items().isEmpty()) {
       throw new IllegalArgumentException("items must not be empty");
     }
     return new SendNotificationBatchCommand(
         principal.tenantId(),
         request.batchId() == null ? null : BatchId.of(request.batchId()),
-        request.items().stream().map(NotificationBatchController::toItem).toList());
+        request.items().stream().map(NotificationBatchController::toItem).toList(),
+        correlationId);
   }
 
   private static BatchNotificationItem toItem(final SendNotificationRequest item) {

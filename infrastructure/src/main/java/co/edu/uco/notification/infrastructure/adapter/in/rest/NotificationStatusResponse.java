@@ -8,7 +8,8 @@ public record NotificationStatusResponse(
     String status,
     String channelType,
     String providerId,
-    Instant lastUpdatedAt) {
+    Instant lastUpdatedAt,
+    String correlationId) {
 
   static NotificationStatusResponse from(final NotificationStatusView view) {
     return new NotificationStatusResponse(
@@ -16,6 +17,7 @@ public record NotificationStatusResponse(
         view.status().name(),
         view.channelType().value(),
         view.lastProviderId() == null ? null : view.lastProviderId().value(),
-        view.lastUpdatedAt());
+        view.lastUpdatedAt(),
+        view.correlationId() == null ? null : view.correlationId().value());
   }
 }

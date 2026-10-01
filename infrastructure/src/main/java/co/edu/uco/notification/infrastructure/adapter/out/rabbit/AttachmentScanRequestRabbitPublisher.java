@@ -4,6 +4,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
 import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyProperties;
+import co.edu.uco.notification.infrastructure.config.CorrelationContext;
 import co.edu.uco.notification.utils.Preconditions;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -34,17 +35,25 @@ public class AttachmentScanRequestRabbitPublisher implements AttachmentScanReque
   public Mono<Void> requestScan(final TenantId tenantId, final UploadId uploadId) {
     Preconditions.requireNonNull(tenantId, "tenantId must not be null");
     Preconditions.requireNonNull(uploadId, "uploadId must not be null");
-    return Mono.<Void>fromRunnable(
-            () ->
-                rabbitTemplate.convertAndSend(
-                    topology.exchange(),
-                    topology.routingKey(),
-                    toJson(new AttachmentScanRequest(tenantId.value(), uploadId.value())),
-                    message -> {
-                      message.getMessageProperties().setMessageId(UUID.randomUUID().toString());
-                      return message;
-                    }))
-        .subscribeOn(Schedulers.boundedElastic());
+    return Mono.deferContextual(
+        context ->
+            Mono.<Void>fromRunnable(
+                    () ->
+                        rabbitTemplate.convertAndSend(
+                            topology.exchange(),
+                            topology.routingKey(),
+                            toJson(new AttachmentScanRequest(tenantId.value(), uploadId.value())),
+                            message -> {
+                              message
+                                  .getMessageProperties()
+                                  .setMessageId(UUID.randomUUID().toString());
+                              CorrelationContext.stamp(
+                                  message.getMessageProperties(),
+                                  CorrelationContext.from(context),
+                                  CorrelationContext.traceFrom(context));
+                              return message;
+                            }))
+                .subscribeOn(Schedulers.boundedElastic()));
   }
 
   private String toJson(final AttachmentScanRequest request) {

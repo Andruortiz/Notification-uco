@@ -7,7 +7,11 @@ import co.edu.uco.notification.core.port.in.ScanAttachmentUploadUseCase;
 import co.edu.uco.notification.infrastructure.adapter.out.rabbit.AttachmentScanRequest;
 import co.edu.uco.notification.infrastructure.config.AttachmentProperties;
 import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyProperties;
+import co.edu.uco.notification.infrastructure.config.CorrelationContext;
+import co.edu.uco.notification.infrastructure.config.LogContext;
+import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.Preconditions;
+import co.edu.uco.notification.utils.TraceParent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
@@ -22,6 +26,7 @@ import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
+import reactor.util.context.Context;
 
 @Component
 public class AttachmentScanListener {
@@ -64,6 +69,27 @@ public class AttachmentScanListener {
       final Channel channel,
       @Header(AmqpHeaders.DELIVERY_TAG) final long deliveryTag)
       throws IOException {
+    final CorrelationId fromHeader = CorrelationContext.fromHeaders(message.getMessageProperties());
+    final CorrelationId correlationId =
+        fromHeader != null
+            ? fromHeader
+            : CorrelationId.of(
+                NotificationDispatchListener.LEGACY_PREFIX + CorrelationId.newId().value());
+    final TraceParent traceParent =
+        CorrelationContext.traceFromHeaders(message.getMessageProperties());
+    try (LogContext ignored =
+        LogContext.open(correlationId, null, null).withTraceParent(traceParent)) {
+      process(message, channel, deliveryTag, correlationId, traceParent);
+    }
+  }
+
+  private void process(
+      final Message message,
+      final Channel channel,
+      final long deliveryTag,
+      final CorrelationId correlationId,
+      final TraceParent traceParent)
+      throws IOException {
     Exception failure = null;
     try {
       final AttachmentScanRequest request =
@@ -71,6 +97,14 @@ public class AttachmentScanListener {
       scanAttachmentUploadUseCase
           .scan(TenantId.of(request.tenantId()), UploadId.of(request.uploadId()))
           .doOnNext(AttachmentScanListener::logVerdict)
+          .contextWrite(
+              traceParent == null
+                  ? Context.of(CorrelationId.CONTEXT_KEY, correlationId.value())
+                  : Context.of(
+                      CorrelationId.CONTEXT_KEY,
+                      correlationId.value(),
+                      TraceParent.CONTEXT_KEY,
+                      traceParent.value()))
           .block();
     } catch (final RuntimeException | IOException cause) {
       failure = cause;

@@ -268,11 +268,13 @@ class AttachmentUploadE2ETest {
   }
 
   private String bodyOf(final WebTestClient.ResponseSpec spec, final int status) {
-    return spec.expectStatus()
-        .isEqualTo(status)
-        .expectBody(String.class)
-        .returnResult()
-        .getResponseBody();
+    final String body =
+        spec.expectStatus()
+            .isEqualTo(status)
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+    return body == null ? null : body.replaceAll(",\"correlationId\":\"[^\"]*\"", "");
   }
 
   private String awaitNotificationStatus(

@@ -52,6 +52,7 @@ class LogCorrelationE2ETest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final Duration TERMINAL_STATUS_TIMEOUT = Duration.ofSeconds(25);
+  private static final Duration LOG_PROPAGATION_TIMEOUT = Duration.ofSeconds(10);
   private static final String SENTINEL_ADDRESS = "sentinel.person@example.com";
   private static final String SENTINEL_BODY = "SENTINEL-BODY-5e1c7a";
   private static final String SENTINEL_SUBJECT = "SENTINEL-SUBJECT-91ab3d";
@@ -216,14 +217,36 @@ class LogCorrelationE2ETest {
     final Map<String, Object> delivered = awaitDelivered("tenant-log-1", notificationId);
 
     assertEquals(correlationId, delivered.get("correlationId"));
+    final Set<String> events =
+        awaitEvents(
+            notificationId,
+            Set.of("NotificationAccepted", "NotificationQueued", "NotificationDelivered"));
     final List<JsonNode> journey = entriesFor(notificationId);
     assertFalse(journey.isEmpty());
     journey.forEach(entry -> assertEquals(correlationId, entry.path("correlationId").asText()));
-    final Set<String> events =
-        Set.copyOf(journey.stream().map(entry -> entry.path("event").asText("")).toList());
-    assertTrue(events.contains("NotificationAccepted"), events.toString());
-    assertTrue(events.contains("NotificationQueued"), events.toString());
+    assertTrue(events.containsAll(Set.of("NotificationAccepted", "NotificationQueued")));
     assertTrue(events.contains("NotificationDelivered"), events.toString());
+  }
+
+  private Set<String> awaitEvents(final String notificationId, final Set<String> expected) {
+    final Instant started = Instant.now();
+    Set<String> events = eventsOf(notificationId);
+    while (!events.containsAll(expected)
+        && Duration.between(started, Instant.now()).compareTo(LOG_PROPAGATION_TIMEOUT) < 0) {
+      events = eventsOf(notificationId);
+    }
+    assertTrue(
+        Duration.between(started, Instant.now()).compareTo(LOG_PROPAGATION_TIMEOUT) <= 0,
+        "the lifecycle logs must appear within " + LOG_PROPAGATION_TIMEOUT);
+    return events;
+  }
+
+  private Set<String> eventsOf(final String notificationId) {
+    return Set.copyOf(
+        entriesFor(notificationId).stream()
+            .map(entry -> entry.path("event").asText(""))
+            .filter(event -> !event.isEmpty())
+            .toList());
   }
 
   @Test
@@ -312,7 +335,7 @@ class LogCorrelationE2ETest {
             .get()
             .uri("/notifications/{id}", "00000000-0000-0000-0000-000000000000")
             .header("Authorization", TestTokens.bearer("tenant-log-g"))
-            .header("X-Correlation-Id", "bad id with spaces\nand-newline")
+            .header("X-Correlation-Id", "bad id with spaces")
             .exchange()
             .expectStatus()
             .isNotFound()

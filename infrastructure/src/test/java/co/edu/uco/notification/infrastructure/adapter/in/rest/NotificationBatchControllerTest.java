@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -27,6 +28,7 @@ import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationP
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
+import co.edu.uco.notification.utils.CorrelationId;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -242,5 +244,56 @@ class NotificationBatchControllerTest {
         .isUnauthorized();
 
     verify(sendNotificationBatchUseCase, never()).sendBatch(any());
+  }
+
+  @Test
+  void sendBatchPassesTheRequestCorrelationIdToTheCommand() {
+    when(sendNotificationBatchUseCase.sendBatch(any()))
+        .thenReturn(
+            Mono.just(
+                new BatchAcceptedResult(
+                    BatchId.of("batch-c"),
+                    List.of(
+                        BatchItemResult.accepted(
+                            ExternalId.of("order-1"), NotificationId.newId())))));
+
+    webTestClient
+        .post()
+        .uri("/notifications:sendBatch")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header(CorrelationId.HEADER, "req-batch-1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{\"batchId\": \"batch-c\", \"items\": [" + VALID_ITEM + "]}")
+        .exchange()
+        .expectStatus()
+        .isEqualTo(HttpStatus.ACCEPTED)
+        .expectHeader()
+        .valueEquals(CorrelationId.HEADER, "req-batch-1");
+
+    final ArgumentCaptor<SendNotificationBatchCommand> command =
+        ArgumentCaptor.forClass(SendNotificationBatchCommand.class);
+    verify(sendNotificationBatchUseCase).sendBatch(command.capture());
+    assertEquals(CorrelationId.of("req-batch-1"), command.getValue().correlationId());
+  }
+
+  @Test
+  void sendBatchWithoutTheHeaderGeneratesAnIdForTheCommand() {
+    when(sendNotificationBatchUseCase.sendBatch(any()))
+        .thenReturn(
+            Mono.just(
+                new BatchAcceptedResult(
+                    BatchId.of("batch-d"),
+                    List.of(
+                        BatchItemResult.accepted(
+                            ExternalId.of("order-1"), NotificationId.newId())))));
+
+    post("{\"batchId\": \"batch-d\", \"items\": [" + VALID_ITEM + "]}")
+        .expectStatus()
+        .isEqualTo(HttpStatus.ACCEPTED);
+
+    final ArgumentCaptor<SendNotificationBatchCommand> command =
+        ArgumentCaptor.forClass(SendNotificationBatchCommand.class);
+    verify(sendNotificationBatchUseCase).sendBatch(command.capture());
+    assertNotNull(command.getValue().correlationId());
   }
 }

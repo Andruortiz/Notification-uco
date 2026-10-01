@@ -11,6 +11,7 @@ import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
 import java.time.Instant;
@@ -222,8 +223,7 @@ class AuthenticationInterinaE2ETest {
           .expectStatus()
           .isForbidden();
 
-      final List<String> lines =
-          logs.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+      final List<String> lines = logs.list.stream().map(LogLines::render).toList();
       assertTrue(lines.stream().anyMatch(line -> line.contains("MISSING_TOKEN")));
       assertTrue(lines.stream().anyMatch(line -> line.contains("INSUFFICIENT_ROLE")));
       assertFalse(lines.stream().anyMatch(line -> line.contains(token)));

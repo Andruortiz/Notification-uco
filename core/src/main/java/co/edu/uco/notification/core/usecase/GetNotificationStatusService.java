@@ -46,6 +46,7 @@ public final class GetNotificationStatusService implements GetNotificationStatus
         notification.status(),
         notification.channelType(),
         lastProviderId,
-        lastUpdatedAt);
+        lastUpdatedAt,
+        notification.correlationId());
   }
 }

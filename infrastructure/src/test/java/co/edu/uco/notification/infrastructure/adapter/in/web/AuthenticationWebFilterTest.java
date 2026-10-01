@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenIssuer;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.time.Duration;
@@ -316,6 +317,6 @@ class AuthenticationWebFilterTest {
   }
 
   private static List<String> lines(final ListAppender<ILoggingEvent> appender) {
-    return appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+    return appender.list.stream().map(LogLines::render).toList();
   }
 }

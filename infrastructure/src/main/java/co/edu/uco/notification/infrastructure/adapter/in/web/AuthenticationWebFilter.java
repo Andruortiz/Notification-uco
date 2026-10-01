@@ -3,6 +3,10 @@ package co.edu.uco.notification.infrastructure.adapter.in.web;
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
+import co.edu.uco.notification.infrastructure.config.LogContext;
+import co.edu.uco.notification.infrastructure.config.LogFields;
+import co.edu.uco.notification.utils.CorrelationId;
+import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
@@ -78,7 +82,9 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       return rejectForbidden(exchange, principal.tenantId().value());
     }
     exchange.getAttributes().put(PRINCIPAL_ATTRIBUTE, principal);
-    return chain.filter(exchange);
+    return chain
+        .filter(exchange)
+        .contextWrite(context -> context.put(LogFields.TENANT_ID, principal.tenantId().value()));
   }
 
   private boolean isExempt(final ServerWebExchange exchange) {
@@ -134,16 +140,37 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
 
   private Mono<Void> reject(
       final ServerWebExchange exchange, final String tenantId, final RejectionReason reason) {
-    LOGGER.warn(AuthenticationLogFormatter.rejection(tenantId, reason));
+    logRejection(exchange, tenantId, reason);
     return writeJson(exchange, HttpStatus.UNAUTHORIZED, "missing or invalid bearer token");
   }
 
   private Mono<Void> rejectForbidden(final ServerWebExchange exchange, final String tenantId) {
-    LOGGER.warn(AuthenticationLogFormatter.rejection(tenantId, RejectionReason.INSUFFICIENT_ROLE));
+    logRejection(exchange, tenantId, RejectionReason.INSUFFICIENT_ROLE);
     return writeJson(
         exchange,
         HttpStatus.FORBIDDEN,
         "role does not satisfy the minimum role required for this operation");
+  }
+
+  private static void logRejection(
+      final ServerWebExchange exchange, final String tenantId, final RejectionReason reason) {
+    try (LogContext ignored =
+        LogContext.open(
+            CorrelationId.fromOrNull(correlationIdOf(exchange)),
+            tenantId == null ? null : LogSanitizer.safe(tenantId),
+            null)) {
+      LOGGER.warn(LogFields.fields("reason", reason), "Request rejected by authentication");
+    }
+  }
+
+  private static String correlationIdOf(final ServerWebExchange exchange) {
+    final Object attribute = exchange.getAttribute(CorrelationIdWebFilter.CORRELATION_ATTRIBUTE);
+    if (attribute instanceof CorrelationId correlationId) {
+      return correlationId.value();
+    }
+    final String header = exchange.getResponse().getHeaders().getFirst(CorrelationId.HEADER);
+    final CorrelationId fromHeader = CorrelationId.fromOrNull(header);
+    return fromHeader != null ? fromHeader.value() : CorrelationId.newId().value();
   }
 
   private static Mono<Void> writeJson(
@@ -151,7 +178,11 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     final ServerHttpResponse response = exchange.getResponse();
     response.setStatusCode(status);
     response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
-    final byte[] bytes = ("{\"message\":\"" + message + "\"}").getBytes(StandardCharsets.UTF_8);
+    final String correlationId = correlationIdOf(exchange);
+    response.getHeaders().set(CorrelationId.HEADER, correlationId);
+    final byte[] bytes =
+        ("{\"message\":\"" + message + "\",\"correlationId\":\"" + correlationId + "\"}")
+            .getBytes(StandardCharsets.UTF_8);
     final DataBuffer buffer = response.bufferFactory().wrap(bytes);
     return response.writeWith(Mono.just(buffer));
   }

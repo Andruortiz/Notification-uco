@@ -21,6 +21,7 @@ import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.infrastructure.support.AttachmentTestContainers;
 import co.edu.uco.notification.infrastructure.support.RecordingAttachmentSender;
@@ -267,11 +268,13 @@ class AttachmentUploadE2ETest {
   }
 
   private String bodyOf(final WebTestClient.ResponseSpec spec, final int status) {
-    return spec.expectStatus()
-        .isEqualTo(status)
-        .expectBody(String.class)
-        .returnResult()
-        .getResponseBody();
+    final String body =
+        spec.expectStatus()
+            .isEqualTo(status)
+            .expectBody(String.class)
+            .returnResult()
+            .getResponseBody();
+    return body == null ? null : body.replaceAll(",\"correlationId\":\"[^\"]*\"", "");
   }
 
   private String awaitNotificationStatus(
@@ -298,7 +301,7 @@ class AttachmentUploadE2ETest {
   }
 
   private List<String> logLines() {
-    return logs.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+    return logs.list.stream().map(LogLines::render).toList();
   }
 
   private static String signatureOf(final Object uploadUrl) {

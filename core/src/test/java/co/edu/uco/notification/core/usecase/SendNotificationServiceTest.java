@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
 import co.edu.uco.notification.core.exception.AttachmentNotReadyException;
@@ -27,6 +28,7 @@ import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import co.edu.uco.notification.utils.CorrelationId;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
@@ -483,5 +485,41 @@ class SendNotificationServiceTest {
         .verify();
 
     verifyNothingWasStored();
+  }
+
+  @Test
+  void sendPersistsTheCommandCorrelationIdAndStampsTheAcceptedEvent() {
+    final CorrelationId correlationId = CorrelationId.of("corr-77");
+    final SendNotificationCommand base = command();
+    final SendNotificationCommand withCorrelation =
+        new SendNotificationCommand(
+            base.tenantId(),
+            base.externalId(),
+            base.channelType(),
+            base.recipientId(),
+            base.recipient(),
+            base.content(),
+            base.priority(),
+            List.of(),
+            correlationId);
+    when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID))
+        .thenReturn(Mono.just(activeRoute()));
+    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
+        .thenReturn(Mono.empty());
+    when(notificationRepository.save(any(Notification.class)))
+        .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.send(withCorrelation)).expectNextCount(1).verifyComplete();
+
+    final ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+    verify(notificationRepository).save(saved.capture());
+    assertEquals(correlationId, saved.getValue().correlationId());
+    @SuppressWarnings("unchecked")
+    final ArgumentCaptor<List<DomainEvent>> events = ArgumentCaptor.forClass(List.class);
+    verify(eventPublisherPort).publish(events.capture());
+    assertEquals(correlationId, events.getValue().getFirst().correlationId());
+    assertEquals(TENANT_ID, events.getValue().getFirst().tenantId());
   }
 }

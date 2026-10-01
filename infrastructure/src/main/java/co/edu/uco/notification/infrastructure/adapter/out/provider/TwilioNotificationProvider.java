@@ -39,12 +39,7 @@ public class TwilioNotificationProvider implements NotificationSenderPort {
         Preconditions.requireNonNull(twilioWebClient, "twilioWebClient must not be null");
     this.properties = Preconditions.requireNonNull(properties, "properties must not be null");
     this.disabledReason = properties.disabledReason();
-    disabledReason.ifPresent(
-        reason ->
-            LOGGER.warn(
-                "Notification sender disabled providerId={} reason={}",
-                PROVIDER_ID.value(),
-                reason));
+    disabledReason.ifPresent(reason -> ProviderLogs.disabled(LOGGER, PROVIDER_ID, reason));
   }
 
   @Override
@@ -55,12 +50,8 @@ public class TwilioNotificationProvider implements NotificationSenderPort {
     }
     final String recipient = notification.recipient().address();
     if (!PhoneNumbers.isE164(recipient)) {
-      LOGGER.info(
-          "Notification rejected before calling provider notificationId={} tenantId={} "
-              + "providerId={} reason=invalid-recipient-format",
-          notification.notificationId().value(),
-          notification.tenantId().value(),
-          PROVIDER_ID.value());
+      ProviderLogs.rejectedBeforeCall(
+          LOGGER, notification, PROVIDER_ID, "invalid-recipient-format");
       return Mono.just(AttemptResult.PERMANENT_FAILURE);
     }
     return webClient
@@ -74,14 +65,7 @@ public class TwilioNotificationProvider implements NotificationSenderPort {
         .onErrorResume(
             error -> {
               final AttemptResult result = TwilioResponseClassifier.classifyError(error);
-              LOGGER.warn(
-                  "Notification dispatch failed notificationId={} tenantId={} providerId={} "
-                      + "result={} errorType={}",
-                  notification.notificationId().value(),
-                  notification.tenantId().value(),
-                  PROVIDER_ID.value(),
-                  result,
-                  error.getClass().getSimpleName());
+              ProviderLogs.dispatchFailed(LOGGER, notification, PROVIDER_ID, result, error);
               return Mono.just(result);
             });
   }
@@ -107,29 +91,17 @@ public class TwilioNotificationProvider implements NotificationSenderPort {
   private static AttemptResult classifyAndLog(
       final Notification notification, final Outcome outcome) {
     final AttemptResult result = TwilioResponseClassifier.classifyStatus(outcome.status());
-    final String maskedRecipient = PhoneNumbers.mask(notification.recipient().address());
     if (result == AttemptResult.ACCEPTED) {
-      LOGGER.info(
-          "Notification dispatched notificationId={} tenantId={} providerId={} result={} "
-              + "httpStatus={} providerMessageId={} recipient={}",
-          notification.notificationId().value(),
-          notification.tenantId().value(),
-          PROVIDER_ID.value(),
-          result,
-          outcome.status(),
-          outcome.body().sid(),
-          maskedRecipient);
+      ProviderLogs.dispatched(
+          LOGGER, notification, PROVIDER_ID, result, outcome.status(), outcome.body().sid());
     } else {
-      LOGGER.warn(
-          "Notification rejected by provider notificationId={} tenantId={} providerId={} "
-              + "result={} httpStatus={} providerErrorCode={} recipient={}",
-          notification.notificationId().value(),
-          notification.tenantId().value(),
-          PROVIDER_ID.value(),
+      ProviderLogs.rejectedByProvider(
+          LOGGER,
+          notification,
+          PROVIDER_ID,
           result,
           outcome.status(),
-          outcome.body().code(),
-          maskedRecipient);
+          String.valueOf(outcome.body().code()));
     }
     return result;
   }

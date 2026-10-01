@@ -4,8 +4,11 @@ import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
+import co.edu.uco.notification.core.port.in.NotificationLiveUpdate;
 import co.edu.uco.notification.core.port.in.SubscribeToNotificationUpdatesQuery;
 import co.edu.uco.notification.core.port.in.SubscribeToNotificationUpdatesUseCase;
+import co.edu.uco.notification.infrastructure.config.LogContext;
+import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Duration;
 import java.time.Instant;
@@ -55,17 +58,20 @@ public class NotificationLiveUpdatesController {
     final Flux<ServerSentEvent<NotificationLiveUpdateResponse>> updates =
         subscribeToNotificationUpdatesUseCase
             .subscribe(query)
-            .doOnNext(
-                update ->
-                    LOGGER.debug(
-                        "Live update tenantId={} notificationId={} action={}",
-                        principal.tenantId().value(),
-                        update.notification().notificationId().value(),
-                        update.action()))
+            .doOnNext(update -> logUpdate(principal, update))
             .map(NotificationLiveUpdateResponse::from)
             .map(payload -> ServerSentEvent.builder(payload).event("update").build());
 
     return Flux.merge(updates, heartbeat());
+  }
+
+  private static void logUpdate(
+      final AuthenticatedPrincipal principal, final NotificationLiveUpdate update) {
+    try (LogContext ignored =
+        LogContext.open(
+            null, principal.tenantId().value(), update.notification().notificationId().value())) {
+      LOGGER.debug(LogFields.fields("action", update.action()), "Live update");
+    }
   }
 
   private static Flux<ServerSentEvent<NotificationLiveUpdateResponse>> heartbeat() {

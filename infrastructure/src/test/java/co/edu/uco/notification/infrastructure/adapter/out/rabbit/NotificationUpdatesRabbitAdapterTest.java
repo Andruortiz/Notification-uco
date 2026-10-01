@@ -2,7 +2,9 @@ package co.edu.uco.notification.infrastructure.adapter.out.rabbit;
 
 import co.edu.uco.notification.core.domain.event.NotificationAccepted;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.utils.CorrelationId;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -32,7 +34,13 @@ class NotificationUpdatesRabbitAdapterTest {
 
   private void publishAcceptedEvent(final NotificationId notificationId) {
     eventPublisherPort
-        .publish(List.of(new NotificationAccepted(notificationId, Instant.now())))
+        .publish(
+            List.of(
+                new NotificationAccepted(
+                    notificationId,
+                    TenantId.of("tenant-1"),
+                    CorrelationId.of("corr-9"),
+                    Instant.now())))
         .block();
   }
 

@@ -39,6 +39,9 @@ tags:
 
 paths:
   /notifications:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Notificaciones]
       summary: Enviar una notificación
@@ -55,6 +58,11 @@ paths:
               $ref: '#/components/schemas/SendNotificationRequest'
       responses:
         '202':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Notificación aceptada (nueva o duplicada -- ver el campo "duplicate").
           content:
             application/json:
@@ -63,6 +71,11 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             El canal no existe/está deshabilitado, el contenido no cumple el esquema del canal, o un adjunto
             es inválido: el canal no acepta adjuntos; el adjunto incumple un tope del servicio (cantidad,
@@ -76,6 +89,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             Un adjunto referencia una subida todavía en PENDING_SCAN. Reintentar cuando
             GET /attachment-uploads/{uploadId} devuelva CLEAN.
@@ -84,8 +102,18 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '413':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: El cuerpo de la solicitud supera 8 MB.
         '503':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             El antivirus o el almacén de archivos no están disponibles o no respondieron a tiempo. La
             notificación no se aceptó; puede reintentarse. Las notificaciones sin adjuntos no se ven
@@ -144,6 +172,11 @@ paths:
             default: 0
       responses:
         '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Página de notificaciones que cumplen el criterio (items vacío si no hay resultados).
           content:
             application/json:
@@ -154,6 +187,11 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             Parámetros inválidos -- from posterior a to, o limit/offset fuera de su rango válido.
           content:
@@ -161,6 +199,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
   /notifications:subscribe:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Notificaciones]
       summary: Suscribirse a actualizaciones en tiempo real
@@ -213,6 +254,11 @@ paths:
             format: date-time
       responses:
         '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             Stream Server-Sent Events. Cada evento `data` es un `NotificationLiveUpdate`. La conexión
             permanece abierta hasta que el cliente la cierra; el servidor intercala comentarios de
@@ -225,6 +271,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   /notifications:sendBatch:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Notificaciones]
       summary: Enviar un lote de notificaciones
@@ -246,6 +295,11 @@ paths:
               $ref: '#/components/schemas/SendNotificationBatchRequest'
       responses:
         '202':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Lote aceptado -- ver el resultado individual de cada elemento.
           content:
             application/json:
@@ -254,6 +308,11 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             La solicitud no cumple el esquema (lista de elementos vacía o ausente, campo obligatorio
             ausente o vacío en algún elemento, prioridad desconocida, batchId en blanco). Se rechaza
@@ -264,6 +323,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /notifications/{id}:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Notificaciones]
       summary: Consultar el estado de una notificación
@@ -273,6 +335,11 @@ paths:
         - $ref: '#/components/parameters/NotificationId'
       responses:
         '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Estado actual de la notificación.
           content:
             application/json:
@@ -281,6 +348,11 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             No existe una notificación con ese id, o no pertenece al tenant del solicitante --
             ambos casos responden igual, para no revelar si el id existe bajo otro cliente.
@@ -290,6 +362,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /notifications/{id}:retry:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Notificaciones]
       summary: Reintentar el envío manualmente
@@ -303,6 +378,11 @@ paths:
         - $ref: '#/components/parameters/NotificationId'
       responses:
         '202':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Reintento aceptado, la notificación vuelve al flujo de despacho.
           content:
             application/json:
@@ -313,12 +393,22 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: El estado actual no admite reintento (ej. ya está DELIVERED).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: No existe una notificación con ese id para este tenant.
           content:
             application/json:
@@ -326,6 +416,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /attachment-uploads:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Adjuntos]
       summary: Pedir una dirección de subida para un archivo grande
@@ -345,6 +438,10 @@ paths:
         '201':
           description: Subida emitida.
           headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
             Location:
               schema:
                 type: string
@@ -356,6 +453,11 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             Nombre, tipo, extensión o tamaño inválidos, o tamaño de hasta 1 MB (ese archivo va embebido en
             la notificación).
@@ -364,6 +466,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: El almacén de archivos no está disponible.
           content:
             application/json:
@@ -371,6 +478,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /attachment-uploads/{uploadId}:complete:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Adjuntos]
       summary: Avisar que la subida terminó
@@ -383,6 +493,11 @@ paths:
         - $ref: '#/components/parameters/UploadId'
       responses:
         '202':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Análisis encolado, o subida ya resuelta (ver state).
           content:
             application/json:
@@ -391,6 +506,11 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             El tamaño del archivo subido no coincide con el declarado. El archivo se descarta y la subida
             sigue en PENDING_SCAN: puede volver a subirse mientras uploadUrl esté vigente.
@@ -399,18 +519,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '404':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: La subida no existe para este tenant.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: El archivo todavía no está en el almacén.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '503':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: El almacén de archivos o el broker no están disponibles.
           content:
             application/json:
@@ -418,6 +553,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /attachment-uploads/{uploadId}:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Adjuntos]
       summary: Consultar el estado de una subida
@@ -426,6 +564,11 @@ paths:
         - $ref: '#/components/parameters/UploadId'
       responses:
         '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Estado actual. Nunca incluye uploadUrl.
           content:
             application/json:
@@ -434,6 +577,11 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: La subida no existe para este tenant.
           content:
             application/json:
@@ -441,6 +589,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /channels:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Catálogo]
       summary: Consultar los canales del catálogo y cómo se enrutan
@@ -455,6 +606,11 @@ paths:
       operationId: listChannels
       responses:
         '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Canales ordenados por channelType (items vacío si el catálogo está vacío).
           content:
             application/json:
@@ -464,6 +620,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   /providers:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Catálogo]
       summary: Consultar los proveedores, su estado y dónde se usan
@@ -477,6 +636,11 @@ paths:
       operationId: listProviders
       responses:
         '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Proveedores ordenados por providerId.
           content:
             application/json:
@@ -486,6 +650,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   /channels:register:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Catálogo]
       summary: Registrar o actualizar un canal
@@ -503,12 +670,22 @@ paths:
               $ref: '#/components/schemas/RegisterChannelRequest'
       responses:
         '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Canal registrado o actualizado.
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: El esquema de validación del canal está mal formado.
           content:
             application/json:
@@ -516,6 +693,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /providers:register:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Catálogo]
       summary: Registrar un proveedor para uno o más canales
@@ -533,6 +713,11 @@ paths:
               $ref: '#/components/schemas/RegisterProviderRequest'
       responses:
         '201':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Proveedor registrado -- ver el campo "enabled" si faltó alguna credencial.
           content:
             application/json:
@@ -543,6 +728,11 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: No existe un adaptador de código para ese providerId.
           content:
             application/json:
@@ -550,6 +740,9 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /recipients/{recipientId}/preferences:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     get:
       tags: [Preferencias]
       summary: Consultar las preferencias de un destinatario
@@ -565,6 +758,11 @@ paths:
         - $ref: '#/components/parameters/RecipientId'
       responses:
         '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Preferencias vigentes (por defecto, todos los canales aceptados).
           content:
             application/json:
@@ -574,6 +772,9 @@ paths:
           $ref: '#/components/responses/Unauthorized'
 
   /recipients/{recipientId}:updatePreferences:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
     post:
       tags: [Preferencias]
       summary: Actualizar las preferencias de un destinatario
@@ -597,6 +798,11 @@ paths:
               $ref: '#/components/schemas/UpdatePreferencesRequest'
       responses:
         '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: Preferencias actualizadas, tal como quedaron guardadas.
           content:
             application/json:
@@ -605,6 +811,11 @@ paths:
         '401':
           $ref: '#/components/responses/Unauthorized'
         '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
           description: >
             Cuerpo ausente o una entrada de acceptedChannels vacía o solo con espacios. Las
             preferencias vigentes no cambian.
@@ -614,6 +825,17 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
 components:
+  headers:
+    CorrelationId:
+      description: Identificador de correlación de la petición (el recibido si es válido, o uno generado).
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9._-]{1,64}$'
+    TraceParent:
+      description: Cabecera W3C traceparent recibida y válida; ausente si no llegó.
+      schema:
+        type: string
   securitySchemes:
     BearerAuth:
       type: http
@@ -627,6 +849,11 @@ components:
 
   responses:
     Unauthorized:
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+        traceparent:
+          $ref: '#/components/headers/TraceParent'
       description: >
         Sin token, token mal formado, firma inválida, expirado, o con alguna claim obligatoria (sub,
         tenantId, role) ausente o con role fuera de ADMINISTRADOR/OPERADOR/CLIENTE. El cuerpo nunca
@@ -636,6 +863,11 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
     Forbidden:
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+        traceparent:
+          $ref: '#/components/headers/TraceParent'
       description: Token válido, pero el rol no alcanza el mínimo requerido por esta operación.
       content:
         application/json:
@@ -643,6 +875,28 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   parameters:
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: >
+        Identificador de correlación de la petición, de 1 a 64 caracteres (letras, dígitos, punto,
+        guion y guion bajo). Si falta o es inválido, el servicio genera uno. Siempre se devuelve en
+        el header de respuesta del mismo nombre y viaja hasta el despacho al proveedor.
+      schema:
+        type: string
+        maxLength: 64
+        pattern: '^[A-Za-z0-9._-]{1,64}$'
+    TraceParent:
+      name: traceparent
+      in: header
+      required: false
+      description: >
+        Cabecera de contexto de traza W3C. Si cumple el formato se conserva y se reenvía en los
+        logs y en la mensajería; si no cumple se descarta. El servicio no la genera ni la interpreta.
+      schema:
+        type: string
+        pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
     NotificationId:
       name: id
       in: path
@@ -928,6 +1182,13 @@ components:
         lastUpdatedAt:
           type: string
           format: date-time
+        correlationId:
+          type: string
+          nullable: true
+          maxLength: 64
+          description: >
+            Identificador de correlación con el que se aceptó la notificación. Nulo en notificaciones
+            anteriores a la introducción del identificador.
 
     NotificationSearchResponse:
       type: object
@@ -1173,9 +1434,15 @@ components:
 
     ErrorResponse:
       type: object
+      required:
+        - correlationId
       properties:
         message:
           type: string
+        correlationId:
+          type: string
+          maxLength: 64
+          description: Identificador de correlación de la petición que produjo el error.
 
     Priority:
       type: string

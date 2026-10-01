@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
+import co.edu.uco.notification.utils.CorrelationId;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -67,6 +68,30 @@ class DeadLetterQueueE2ETest {
             .get(RepublishMessageRecoverer.X_EXCEPTION_MESSAGE);
     assertNotNull(exceptionMessage, "el header de causa debe estar presente");
     assertTrue(exceptionMessage.toString().contains(poisonId.value()));
+  }
+
+  @Test
+  void theCorrelationIdSurvivesTheRetriesAndReachesTheDeadLetterQueue() {
+    final NotificationId poisonId = NotificationId.newId();
+    when(dispatchNotificationUseCase.dispatch(any()))
+        .thenReturn(Mono.error(new NotificationNotFoundException(poisonId)));
+
+    rabbitTemplate.convertAndSend(
+        properties.dispatch().exchange(),
+        properties.dispatch().routingKey(),
+        poisonId.value(),
+        message -> {
+          message.getMessageProperties().setMessageId(poisonId.value());
+          message.getMessageProperties().setHeader(CorrelationId.AMQP_HEADER, "dlq-corr-1");
+          return message;
+        });
+
+    final Message deadLettered = awaitDeadLetteredMessage();
+
+    assertNotNull(deadLettered);
+    assertEquals(
+        "dlq-corr-1",
+        deadLettered.getMessageProperties().getHeaders().get(CorrelationId.AMQP_HEADER));
   }
 
   private Message awaitDeadLetteredMessage() {

@@ -16,6 +16,11 @@ import co.edu.uco.notification.core.port.in.SearchNotificationsUseCase;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
+import co.edu.uco.notification.infrastructure.config.CorrelationContext;
+import co.edu.uco.notification.infrastructure.config.LogContext;
+import co.edu.uco.notification.infrastructure.config.LogFields;
+import co.edu.uco.notification.utils.CorrelationId;
+import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
 import org.slf4j.Logger;
@@ -60,8 +65,13 @@ public class NotificationController {
   public Mono<ResponseEntity<SendNotificationResponse>> send(
       final AuthenticatedPrincipal principal, @RequestBody final SendNotificationRequest request) {
     final String tenantId = principal.tenantId().value();
-    return logAttachments(
-            tenantId, request, sendNotificationUseCase.send(toCommand(principal, request)))
+    return Mono.deferContextual(
+            context ->
+                logAttachments(
+                    tenantId,
+                    request,
+                    sendNotificationUseCase.send(
+                        toCommand(principal, request, CorrelationContext.from(context)))))
         .map(SendNotificationResponse::from)
         .map(response -> ResponseEntity.status(HttpStatus.ACCEPTED).body(response));
   }
@@ -74,25 +84,41 @@ public class NotificationController {
       return sending;
     }
     return sending
-        .doOnSuccess(
-            result ->
-                LOGGER.info(
-                    "Notification accepted with attachments tenantId={} externalId={}"
-                        + " notificationId={} duplicate={} attachments={}",
-                    AttachmentLogFormatter.safe(tenantId),
-                    AttachmentLogFormatter.safe(request.externalId()),
-                    result.notificationId().value(),
-                    result.duplicate(),
-                    AttachmentLogFormatter.ofSummaries(result.attachments())))
-        .doOnError(
-            error ->
-                LOGGER.info(
-                    "Notification with attachments rejected tenantId={} externalId={}"
-                        + " attachments={} reason={}",
-                    AttachmentLogFormatter.safe(tenantId),
-                    AttachmentLogFormatter.safe(request.externalId()),
-                    AttachmentLogFormatter.ofRequests(request.attachments()),
-                    AttachmentLogFormatter.safe(error.getMessage())));
+        .doOnSuccess(result -> logAccepted(tenantId, request, result))
+        .doOnError(error -> logRejected(tenantId, request, error));
+  }
+
+  private static void logAccepted(
+      final String tenantId,
+      final SendNotificationRequest request,
+      final SendNotificationResult result) {
+    try (LogContext ignored =
+        LogContext.open(null, LogSanitizer.safe(tenantId), result.notificationId().value())) {
+      LOGGER.info(
+          LogFields.fields(
+              "externalId",
+              LogSanitizer.safe(request.externalId()),
+              "duplicate",
+              result.duplicate(),
+              "attachments",
+              AttachmentLogFormatter.ofSummaries(result.attachments())),
+          "Notification accepted with attachments");
+    }
+  }
+
+  private static void logRejected(
+      final String tenantId, final SendNotificationRequest request, final Throwable error) {
+    try (LogContext ignored = LogContext.open(null, LogSanitizer.safe(tenantId), null)) {
+      LOGGER.info(
+          LogFields.fields(
+              "externalId",
+              LogSanitizer.safe(request.externalId()),
+              "attachments",
+              AttachmentLogFormatter.ofRequests(request.attachments()),
+              "reason",
+              LogSanitizer.safe(error.getMessage())),
+          "Notification with attachments rejected");
+    }
   }
 
   @GetMapping("/{id}")
@@ -127,7 +153,9 @@ public class NotificationController {
   }
 
   private static SendNotificationCommand toCommand(
-      final AuthenticatedPrincipal principal, final SendNotificationRequest request) {
+      final AuthenticatedPrincipal principal,
+      final SendNotificationRequest request,
+      final CorrelationId correlationId) {
     return new SendNotificationCommand(
         principal.tenantId(),
         ExternalId.of(request.externalId()),
@@ -136,6 +164,7 @@ public class NotificationController {
         Recipient.of(request.recipientAddress()),
         NotificationContent.of(request.subject(), request.body()),
         Priority.valueOf(request.priority()),
-        request.attachments().stream().map(AttachmentRequest::toSubmission).toList());
+        request.attachments().stream().map(AttachmentRequest::toSubmission).toList(),
+        correlationId);
   }
 }

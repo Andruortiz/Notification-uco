@@ -26,8 +26,6 @@ public class FcmNotificationProvider implements NotificationSenderPort {
   private static final ProviderId PROVIDER_ID = ProviderId.of("fcm");
   private static final String SEND_PATH = "/v1/projects/{projectId}/messages:send";
   private static final int UNAUTHORIZED = 401;
-  private static final String MASK = "***";
-  private static final int VISIBLE_CHARACTERS = 4;
 
   private final WebClient webClient;
   private final Optional<String> disabledReason;
@@ -48,12 +46,7 @@ public class FcmNotificationProvider implements NotificationSenderPort {
         serviceAccount
             .map(account -> new FcmAccessTokenProvider(webClient, account, properties.tokenUrl()))
             .orElse(null);
-    disabledReason.ifPresent(
-        reason ->
-            LOGGER.warn(
-                "Notification sender disabled providerId={} reason={}",
-                PROVIDER_ID.value(),
-                reason));
+    disabledReason.ifPresent(reason -> ProviderLogs.disabled(LOGGER, PROVIDER_ID, reason));
   }
 
   @Override
@@ -92,14 +85,7 @@ public class FcmNotificationProvider implements NotificationSenderPort {
         .onErrorResume(
             error -> {
               final AttemptResult result = FcmResponseClassifier.classifyError(error);
-              LOGGER.warn(
-                  "Notification dispatch failed notificationId={} tenantId={} providerId={} "
-                      + "result={} errorType={}",
-                  notification.notificationId().value(),
-                  notification.tenantId().value(),
-                  PROVIDER_ID.value(),
-                  result,
-                  error.getClass().getSimpleName());
+              ProviderLogs.dispatchFailed(LOGGER, notification, PROVIDER_ID, result, error);
               return Mono.just(result);
             });
   }
@@ -123,29 +109,17 @@ public class FcmNotificationProvider implements NotificationSenderPort {
   private static AttemptResult classifyAndLog(
       final Notification notification, final Outcome outcome) {
     final AttemptResult result = FcmResponseClassifier.classifyStatus(outcome.status());
-    final String maskedRecipient = mask(notification.recipient().address());
     if (result == AttemptResult.ACCEPTED) {
-      LOGGER.info(
-          "Notification dispatched notificationId={} tenantId={} providerId={} result={} "
-              + "httpStatus={} providerMessageId={} recipient={}",
-          notification.notificationId().value(),
-          notification.tenantId().value(),
-          PROVIDER_ID.value(),
-          result,
-          outcome.status(),
-          outcome.messageId(),
-          maskedRecipient);
+      ProviderLogs.dispatched(
+          LOGGER, notification, PROVIDER_ID, result, outcome.status(), outcome.messageId());
     } else {
-      LOGGER.warn(
-          "Notification rejected by provider notificationId={} tenantId={} providerId={} "
-              + "result={} httpStatus={} providerErrorCode={} recipient={}",
-          notification.notificationId().value(),
-          notification.tenantId().value(),
-          PROVIDER_ID.value(),
+      ProviderLogs.rejectedByProvider(
+          LOGGER,
+          notification,
+          PROVIDER_ID,
           result,
           outcome.status(),
-          outcome.errorCode(),
-          maskedRecipient);
+          String.valueOf(outcome.errorCode()));
     }
     return result;
   }
@@ -154,33 +128,13 @@ public class FcmNotificationProvider implements NotificationSenderPort {
       final Notification notification, final Throwable error) {
     if (error instanceof FcmAccessTokenProvider.AuthorizationRejectedException rejected) {
       final AttemptResult result = FcmResponseClassifier.classifyStatus(rejected.status());
-      LOGGER.warn(
-          "Notification authorization failed notificationId={} tenantId={} providerId={} "
-              + "stage=authorization result={} httpStatus={}",
-          notification.notificationId().value(),
-          notification.tenantId().value(),
-          PROVIDER_ID.value(),
-          result,
-          rejected.status());
+      ProviderLogs.authorizationFailed(
+          LOGGER, notification, PROVIDER_ID, result, rejected.status(), null);
       return result;
     }
     final AttemptResult result = FcmResponseClassifier.classifyError(error);
-    LOGGER.warn(
-        "Notification authorization failed notificationId={} tenantId={} providerId={} "
-            + "stage=authorization result={} errorType={}",
-        notification.notificationId().value(),
-        notification.tenantId().value(),
-        PROVIDER_ID.value(),
-        result,
-        error.getClass().getSimpleName());
+    ProviderLogs.authorizationFailed(LOGGER, notification, PROVIDER_ID, result, null, error);
     return result;
-  }
-
-  private static String mask(final String value) {
-    if (value == null || value.length() <= VISIBLE_CHARACTERS) {
-      return MASK;
-    }
-    return MASK + value.substring(value.length() - VISIBLE_CHARACTERS);
   }
 
   @Override

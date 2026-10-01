@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
@@ -27,11 +28,13 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import co.edu.uco.notification.utils.CorrelationId;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -151,6 +154,44 @@ class RequeuePendingNotificationsServiceTest {
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
     verify(eventPublisherPort, never()).enqueueForDispatch(any());
+  }
+
+  @Test
+  void requeueEventsCarryThePersistedCorrelationIdOfTheNotification() {
+    final CorrelationId persisted = CorrelationId.of("persisted-corr");
+    final Notification due =
+        Notification.reconstitute(
+            NotificationId.newId(),
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-1"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+            NotificationStatus.RECOVERABLE,
+            new NotificationMetadata(Instant.now().minusSeconds(300), 1L),
+            List.of(
+                DeliveryAttempt.of(
+                    Instant.now().minusSeconds(120),
+                    AttemptResult.RECOVERABLE_FAILURE,
+                    AttemptOrigin.AUTOMATIC,
+                    ProviderId.of("brevo"))),
+            persisted);
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.just(due));
+    when(notificationRepository.save(due)).thenReturn(Mono.just(due));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(due)).thenReturn(Mono.empty());
+
+    StepVerifier.create(
+            service.requeuePending().contextWrite(c -> c.put("correlationId", "sched-x")))
+        .verifyComplete();
+
+    @SuppressWarnings("unchecked")
+    final ArgumentCaptor<List<DomainEvent>> events = ArgumentCaptor.forClass(List.class);
+    verify(eventPublisherPort).publish(events.capture());
+    assertEquals(persisted, events.getValue().getFirst().correlationId());
   }
 
   private static Notification recoverableNotification(

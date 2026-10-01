@@ -26,6 +26,7 @@ import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrinci
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.nio.charset.StandardCharsets;
@@ -97,7 +98,7 @@ class AttachmentUploadControllerTest {
   }
 
   private boolean logsContain(final String fragment) {
-    return logs.list.stream().anyMatch(event -> event.getFormattedMessage().contains(fragment));
+    return logs.list.stream().anyMatch(event -> LogLines.render(event).contains(fragment));
   }
 
   @Test
@@ -126,7 +127,9 @@ class AttachmentUploadControllerTest {
         .jsonPath("$.expiresAt")
         .isEqualTo("2026-09-29T10:15:00Z");
 
-    assertTrue(logsContain("Attachment upload issued tenantId=tenant-1 uploadId=upload-1"));
+    assertTrue(logsContain("action=issued"));
+    assertTrue(logsContain("uploadId=upload-1"));
+    assertTrue(logsContain("tenantId=tenant-1"));
     assertFalse(logsContain("secret-9090"));
   }
 
@@ -149,7 +152,9 @@ class AttachmentUploadControllerTest {
         .doesNotExist();
 
     verify(completeUseCase).complete(TENANT, UPLOAD_ID);
-    assertTrue(logsContain("Attachment upload completed tenantId=tenant-1 uploadId=upload-1"));
+    assertTrue(logsContain("action=completed"));
+    assertTrue(logsContain("uploadId=upload-1"));
+    assertTrue(logsContain("tenantId=tenant-1"));
   }
 
   @Test

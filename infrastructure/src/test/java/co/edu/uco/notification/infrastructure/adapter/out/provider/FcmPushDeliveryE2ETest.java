@@ -17,6 +17,7 @@ import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -277,9 +278,7 @@ class FcmPushDeliveryE2ETest {
   }
 
   private String logs() {
-    return logAppender.list.stream()
-        .map(ILoggingEvent::getFormattedMessage)
-        .collect(Collectors.joining("\n"));
+    return logAppender.list.stream().map(LogLines::render).collect(Collectors.joining("\n"));
   }
 
   private List<String> publishedEvents() {

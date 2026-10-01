@@ -17,6 +17,7 @@ import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
+import co.edu.uco.notification.utils.CorrelationId;
 import java.util.List;
 import java.util.Objects;
 
@@ -43,6 +44,7 @@ final class NotificationDocumentMapper {
         notification.deliveryAttempts().stream()
             .map(NotificationDocumentMapper::toDocument)
             .toList(),
+        notification.correlationId() == null ? null : notification.correlationId().value(),
         notification.version());
   }
 
@@ -70,7 +72,8 @@ final class NotificationDocumentMapper {
         Objects.requireNonNullElse(document.deliveryAttempts(), List.<DeliveryAttemptDocument>of())
             .stream()
             .map(NotificationDocumentMapper::toDomain)
-            .toList());
+            .toList(),
+        CorrelationId.fromOrNull(document.correlationId()));
   }
 
   private static AttachmentDocument toDocument(final TenantId owner, final Attachment attachment) {

@@ -29,6 +29,7 @@ public record NotificationDocument(
     NotificationStatus status,
     Instant acceptedAt,
     List<DeliveryAttemptDocument> deliveryAttempts,
+    String correlationId,
     @Version Long version) {
 
   public NotificationDocument {

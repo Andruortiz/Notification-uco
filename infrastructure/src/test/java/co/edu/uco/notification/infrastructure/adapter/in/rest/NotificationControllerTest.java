@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -35,8 +36,11 @@ import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrinci
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
+import co.edu.uco.notification.utils.CorrelationId;
+import co.edu.uco.notification.utils.TraceParent;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
@@ -419,7 +423,7 @@ class NotificationControllerTest {
   }
 
   private static List<String> lines(final ListAppender<ILoggingEvent> appender) {
-    return appender.list.stream().map(ILoggingEvent::getFormattedMessage).toList();
+    return appender.list.stream().map(LogLines::render).toList();
   }
 
   private void post(final String body, final HttpStatus expected) {
@@ -549,5 +553,144 @@ class NotificationControllerTest {
     } finally {
       release(logs);
     }
+  }
+
+  @Test
+  void sendPassesTheRequestCorrelationIdToTheCommandAndEchoesItInTheResponse() {
+    final NotificationId id = NotificationId.newId();
+    when(sendNotificationUseCase.send(any()))
+        .thenReturn(Mono.just(new SendNotificationResult(id, NotificationStatus.PENDING, false)));
+
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header(CorrelationId.HEADER, "req-send-1")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(REQUEST_BODY)
+        .exchange()
+        .expectStatus()
+        .isEqualTo(HttpStatus.ACCEPTED)
+        .expectHeader()
+        .valueEquals(CorrelationId.HEADER, "req-send-1");
+
+    final ArgumentCaptor<SendNotificationCommand> command =
+        ArgumentCaptor.forClass(SendNotificationCommand.class);
+    verify(sendNotificationUseCase).send(command.capture());
+    assertEquals(CorrelationId.of("req-send-1"), command.getValue().correlationId());
+  }
+
+  @Test
+  void sendWithoutTheHeaderGeneratesAnIdUsedInTheCommandAndTheResponse() {
+    when(sendNotificationUseCase.send(any()))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    NotificationId.newId(), NotificationStatus.PENDING, false)));
+
+    final String echoed =
+        webTestClient
+            .post()
+            .uri("/notifications")
+            .header("Authorization", TestTokens.bearer("tenant-1"))
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(REQUEST_BODY)
+            .exchange()
+            .expectStatus()
+            .isEqualTo(HttpStatus.ACCEPTED)
+            .returnResult(String.class)
+            .getResponseHeaders()
+            .getFirst(CorrelationId.HEADER);
+
+    final ArgumentCaptor<SendNotificationCommand> command =
+        ArgumentCaptor.forClass(SendNotificationCommand.class);
+    verify(sendNotificationUseCase).send(command.capture());
+    assertNotNull(echoed);
+    assertEquals(echoed, command.getValue().correlationId().value());
+  }
+
+  @Test
+  void getStatusExposesTheCorrelationId() {
+    final NotificationId id = NotificationId.newId();
+    when(getNotificationStatusUseCase.getStatus(any()))
+        .thenReturn(
+            Mono.just(
+                new NotificationStatusView(
+                    id,
+                    NotificationStatus.PENDING,
+                    ChannelType.of("EMAIL"),
+                    null,
+                    Instant.now(),
+                    CorrelationId.of("corr-status"))));
+
+    webTestClient
+        .get()
+        .uri("/notifications/{id}", id.value())
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .exchange()
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.correlationId")
+        .isEqualTo("corr-status");
+  }
+
+  @Test
+  void errorResponsesCarryTheCorrelationIdInHeaderAndBody() {
+    final NotificationId id = NotificationId.newId();
+    when(getNotificationStatusUseCase.getStatus(any()))
+        .thenReturn(Mono.error(new NotificationNotFoundException(id)));
+
+    webTestClient
+        .get()
+        .uri("/notifications/{id}", id.value())
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header(CorrelationId.HEADER, "req-404")
+        .exchange()
+        .expectStatus()
+        .isNotFound()
+        .expectHeader()
+        .valueEquals(CorrelationId.HEADER, "req-404")
+        .expectBody()
+        .jsonPath("$.correlationId")
+        .isEqualTo("req-404");
+  }
+
+  @Test
+  void anInvalidIncomingCorrelationIdIsReplacedAndNeverEchoed() {
+    final NotificationId id = NotificationId.newId();
+    when(getNotificationStatusUseCase.getStatus(any()))
+        .thenReturn(Mono.error(new NotificationNotFoundException(id)));
+
+    final String echoed =
+        webTestClient
+            .get()
+            .uri("/notifications/{id}", id.value())
+            .header("Authorization", TestTokens.bearer("tenant-1"))
+            .header(CorrelationId.HEADER, "bad id with spaces")
+            .exchange()
+            .returnResult(String.class)
+            .getResponseHeaders()
+            .getFirst(CorrelationId.HEADER);
+
+    assertNotNull(echoed);
+    assertFalse(echoed.contains(" "));
+  }
+
+  @Test
+  void aValidTraceparentIsEchoedInTheResponse() {
+    final NotificationId id = NotificationId.newId();
+    when(getNotificationStatusUseCase.getStatus(any()))
+        .thenReturn(Mono.error(new NotificationNotFoundException(id)));
+    final String traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+
+    webTestClient
+        .get()
+        .uri("/notifications/{id}", id.value())
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header(TraceParent.HEADER, traceparent)
+        .exchange()
+        .expectHeader()
+        .valueEquals(TraceParent.HEADER, traceparent);
   }
 }

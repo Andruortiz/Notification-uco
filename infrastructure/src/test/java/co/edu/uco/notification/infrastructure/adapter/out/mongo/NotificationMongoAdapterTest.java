@@ -18,6 +18,7 @@ import co.edu.uco.notification.core.exception.NotificationVersionConflictExcepti
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
 import co.edu.uco.notification.core.usecase.RequeuePendingNotificationsService;
+import co.edu.uco.notification.utils.CorrelationId;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -93,6 +94,25 @@ class NotificationMongoAdapterTest {
               assertEquals(saved.externalId(), found.externalId());
               assertEquals(saved.version(), found.version());
             })
+        .verifyComplete();
+  }
+
+  @Test
+  void correlationIdIsPersistedAndReadBack() {
+    final Notification withCorrelation =
+        Notification.accept(
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-corr"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+            CorrelationId.of("corr-mongo-1"));
+    final Notification saved = adapter.save(withCorrelation).block();
+
+    StepVerifier.create(adapter.findById(saved.notificationId()))
+        .assertNext(found -> assertEquals(CorrelationId.of("corr-mongo-1"), found.correlationId()))
         .verifyComplete();
   }
 
@@ -386,6 +406,7 @@ class NotificationMongoAdapterTest {
                 NotificationStatus.PENDING,
                 Instant.now(),
                 List.of(),
+                null,
                 null))
         .block();
 

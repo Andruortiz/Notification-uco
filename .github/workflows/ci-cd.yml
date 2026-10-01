@@ -134,6 +134,9 @@ jobs:
         with:
           name: build-output
 
+      - name: Puertas de calidad (Spotless, SpotBugs, cobertura)
+        run: ./mvnw -B -ntp install -DskipTests
+
   imagen:
     name: "Imagen Docker"
     needs: [ security, quality ]

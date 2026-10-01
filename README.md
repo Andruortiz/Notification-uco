@@ -47,3 +47,24 @@ db.channel_catalog.updateOne(
 - **Fuera de alcance:** SMS (Twilio) y push (FCM) no envian adjuntos; una notificacion con adjuntos
   despachada por ellos falla sin reintentos.
 
+## Azure Key Vault
+
+Las variables de entorno del servicio (`MONGO_PASSWORD`, `BREVO_API_KEY`, `AUTH_JWT_HS256_SECRET`, etc.)
+pueden leerse tambien desde un Azure Key Vault. Los contenedores (MongoDB, RabbitMQ, MinIO, ClamAV) no
+cambian.
+
+- **Activacion:** definir `AZURE_KEYVAULT_ENDPOINT` (por ejemplo `https://mi-vault.vault.azure.net/`).
+  Sin ella el servicio funciona solo con el `.env`, como siempre.
+- **Nombres:** Key Vault no admite guiones bajos, asi que el secreto `MONGO-PASSWORD` se expone como
+  `MONGO_PASSWORD`. Se crean con el mismo nombre de la variable cambiando `_` por `-`.
+- **Prefijo (recomendado):** con `AZURE_KEYVAULT_SECRET_PREFIX` (por ejemplo `NOTIFICATION-`) solo se leen
+  los secretos cuyo nombre empieza con ese prefijo, y este se descarta: `NOTIFICATION-MONGO-PASSWORD` se
+  expone como `MONGO_PASSWORD`. Sin prefijo se leen todos los secretos del vault, tambien los de otros
+  servicios, y cada uno es una llamada mas al arrancar.
+- **Precedencia:** una variable de entorno real gana sobre el vault; el vault gana sobre los valores por
+  defecto de `application.yml`.
+- **Autenticacion:** `DefaultAzureCredential`. En Azure, identidad administrada del Container App o App
+  Service con el rol *Key Vault Secrets User* sobre el vault. En local, `az login`.
+- **Fallo:** si el vault esta configurado y no se puede leer, el arranque falla.
+- **Alcance:** solo se leen los secretos habilitados; se cargan una vez al arrancar (rotar un secreto
+  requiere reiniciar la aplicacion).

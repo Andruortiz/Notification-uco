@@ -63,16 +63,13 @@ public class NotificationBatchController {
     if (item == null) {
       throw new IllegalArgumentException("batch item must not be null");
     }
-    if (item.priority() == null) {
-      throw new IllegalArgumentException("priority must not be blank");
-    }
     return new BatchNotificationItem(
         ExternalId.of(item.externalId()),
         ChannelType.of(item.channelType()),
         RecipientId.of(item.recipientId()),
         Recipient.of(item.recipientAddress()),
         NotificationContent.of(item.subject(), item.body()),
-        Priority.valueOf(item.priority()),
+        RequestEnums.required(Priority.class, "priority", item.priority()),
         item.attachments().stream().map(AttachmentRequest::toSubmission).toList());
   }
 }

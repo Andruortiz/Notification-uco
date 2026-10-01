@@ -137,14 +137,60 @@ jobs:
       - name: Puertas de calidad (Spotless, SpotBugs, cobertura)
         run: ./mvnw -B -ntp install -DskipTests
 
+  imagen:
+    name: "Imagen Docker"
+    needs: [ security, quality ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Definir nombre de la imagen
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - name: Construir imagen Docker
-        if: false
-        run: docker build -t notification-service:${{ github.sha }} .
+        run: docker build -t "$IMAGE:$GITHUB_SHA" .
 
-      - name: Publicar imagen
-        if: false
-        run: echo "pendiente del Dockerfile (HU2-063, Fase 10)"
+      - name: Verificar la imagen (JRE 21 y usuario sin privilegios)
+        run: |
+          docker run --rm --entrypoint java "$IMAGE:$GITHUB_SHA" -version
+          test "$(docker run --rm --entrypoint id "$IMAGE:$GITHUB_SHA" -u)" != "0"
 
-      - name: Desplegar
-        if: false
-        run: echo "pendiente de Fase 10 completa (HU2-064, HU2-066, HU2-068, HU2-069)"
+
+      - name: Publicar imagen en GHCR
+        if: github.event_name == 'push'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:$GITHUB_REF_NAME"
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:$GITHUB_REF_NAME"
+          if [ "$GITHUB_REF_NAME" = "main" ]; then
+            docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi
+
+  desplegar:
+    name: "Desplegar"
+    needs: imagen
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'produccion' || 'desarrollo' }}
+    concurrency:
+      group: desplegar-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+
+      - name: Notificar el despliegue
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::Sin destino de despliegue: defina el secreto DEPLOY_HOOK_URL en el entorno para activarlo."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 30 -X POST "$DEPLOY_HOOK_URL"

@@ -3,7 +3,7 @@
 Las cuatro decisiones son **del usuario**. Se documentan opciones, tradeoffs y una recomendación; ninguna
 está resuelta hasta que el usuario responda.
 
-## Decisión 1 — Formato de log estructurado (pendiente)
+## Decisión 1 — Formato de log estructurado (resuelta: opción A, JSON con `logstash-logback-encoder`)
 
 Contexto: Spring Boot 3.3.4 no incluye logging estructurado (llega en 3.4). La constitución exige
 "JSON o equivalente parseable por máquina, nunca texto plano libre". El patrón de texto actual
@@ -18,7 +18,7 @@ Contexto: Spring Boot 3.3.4 no incluye logging estructurado (llega en 3.4). La c
 
 Recomendación: A.
 
-## Decisión 2 — Propagación del identificador (pendiente de confirmación)
+## Decisión 2 — Propagación del identificador (resuelta: conservar lo implementado y transportar `traceparent`)
 
 Estado: ya implementada de forma preliminar. Cabecera HTTP `X-Correlation-Id`, generada si falta o es
 inválida; contexto Reactor puenteado a MDC con `context-propagation`; cabecera AMQP
@@ -35,7 +35,7 @@ no relevante para el identificador pero sí para el orden de logs en lote.
 
 Recomendación: A. Fuera de alcance: reenviar el id a proveedores.
 
-## Decisión 3 — Alcance de `LogSanitizer` (pendiente)
+## Decisión 3 — Alcance de `LogSanitizer` (resuelta: destinatario enmascarado; contenido y credenciales nunca)
 
 Hoy hay tres sanitizaciones duplicadas (`AttachmentLogFormatter.safe`, `AuthenticationLogFormatter.safe`,
 máscaras de Twilio y FCM) y los logs de proveedor ya imprimen destinatario enmascarado.
@@ -50,7 +50,7 @@ máscaras de Twilio y FCM) y los logs de proveedor ya imprimen destinatario enma
 Recomendación: la columna recomendada. Hay que decidir además si el hash del destinatario sirve para
 correlacionar sin exponer (útil, pero un hash de un teléfono es reversible por fuerza bruta).
 
-## Decisión 4 — Política de niveles (pendiente de confirmación)
+## Decisión 4 — Política de niveles (resuelta: INFO éxitos, WARN rechazos 401/403 y fallos recuperables, ERROR fallos de sistema y permanentes)
 
 Provisional: INFO aceptación y cambios de estado; DEBUG detalle interno; WARN fallos recuperables;
 ERROR fallos permanentes o de infraestructura no recuperada. Pregunta abierta: un rechazo

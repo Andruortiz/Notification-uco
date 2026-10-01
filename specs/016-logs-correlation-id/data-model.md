@@ -12,32 +12,32 @@
 - Añade `correlationId` (puede ser nulo en registros antiguos). Se asigna una sola vez al aceptar.
 - Persistencia: campo `correlationId` en `NotificationDocument`; documentos antiguos se leen como nulo.
 
-## DomainEvent y 7 records (core, por modificar)
+## DomainEvent y 7 records (core, implementado)
 
 - Añaden `correlationId` y `tenantId` (además de `notificationId` y `occurredOn`).
 - Regla: los eventos de una misma notificación comparten el `correlationId` con el que fue aceptada;
   `tenantId` nunca nulo; `correlationId` nulo solo para notificaciones anteriores a la historia.
 
-## NotificationStatusView / Response (core + REST, por modificar)
+## NotificationStatusView / Response (core + REST, implementado)
 
 - Añade `correlationId` (opcional para registros antiguos).
 
-## ErrorResponse (REST, por modificar)
+## ErrorResponse (REST, implementado)
 
 - Añade `correlationId` (siempre presente: lo ha generado el filtro).
 
-## LogSanitizer (utils, nuevo)
+## LogSanitizer (utils, implementado)
 
 - `maskRecipient(String)`: devuelve forma enmascarada; nulo devuelve marcador.
 - `redact(String)`: devuelve marcador constante, nunca el valor.
 - `safe(String)`: sustituye caracteres de control; limita longitud.
 
-## FailureCategory (utils, nuevo)
+## FailureCategory (utils, implementado)
 
 - `RECOVERABLE_PROVIDER`, `RECOVERABLE_INFRASTRUCTURE`, `PERMANENT_BUSINESS`.
 
 ## Entrada de log (salida, no persistida)
 
 Campos: `timestamp`, `level`, `logger`, `message`, `correlationId`, `tenantId`, `notificationId`,
-`failureCategory` (cuando aplica), `stack_trace` (sanitizada). Los tres identificadores son campos
+`traceparent` (cuando llega), `event` (hitos de ciclo de vida), `failureCategory` (cuando aplica), `stack_trace` (sanitizada). Los tres identificadores son campos
 independientes, no parte del mensaje.

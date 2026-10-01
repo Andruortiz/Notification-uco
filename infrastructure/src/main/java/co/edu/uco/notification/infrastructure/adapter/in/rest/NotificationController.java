@@ -144,7 +144,7 @@ public class NotificationController {
             principal.tenantId(),
             recipientId == null ? null : RecipientId.of(recipientId),
             channelType == null ? null : ChannelType.of(channelType),
-            status == null ? null : NotificationStatus.valueOf(status),
+            RequestEnums.optional(NotificationStatus.class, "status", status),
             from,
             to,
             limit,
@@ -163,7 +163,7 @@ public class NotificationController {
         RecipientId.of(request.recipientId()),
         Recipient.of(request.recipientAddress()),
         NotificationContent.of(request.subject(), request.body()),
-        Priority.valueOf(request.priority()),
+        RequestEnums.required(Priority.class, "priority", request.priority()),
         request.attachments().stream().map(AttachmentRequest::toSubmission).toList(),
         correlationId);
   }

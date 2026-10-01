@@ -219,6 +219,52 @@ class NotificationControllerTest {
         .isBadRequest();
   }
 
+  @Test
+  void searchNamesTheAllowedValuesWhenTheStatusIsInvalid() {
+    webTestClient
+        .get()
+        .uri("/notifications?status=NOT_A_REAL_STATUS")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.message")
+        .value(message -> assertTrue(message.toString().startsWith("status must be one of ")));
+  }
+
+  @Test
+  void sendReturnsBadRequestWhenThePriorityIsMissing() {
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(REQUEST_BODY.replace(",\n  \"priority\": \"NORMAL\"", ""))
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.message")
+        .isEqualTo("priority must not be blank");
+  }
+
+  @Test
+  void sendNamesTheAllowedValuesWhenThePriorityIsUnknown() {
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(REQUEST_BODY.replace("\"NORMAL\"", "\"normal\""))
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.message")
+        .isEqualTo("priority must be one of LOW, NORMAL, HIGH");
+  }
+
   private static final String ATTACHMENT_CONTENT = "c2VjcmV0LWNvbnRlbnQtMzE0MQ==";
   private static final String ATTACHMENT_URL =
       "http://minio.test/notification-attachments/tenants/tenant-1/uploads/u-1"

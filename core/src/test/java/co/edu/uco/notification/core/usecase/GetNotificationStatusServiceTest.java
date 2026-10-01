@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusQuery;
 import co.edu.uco.notification.core.port.in.NotificationStatusView;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import co.edu.uco.notification.utils.CorrelationId;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import reactor.core.publisher.Mono;
@@ -111,5 +112,41 @@ class GetNotificationStatusServiceTest {
   @Test
   void constructorRejectsNullNotificationRepository() {
     assertThrows(NullPointerException.class, () -> new GetNotificationStatusService(null));
+  }
+
+  @Test
+  void getStatusExposesThePersistedCorrelationId() {
+    final CorrelationId correlationId = CorrelationId.of("corr-status");
+    final Notification notification =
+        Notification.accept(
+            new NotificationRouting(
+                TENANT_ID,
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+            correlationId);
+    when(notificationRepository.findById(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
+
+    StepVerifier.create(
+            service.getStatus(
+                new GetNotificationStatusQuery(TENANT_ID, notification.notificationId())))
+        .assertNext(view -> assertEquals(correlationId, view.correlationId()))
+        .verifyComplete();
+  }
+
+  @Test
+  void getStatusLeavesTheCorrelationIdNullForLegacyNotifications() {
+    final Notification notification = acceptedNotification();
+    when(notificationRepository.findById(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
+
+    StepVerifier.create(
+            service.getStatus(
+                new GetNotificationStatusQuery(TENANT_ID, notification.notificationId())))
+        .assertNext(view -> assertNull(view.correlationId()))
+        .verifyComplete();
   }
 }

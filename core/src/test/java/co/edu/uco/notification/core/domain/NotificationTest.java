@@ -18,6 +18,7 @@ import co.edu.uco.notification.core.domain.event.NotificationRecoverable;
 import co.edu.uco.notification.core.domain.event.NotificationRequeued;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
+import co.edu.uco.notification.utils.CorrelationId;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,71 @@ class NotificationTest {
             RecipientId.of("recipient-1"),
             Recipient.of("alice@example.com")),
         new NotificationDetails(NotificationContent.of("Subject", "Body"), Priority.NORMAL));
+  }
+
+  @Test
+  void acceptWithCorrelationIdStoresItAndStampsEveryEvent() {
+    final CorrelationId correlationId = CorrelationId.of("corr-42");
+    final Notification notification =
+        Notification.accept(
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Subject", "Body"), Priority.NORMAL),
+            correlationId);
+    notification.markQueued();
+    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.requeue();
+    notification.markQueued();
+    notification.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+
+    final List<DomainEvent> events = notification.pullEvents();
+
+    assertEquals(correlationId, notification.correlationId());
+    assertEquals(6, events.size());
+    events.forEach(
+        event -> {
+          assertEquals(correlationId, event.correlationId());
+          assertEquals(TenantId.of("tenant-1"), event.tenantId());
+          assertEquals(notification.notificationId(), event.notificationId());
+        });
+  }
+
+  @Test
+  void failureAndDiscardEventsCarryThePersistedCorrelationId() {
+    final CorrelationId correlationId = CorrelationId.of("corr-43");
+    final Notification failed = acceptedWith(correlationId);
+    failed.markQueued();
+    failed.markFailed(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    final Notification exhausted = acceptedWith(correlationId);
+    exhausted.markQueued();
+    exhausted.markRetriesExhausted(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    final Notification discarded = acceptedWith(correlationId);
+    discarded.discard();
+
+    failed.pullEvents().forEach(event -> assertEquals(correlationId, event.correlationId()));
+    exhausted.pullEvents().forEach(event -> assertEquals(correlationId, event.correlationId()));
+    discarded.pullEvents().forEach(event -> assertEquals(correlationId, event.correlationId()));
+  }
+
+  @Test
+  void acceptWithoutCorrelationIdLeavesItNull() {
+    assertNull(accepted().correlationId());
+  }
+
+  private static Notification acceptedWith(final CorrelationId correlationId) {
+    return Notification.accept(
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Subject", "Body"), Priority.NORMAL),
+        correlationId);
   }
 
   @Test

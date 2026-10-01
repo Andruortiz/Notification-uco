@@ -45,6 +45,7 @@ import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
 import co.edu.uco.notification.core.repository.NotificationBatchRepository;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import co.edu.uco.notification.utils.CorrelationId;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
@@ -428,5 +429,30 @@ class SendNotificationBatchServiceTest {
                   new AttachmentInspector(detector, scanner, cache), uploads, storage)),
           notificationBatchRepository);
     }
+  }
+
+  @Test
+  void sendBatchPassesTheBatchCorrelationIdToEveryItem() {
+    final CorrelationId correlationId = CorrelationId.of("batch-corr");
+    final ArgumentCaptor<SendNotificationCommand> captured =
+        ArgumentCaptor.forClass(SendNotificationCommand.class);
+    when(sendNotificationUseCase.send(captured.capture()))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    NotificationId.newId(), NotificationStatus.PENDING, false)));
+
+    final SendNotificationBatchCommand command =
+        new SendNotificationBatchCommand(
+            TENANT_ID,
+            BatchId.of("batch-corr-1"),
+            List.of(item("order-1"), item("order-2")),
+            correlationId);
+
+    final BatchAcceptedResult result = service.sendBatch(command).block();
+
+    assertNotNull(result);
+    assertEquals(2, captured.getAllValues().size());
+    captured.getAllValues().forEach(item -> assertEquals(correlationId, item.correlationId()));
   }
 }

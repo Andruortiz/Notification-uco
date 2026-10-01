@@ -67,7 +67,8 @@ public final class SendNotificationBatchService implements SendNotificationBatch
             item.recipient(),
             item.content(),
             item.priority(),
-            item.attachments());
+            item.attachments(),
+            command.correlationId());
 
     return sendNotificationUseCase
         .send(itemCommand)

@@ -4,6 +4,7 @@ import co.edu.uco.notification.core.domain.event.*;
 import co.edu.uco.notification.core.domain.policy.StatusTransitionPolicy;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
+import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ public final class Notification {
   private final List<DeliveryAttempt> deliveryAttempts = new ArrayList<>();
 
   private NotificationStatus status;
+  private CorrelationId correlationId;
   private final Long version;
 
   private Notification(
@@ -46,6 +48,13 @@ public final class Notification {
 
   public static Notification accept(
       final NotificationRouting routing, final NotificationDetails details) {
+    return accept(routing, details, null);
+  }
+
+  public static Notification accept(
+      final NotificationRouting routing,
+      final NotificationDetails details,
+      final CorrelationId correlationId) {
     Preconditions.requireNonNull(routing, "routing must not be null");
     Preconditions.requireNonNull(details, "details must not be null");
     final Notification notification =
@@ -54,8 +63,13 @@ public final class Notification {
             routing,
             details,
             new NotificationMetadata(Instant.now(), null));
+    notification.correlationId = correlationId;
     notification.eventRecorder.registerEvent(
-        new NotificationAccepted(notification.notificationId, notification.acceptedAt));
+        new NotificationAccepted(
+            notification.notificationId,
+            notification.tenantId,
+            notification.correlationId,
+            notification.acceptedAt));
     return notification;
   }
 
@@ -66,6 +80,17 @@ public final class Notification {
       final NotificationStatus status,
       final NotificationMetadata metadata,
       final List<DeliveryAttempt> deliveryAttempts) {
+    return reconstitute(notificationId, routing, details, status, metadata, deliveryAttempts, null);
+  }
+
+  public static Notification reconstitute(
+      final NotificationId notificationId,
+      final NotificationRouting routing,
+      final NotificationDetails details,
+      final NotificationStatus status,
+      final NotificationMetadata metadata,
+      final List<DeliveryAttempt> deliveryAttempts,
+      final CorrelationId correlationId) {
     Preconditions.requireNonNull(notificationId, "notificationId must not be null");
     Preconditions.requireNonNull(routing, "routing must not be null");
     Preconditions.requireNonNull(details, "details must not be null");
@@ -75,20 +100,27 @@ public final class Notification {
 
     final Notification notification = new Notification(notificationId, routing, details, metadata);
     notification.status = status;
+    notification.correlationId = correlationId;
     notification.deliveryAttempts.addAll(deliveryAttempts);
     return notification;
   }
 
+  public CorrelationId correlationId() {
+    return correlationId;
+  }
+
   public void markQueued() {
     transitionTo(NotificationStatus.IN_PROCESS);
-    eventRecorder.registerEvent(new NotificationQueued(notificationId, Instant.now()));
+    eventRecorder.registerEvent(
+        new NotificationQueued(notificationId, tenantId, correlationId, Instant.now()));
   }
 
   public void markDelivered(final AttemptOrigin origin, final ProviderId providerId) {
     transitionTo(NotificationStatus.DELIVERED);
     final Instant now = Instant.now();
     deliveryAttempts.add(DeliveryAttempt.of(now, AttemptResult.ACCEPTED, origin, providerId));
-    eventRecorder.registerEvent(new NotificationDelivered(notificationId, now));
+    eventRecorder.registerEvent(
+        new NotificationDelivered(notificationId, tenantId, correlationId, now));
   }
 
   public void markRecoverable(final AttemptOrigin origin, final ProviderId providerId) {
@@ -96,7 +128,8 @@ public final class Notification {
     final Instant now = Instant.now();
     deliveryAttempts.add(
         DeliveryAttempt.of(now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
-    eventRecorder.registerEvent(new NotificationRecoverable(notificationId, now));
+    eventRecorder.registerEvent(
+        new NotificationRecoverable(notificationId, tenantId, correlationId, now));
   }
 
   public void markRetriesExhausted(final AttemptOrigin origin, final ProviderId providerId) {
@@ -104,7 +137,8 @@ public final class Notification {
     final Instant now = Instant.now();
     deliveryAttempts.add(
         DeliveryAttempt.of(now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
-    eventRecorder.registerEvent(new NotificationFailed(notificationId, now));
+    eventRecorder.registerEvent(
+        new NotificationFailed(notificationId, tenantId, correlationId, now));
   }
 
   public void markFailed(final AttemptOrigin origin, final ProviderId providerId) {
@@ -112,17 +146,20 @@ public final class Notification {
     final Instant now = Instant.now();
     deliveryAttempts.add(
         DeliveryAttempt.of(now, AttemptResult.PERMANENT_FAILURE, origin, providerId));
-    eventRecorder.registerEvent(new NotificationFailed(notificationId, now));
+    eventRecorder.registerEvent(
+        new NotificationFailed(notificationId, tenantId, correlationId, now));
   }
 
   public void requeue() {
     transitionTo(NotificationStatus.PENDING);
-    eventRecorder.registerEvent(new NotificationRequeued(notificationId, Instant.now()));
+    eventRecorder.registerEvent(
+        new NotificationRequeued(notificationId, tenantId, correlationId, Instant.now()));
   }
 
   public void discard() {
     transitionTo(NotificationStatus.DISCARDED);
-    eventRecorder.registerEvent(new NotificationDiscarded(notificationId, Instant.now()));
+    eventRecorder.registerEvent(
+        new NotificationDiscarded(notificationId, tenantId, correlationId, Instant.now()));
   }
 
   private void transitionTo(final NotificationStatus target) {

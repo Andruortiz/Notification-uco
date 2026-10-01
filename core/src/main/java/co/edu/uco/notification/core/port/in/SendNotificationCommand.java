@@ -8,6 +8,7 @@ import co.edu.uco.notification.core.domain.valueobject.Priority;
 import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.List;
 
@@ -19,7 +20,8 @@ public record SendNotificationCommand(
     Recipient recipient,
     NotificationContent content,
     Priority priority,
-    List<AttachmentSubmission> attachments) {
+    List<AttachmentSubmission> attachments,
+    CorrelationId correlationId) {
 
   public SendNotificationCommand {
     Preconditions.requireNonNull(tenantId, "tenantId must not be null");
@@ -39,7 +41,37 @@ public record SendNotificationCommand(
       final RecipientId recipientId,
       final Recipient recipient,
       final NotificationContent content,
+      final Priority priority,
+      final List<AttachmentSubmission> attachments) {
+    this(
+        tenantId,
+        externalId,
+        channelType,
+        recipientId,
+        recipient,
+        content,
+        priority,
+        attachments,
+        null);
+  }
+
+  public SendNotificationCommand(
+      final TenantId tenantId,
+      final ExternalId externalId,
+      final ChannelType channelType,
+      final RecipientId recipientId,
+      final Recipient recipient,
+      final NotificationContent content,
       final Priority priority) {
-    this(tenantId, externalId, channelType, recipientId, recipient, content, priority, List.of());
+    this(
+        tenantId,
+        externalId,
+        channelType,
+        recipientId,
+        recipient,
+        content,
+        priority,
+        List.of(),
+        null);
   }
 }

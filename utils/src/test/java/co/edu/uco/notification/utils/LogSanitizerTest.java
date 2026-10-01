@@ -55,4 +55,29 @@ class LogSanitizerTest {
     assertEquals("key=[REDACTED] and [REDACTED]", redacted);
     assertTrue(LogSanitizer.redactSecrets(null, "x") == null);
   }
+
+  @Test
+  void scrubMasksEmailsPhonesAndSecretsInsideFreeText() {
+    final String scrubbed =
+        LogSanitizer.scrub(
+            "send to usuario@ejemplo.com or +573001235678 with api-key=abc123 and "
+                + "Authorization: Bearer abc.def.ghi password: hunter2");
+
+    assertFalse(scrubbed.contains("usuario@"));
+    assertFalse(scrubbed.contains("573001235678"));
+    assertFalse(scrubbed.contains("abc123"));
+    assertFalse(scrubbed.contains("abc.def.ghi"));
+    assertFalse(scrubbed.contains("hunter2"));
+    assertTrue(scrubbed.contains("***@ejemplo.com"));
+    assertTrue(scrubbed.contains("***5678"));
+  }
+
+  @Test
+  void scrubRedactsJwtsAndLeavesPlainTextAndNullAlone() {
+    final String jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.c2lnbmF0dXJl";
+
+    assertFalse(LogSanitizer.scrub("token was " + jwt).contains(jwt));
+    assertEquals("plain message", LogSanitizer.scrub("plain message"));
+    assertEquals(null, LogSanitizer.scrub(null));
+  }
 }

@@ -6,7 +6,7 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente
+**Estado**: Aceptado
 
 **Versión del plan**: 1
 
@@ -29,10 +29,10 @@ persistencia). Este plan la reconcilia con la spec: conserva la propagación, y 
 (formato estructurado, `LogSanitizer`, `tenantId`/`notificationId` como campos, identificador en
 eventos de dominio, en la consulta de estado y en los errores, y una prueba E2E).
 
-Cuatro decisiones quedan **pendientes del usuario** (ver `research.md`): formato de log, propagación,
-alcance del sanitizador y política de niveles. Este plan fija una **recomendación** para cada una para
-poder dimensionar el trabajo; si el usuario elige otra, `research.md` indica qué cambia. Hasta
-entonces el plan no debe aprobarse.
+Las cuatro decisiones fueron **resueltas por el usuario** (ver `research.md` y la sección "Decisiones
+del usuario y hallazgos del revisor" al final): JSON con `logstash-logback-encoder`; `X-Correlation-Id`
+más `traceparent` transportado; destinatario enmascarado, contenido y credenciales nunca registrados;
+INFO éxito, WARN rechazos 401/403, ERROR fallos de sistema.
 
 ## Reconciliación con la implementación preliminar
 
@@ -56,7 +56,7 @@ entonces el plan no debe aprobarse.
 |---|---|---|
 | `logback-spring.xml` con patrón de texto y `[cid=%X{correlationId:-}]` | Se reemplaza por salida estructurada (decisión 1). | **Sí.** FR-007 y la constitución (Restricciones técnicas, RNF-10) prohíben texto plano libre; el patrón actual es texto con un campo incrustado. No cumple la constitución aunque propague el identificador. |
 | `NotificationDispatchListener.onMessage(String)` (sobrecarga de un argumento que delega con `null`) | Se elimina; las pruebas usan la firma con cabecera. | No contradice la spec; es código de compatibilidad sin uso de producción (Principio VII: nada temporal definitivo). |
-| Logs existentes (18 puntos con `LOGGER` y concatenación `clave=valor` en mensaje) | Pasan a campos estructurados; los datos de destinatario/contenido pasan por `LogSanitizer`. | Parcial: ya incluyen `tenantId`/`notificationId` pero dentro del texto, no como campos. |
+| Logs existentes (26 llamadas `LOGGER` en 9 clases de `infrastructure/src/main`, con `clave=valor` concatenado en el mensaje) | Pasan a campos estructurados; los datos de destinatario/contenido pasan por `LogSanitizer`. | Parcial: ya incluyen `tenantId`/`notificationId` pero dentro del texto, no como campos. |
 | `AttachmentLogFormatter.safe`, `AuthenticationLogFormatter.safe`, `mask` de Twilio/FCM (tres sanitizaciones duplicadas) | Se consolidan en `LogSanitizer` (utils). | No contradice; elimina duplicación y fija una sola política (FR-010). |
 | Brevo y proveedores | Revisión: ningún log de respuesta del proveedor ni excepción lleva credencial o destinatario completo. | La spec exige 0 centinelas (SC-004); hoy no está probado. |
 
@@ -103,7 +103,7 @@ autenticación interina); el layout JSON no bloquea el hilo reactivo (appender a
 **Constraints**: ningún comentario explicativo en código nuevo; ninguna dependencia nueva en `core`;
 contrato OpenAPI primero.
 
-**Scale/Scope**: 3 canales, N tenants; ~18 puntos de log existentes más los hitos de ciclo de vida.
+**Scale/Scope**: 3 canales, N tenants; 26 llamadas de log existentes más los hitos de ciclo de vida.
 
 ## Constitution Check
 
@@ -116,12 +116,12 @@ contrato OpenAPI primero.
 | V. Commits | Una línea, español sin tildes, `tipo(ambito): descripcion`; sin razonamiento en el commit. |
 | VI. Aprobación | Plan queda en `Pendiente`; no se generan tareas. |
 | VII. Sin soluciones temporales | Ver Excepciones: lo diferido tiene dueño y fecha por fijar por el usuario. |
-| IX. Observabilidad | Es el principio que esta historia implementa. |
+| IX. Observabilidad | Es el principio que esta historia implementa; se cumple solo cuando existan `LogSanitizer`, los eventos con identificadores y el E2E (hoy nada de eso existe). |
 | Restricción de logs (RNF-10) | La preliminar **no cumple** (texto plano); el plan corrige. |
 | Consumidores RabbitMQ: ack manual y DLQ | Esta historia solo añade MDC y lectura de cabecera en `NotificationDispatchListener` y `AttachmentScanListener`; no cambia su política de ack ni de DLQ. Si al implementar se requiere tocarla se justificará aquí. |
-| Secretos fuera de logs | Cumple por `LogSanitizer` + prueba de centinelas. |
+| Secretos fuera de logs | Pendiente de cumplir: `LogSanitizer` aún no existe; se considera cumplido solo con la prueba de centinelas en verde. |
 
-Resultado: sin violaciones tras diseño; sin entradas en Complexity Tracking.
+Resultado: el diseño no introduce violaciones; el cumplimiento de IX, de la restricción de logs y de secretos depende de las tareas descritas y se verifica con las pruebas, no por diseño. Sin entradas en Complexity Tracking.
 
 ## Diseño propuesto (resumen)
 
@@ -210,12 +210,41 @@ compartido por `core` e `infrastructure`).
 
 | Pendiente | Dueño | Fecha |
 |---|---|---|
-| Métricas técnicas y de negocio de RNF-10 (el resto del requisito) | por asignar por el usuario | por fijar por el usuario |
-| Reenvío del identificador a proveedores (Brevo/Twilio/FCM) | por asignar por el usuario | por fijar por el usuario |
-| Catálogo numérico `ErrorCode` (solo se entrega la categoría) | por asignar por el usuario | por fijar por el usuario |
-
-El agente no inventa dueños ni fechas; el usuario debe completarlas antes de aprobar.
+| Métricas técnicas y de negocio de RNF-10 (el resto del requisito) | equipo de desarrollo del componente | 2026-10-15 |
+| Reenvío del identificador a proveedores (Brevo/Twilio/FCM) | equipo de desarrollo del componente | 2026-10-15 |
+| Catálogo numérico `ErrorCode` (solo se entrega `FailureCategory`) | equipo de desarrollo del componente | 2026-10-15 |
+| Micrometer Tracing / SDK de OpenTelemetry (solo se transporta `traceparent`) | equipo de desarrollo del componente | 2026-10-15 |
 
 ## Complexity Tracking
 
 Sin violaciones que justificar.
+
+## Decisiones del usuario y hallazgos del revisor (versión 1, reconciliación)
+
+### Decisiones del usuario
+
+1. Formato: JSON de una línea con `logstash-logback-encoder`, dependencia solo en `infrastructure`.
+2. Propagación: se mantiene `X-Correlation-Id` y además se transporta `traceparent` (REST de entrada,
+   MDC clave `traceparent`, cabecera AMQP `traceparent`). Alcance mínimo: no se genera ni interpreta,
+   solo se acepta si cumple el formato W3C (`00-` 32 hex `-` 16 hex `-` 2 hex) y se reenvía. Supuesto
+   del agente: no se añade Micrometer Tracing ni SDK de OpenTelemetry; su adopción está en Excepciones.
+3. `LogSanitizer`: destinatario enmascarado; contenido y credenciales nunca; caracteres de control
+   neutralizados.
+4. Niveles: INFO éxitos, WARN rechazos 401/403, ERROR fallos de sistema. Supuesto del agente (no
+   confirmado): fallos recuperables de proveedor en WARN y fallos permanentes de negocio en ERROR.
+5. Excepciones del Principio VII: ver tabla (equipo de desarrollo del componente, 2026-10-15).
+
+### Hallazgos del revisor y su resolución
+
+| Id | Resolución |
+|---|---|
+| H4 | Redacción de Constitution Check matizada (arriba). |
+| H5 | Se elimina `NotificationDispatchListener.onMessage(String)`; las pruebas pasan a la firma con cabecera. Si falta la cabecera, el listener genera un id con prefijo `legacy-` solo como respaldo para las entradas sin notificación a mano; las entradas del ciclo de vida (eventos y proveedores) usan el id persistido de la notificación mediante `LogContext`. Una notificación aceptada tras esta historia siempre tiene id persistido y `enqueueForDispatch` siempre estampa ese id; el caso "sin cabecera" solo ocurre con mensajes anteriores a la historia. FR-017 en la spec lo refleja. |
+| H7 | Los eventos nacen con el `correlationId` de la notificación (campo del agregado), no con el del contexto. `NotificationRabbitPublisher.publish` estampa y registra con el id del evento. Un reencolado desde el planificador (`sched-<uuid>`) mantiene el id persistido; el id del planificador solo se usa para las entradas de log propias del barrido. |
+| H6 | `%wEx` desaparece con el layout JSON; el stack trace pasa por un `ThrowableProxyConverter` que usa `LogSanitizer`. Se prueba con centinela en la excepción. Se prueba el id en reintento y DLQ (US1.4); la prueba de DLQ requiere broker en `localhost:5673`, no ejecutable sin Docker. |
+| H8 | Pruebas de ausencia de fuga entre peticiones concurrentes (FR-014) para el filtro y el puente a MDC, y de limpieza de MDC tras cada mensaje en los listeners. |
+| H9 | Pruebas añadidas: ambos listeners, scheduler, ambos controllers, roundtrip de mapper/Mongo con id no nulo, factory en `SendNotificationService`, lote, filtro con salto de línea y caso 401. |
+| H10 | SC-001/003/004/005/006 cubiertos por `LogCorrelationE2ETest` (escrito, no ejecutable sin Docker) más pruebas de capa ejecutables sin Docker (layout, sanitizador, filtro). |
+| H11 | Recuento corregido a 26 llamadas en 9 clases. La spec tenía cuatro apariciones del marcador, no tres; todas resueltas. |
+| H12 | `Notification.assignCorrelationId` (setter público que muta el agregado) se elimina. El id entra por una sobrecarga de `Notification.accept(routing, details, correlationId)` y por `reconstitute`; así `NotificationAccepted` nace con el id y el agregado es inmutable en ese campo. |
+| OpenAPI | Se aplica `contracts/openapi-delta.md` completo: cabecera de respuesta en todas las respuestas, `correlationId` en `ErrorResponse` y `NotificationStatusResponse`, y `traceparent`. |

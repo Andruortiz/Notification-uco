@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-01
 
-**Status**: Borrador — pendiente de clarificación (ver `Clarifications`)
+**Status**: Clarificado y plan aprobado por el usuario (2026-10-01)
 
 **Input**: User description: "HU2-056 — Como operador, quiero trazar una solicitud de punta a punta
 mediante logs estructurados con un identificador de correlación."
@@ -22,10 +22,20 @@ se hace en `plan.md`.
 
 ### Session 2026-10-01
 
-Cuatro decisiones de diseño quedaron deliberadamente abiertas y deben ser resueltas por el usuario
-antes de aprobar el plan. Tres están marcadas en los requisitos con `[NEEDS CLARIFICATION]` (formato,
-sanitización, y su reflejo en FR-007/FR-010); la cuarta (niveles de log) y la propagación se registran
-en `Assumptions` como supuestos provisionales pendientes de confirmación. Ver `Open Questions`.
+Las cuatro decisiones de diseño dejadas abiertas fueron resueltas por el usuario:
+
+- Q: ¿Formato de log? -> A: JSON de una línea con `logstash-logback-encoder` (dependencia solo en
+  `infrastructure`).
+- Q: ¿Propagación? -> A: se mantiene `X-Correlation-Id` y además se propaga `traceparent` para
+  compatibilidad futura con OpenTelemetry. Alcance mínimo: aceptar y reenviar `traceparent` (REST de
+  entrada, MDC, cabecera AMQP); sin Micrometer Tracing ni SDK de OpenTelemetry.
+- Q: ¿Alcance de `LogSanitizer`? -> A: el destinatario se enmascara (no se omite); el contenido y las
+  credenciales nunca se registran; los caracteres de control se neutralizan.
+- Q: ¿Niveles? -> A: INFO para operaciones exitosas, WARN para rechazos 401/403, ERROR para fallos de
+  sistema. Los fallos recuperables de proveedor se registran en WARN: supuesto del agente, no
+  confirmado por el usuario.
+- Excepciones del Principio VII (métricas de RNF-10, reenvío del id a proveedores, catálogo
+  `ErrorCode`): dueño equipo de desarrollo del componente, fecha 2026-10-15.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -76,8 +86,7 @@ tres campos.
 **Acceptance Scenarios**:
 
 1. **Given** el servicio en ejecución, **When** emite cualquier entrada de log, **Then** la entrada es
-   parseable por máquina en el formato [NEEDS CLARIFICATION: formato estructurado — JSON de una línea
-   por evento, logfmt u otro formato parseable].
+   parseable por máquina como JSON de una línea por evento.
 2. **Given** una notificación del tenant `A`, **When** se registra su aceptación, cada cambio de estado
    y su resultado terminal, **Then** cada entrada incluye `correlationId`, `tenantId` y
    `notificationId` como campos distintos.
@@ -101,8 +110,8 @@ en trazas de excepciones.
 
 1. **Given** una notificación cuyo destinatario es `usuario@ejemplo.com`, **When** se registra
    cualquier evento de su ciclo de vida, **Then** la dirección aparece solo en la forma definida por
-   la política de sanitización: [NEEDS CLARIFICATION: ¿qué se oculta y cómo? destinatario enmascarado
-   u omitido, contenido omitido, credenciales omitidas — alcance exacto del sanitizador].
+   la política de sanitización: enmascarada. El contenido del mensaje y las credenciales nunca se
+   registran y los caracteres de control se neutralizan.
 2. **Given** un fallo del proveedor cuya respuesta incluye la credencial usada, **When** se registra el
    error, **Then** la credencial no aparece en el log.
 3. **Given** una solicitud con cabecera `Authorization`, **When** se registra la solicitud, **Then** el
@@ -183,13 +192,14 @@ estado y comprobar que expone el mismo valor.
 - **FR-006**: Los mensajes publicados MUST llevar el identificador en una cabecera y los eventos de
   dominio MUST poder asociarse a él.
 - **FR-007**: Todas las entradas de log MUST emitirse en formato estructurado parseable por máquina
-  [NEEDS CLARIFICATION: formato estructurado (ver Historia 2)], nunca texto libre.
+  (JSON de una línea), nunca texto libre.
 - **FR-008**: Toda entrada ligada al ciclo de vida de una notificación MUST incluir `correlationId`,
   `tenantId` y `notificationId` como campos independientes.
 - **FR-009**: Ninguna entrada MUST contener direcciones de destinatario en claro, contenido del
   mensaje, credenciales de proveedor, tokens ni secretos, tampoco dentro de trazas de excepciones.
 - **FR-010**: Existe un componente de sanitización reutilizable que aplica la política de FR-009
-  [NEEDS CLARIFICATION: alcance exacto, ver Historia 3] y es el único camino para registrar datos de
+  (destinatario enmascarado, contenido y credenciales nunca registrados, caracteres de control
+  neutralizados) y es el único camino para registrar datos de
   destinatario o contenido.
 - **FR-011**: Los niveles de log MUST seguir una política documentada que distinga hitos de negocio,
   detalle interno, fallos recuperables y fallos permanentes (ver `Assumptions`).
@@ -198,6 +208,14 @@ estado y comprobar que expone el mismo valor.
 - **FR-013**: La consulta de estado de una notificación MUST exponer el identificador de correlación.
 - **FR-014**: El identificador MUST aislarse entre solicitudes concurrentes: nunca una entrada de una
   solicitud lleva el identificador de otra.
+- **FR-016**: El servicio MUST aceptar, conservar y reenviar la cabecera `traceparent` (REST de
+  entrada, contexto de log, cabecera de mensajería) sin interpretarla ni generarla; un valor que no
+  cumpla el formato W3C se descarta.
+- **FR-017**: Los eventos de una notificación MUST llevar el identificador de correlación persistido
+  de la notificación, aun cuando el recorrido lo dispare otro proceso (planificador, reencolado); una
+  notificación no puede tener dos identificadores. Si un mensaje llega sin cabecera, las entradas
+  del ciclo de vida usan el identificador persistido; el consumidor solo genera uno de respaldo
+  (prefijo `legacy-`) para las entradas que no tienen la notificación a mano.
 - **FR-015**: El contrato de la API MUST documentar el identificador en solicitudes, respuestas y
   errores antes de su implementación.
 
@@ -229,30 +247,17 @@ estado y comprobar que expone el mismo valor.
 
 ## Assumptions
 
-- Política de niveles provisional (pendiente de confirmación del usuario): INFO para aceptación y
-  cambios de estado; DEBUG para detalle interno; WARN para fallos recuperables; ERROR para fallos
-  permanentes o de infraestructura no recuperada.
-- Propagación provisional (pendiente de confirmación): el nombre de cabecera es `X-Correlation-Id` en
-  HTTP y `x-correlation-id` en mensajería, generado si falta, como ya establece el código preliminar.
+- Política de niveles: INFO operaciones exitosas y cambios de estado; WARN rechazos 401/403 y fallos
+  recuperables de proveedor (este último, supuesto del agente); ERROR fallos de sistema y fallos
+  permanentes no recuperados; DEBUG detalle interno.
+- Propagación: `X-Correlation-Id` en HTTP y `x-correlation-id` en mensajería, generado si falta;
+  `traceparent` solo se transporta (FR-016).
 - Los proveedores externos (correo, SMS, push) no reciben el identificador en esta historia; solo
   se registra en los logs propios. Reenviarlo se trata como mejora futura.
 - Las métricas técnicas y de negocio de RNF-10 quedan fuera de esta historia; esta historia cubre solo
-  logs estructurados y correlación. Debe quedar registrado como excepción con dueño y fecha en el plan
-  (Principio VII).
+  logs estructurados y correlación. Excepción del Principio VII: dueño equipo de desarrollo del
+  componente, fecha 2026-10-15 (igual para el reenvío a proveedores y el catálogo `ErrorCode`).
 - El enmascaramiento de datos en logs no cambia los datos persistidos ni las respuestas de la API.
 - La autenticación interina (HU2-096) ya existe; el `tenantId` para los logs sale de la identidad
   validada, no de un header libre.
 - Los logs se consumen por un agregador externo; su elección y la retención quedan fuera de alcance.
-
-## Open Questions (para el usuario)
-
-1. Formato de log: ¿JSON de una línea (estándar con Kubernetes y agregadores), logfmt u otro? Spring
-   Boot 3.3.4 no trae logging estructurado nativo (llega en 3.4): implica un encoder adicional o
-   formato propio. La constitución exige "JSON o equivalente parseable", por lo que el texto plano
-   actual del código preliminar no la cumple.
-2. Propagación: ¿se mantiene `X-Correlation-Id` generado si falta, propagado por contexto de hilo y
-   cabecera de mensajería, o hay otro estándar de la organización (por ejemplo cabecera de trazado
-   distribuido)?
-3. Sanitización: ¿qué oculta el sanitizador? Dirección del destinatario (omitida, enmascarada o
-   hash), contenido (siempre omitido), credenciales y tokens (siempre omitidos).
-4. Niveles: ¿se confirma la política provisional de `Assumptions`?

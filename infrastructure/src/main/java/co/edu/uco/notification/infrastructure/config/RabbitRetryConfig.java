@@ -6,6 +6,7 @@ import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import org.springframework.amqp.rabbit.retry.RepublishMessageRecoverer;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.context.annotation.Bean;
@@ -25,7 +26,8 @@ public class RabbitRetryConfig {
   @Bean
   StatefulRetryOperationsInterceptor notificationDispatchRetryInterceptor(
       @Value("${notification.rabbit.dispatch.max-attempts:3}") final int maxAttempts,
-      final MessageRecoverer notificationDispatchDlqRecoverer) {
+      @Qualifier("notificationDispatchDlqRecoverer")
+          final MessageRecoverer notificationDispatchDlqRecoverer) {
     return RetryInterceptorBuilder.stateful()
         .maxAttempts(maxAttempts)
         .recoverer(notificationDispatchDlqRecoverer)

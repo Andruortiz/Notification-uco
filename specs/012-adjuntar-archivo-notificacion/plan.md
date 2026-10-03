@@ -25,6 +25,7 @@
 |---|---|---|
 | 1 | Referencia https pura: el cliente aloja el archivo y envía `{ fileName, contentType, sizeBytes, url }`. | Aceptada el 2026-09-28. T001–T018 implementadas y commiteadas en esta rama; T019–T022 en curso sin commitear. **Superada por la versión 3.** |
 | 2 | Contenido embebido en Base64 para todo archivo (delta hipotético que la v1 documentaba en "Si Q1 cambia a contenido embebido"). | Nunca adoptada. Su contenido útil se integra en la v3. |
+| 3.1 | Enmienda de correcciones de la revisión independiente (2026-10-03), sin cambiar Q1–Q5. Ver [Enmienda 3.1](#enmienda-31--correcciones-de-la-revisión-2026-10-03). | **Propuesta con Q6 a Q9 resueltas por el usuario el 2026-10-03; pendiente de su aprobación explícita.** No altera el campo `Estado` de arriba. |
 | 3 | **Híbrido por tamaño**, umbral 1 MB: embebido en Base64 hasta 1 MB; por encima, subida a un almacén de objetos propio del servicio mediante una dirección de subida prefirmada que el propio servicio emite. Escaneo antivirus, verificación del tipo real y huella SHA-256 en ambos caminos. | **Este documento.** Aceptada el 2026-09-29. Spec, research, data-model, quickstart, contrato y `tasks.md` actualizados a la v3 el mismo día. |
 
 ## Summary
@@ -231,8 +232,8 @@ decisión de arquitectura sobre MinIO y ClamAV fuera de desarrollo.
   - **Secretos** — PASS: credenciales de MinIO por variables de entorno, nunca versionadas; la dirección
     prefirmada se trata como credencial temporal.
   - **Multi-tenant** — PASS por diseño, con prueba obligatoria de dos tenants (ver
-    [Aislamiento por tenant](#aislamiento-por-tenant)). Sigue el placeholder `X-Tenant-Id` mientras DEP-01
-    esté bloqueado.
+    [Aislamiento por tenant](#aislamiento-por-tenant)). El tenant sale del token JWT interino (HU2-096), no de
+    `X-Tenant-Id`, mientras DEP-01 esté bloqueado.
   - **Bloqueo optimista y actualizaciones atómicas** — PASS: la notificación sigue en una sola escritura
     del agregado; las transiciones de `AttachmentUpload` son `findAndModify` condicionados al estado
     anterior, nunca leer-luego-escribir.
@@ -501,7 +502,7 @@ findActiveRoute
 
 ### Camino grande (`url` a MinIO propio)
 
-**Emisión** — `POST /attachment-uploads` (`X-Tenant-Id`) con `{ fileName, contentType, sizeBytes }`:
+**Emisión** — `POST /attachment-uploads` (tenant tomado del token) con `{ fileName, contentType, sizeBytes }`:
 
 - Mismas reglas 2–5 de `AttachmentPolicy`, más `sizeBytes` > 1 048 576.
 - Crea `AttachmentUpload { uploadId, tenantId, fileName, contentType, sizeBytes, uploadKey =
@@ -707,12 +708,112 @@ y por qué. Secciones afectadas:
 `research.md` (Decisiones 1, 3, 5, 9 y 11 reescritas; 12–15 nuevas), `data-model.md`, `quickstart.md` y
 `contracts/api-notificaciones-cambios.md` se reescribieron en la misma línea; `tasks.md` se regeneró.
 
+## Enmienda 3.1 — correcciones de la revisión (2026-10-03)
+
+**Estado**: propuesta con las clarificaciones Q6 a Q9 resueltas (2026-10-03); pendiente de aprobación explícita. Rama `fix/HU2-092-hallazgos-revision`. No es una historia
+nueva: enmienda esta carpeta, no renumera nada (FR-027 a FR-040, SC-015 a SC-022, User Story 8, tareas
+T076 en adelante) y no genera un `tasks.md` nuevo; las tareas propuestas están abajo y se pasan a
+`tasks.md` solo tras la aprobación.
+
+### Hallazgos de la revisión del 2026-10-03
+
+Cada hallazgo se contrastó con el código de `develop` antes de aceptarlo.
+
+| # | Hallazgo | Veredicto | Verificación y decisión |
+|---|---|---|---|
+| 1 | Subida `PENDING_SCAN` para siempre (stat vacío, tamaño distinto, transición perdida tras borrar) | **Aceptado** | `ScanAttachmentUploadService.scan` devuelve `Mono.empty()` en los tres casos y el listener confirma sin log. Estado `FAILED` + motivo (FR-027 a FR-029). |
+| 2 | `read` sin comparar `stat` con lo declarado ni con el máximo | **Aceptado** | `scanStoredObject` lee antes de comparar. FR-028 compara antes de leer y acota la lectura. |
+| 3a | `send`/`recover` lanzan excepción y se sale sin ack ni nack | **Aceptado** | `handleFailure` propaga la excepción antes de `basicAck`. Además la cola de escaneo no tiene DLX (`new Queue(properties.queue())`), así que `nack(requeue=false)` solo funciona si se añade (Q9). |
+| 3b | JSON ilegible se reintenta `maxAttempts` veces | **Aceptado** | FR-030, error irrecuperable directo a la DLQ. |
+| 3c | `AttachmentObjectChangedException` debería ir directo a la DLQ | **Descartado** | FR-025 y este plan exigen volver a analizar el archivo cambiado: el reintento sobre el contenido nuevo es el comportamiento diseñado. Se conserva el reintento. |
+| 3d | Reenvío y ack no atómicos (duplicado si falla el ack tras publicar) | **Aceptado como diseño, no como defecto** | El consumo es "al menos una vez" y el consumidor es idempotente (la transición exige `PENDING_SCAN`). Se documenta en FR-031 y se prueba que un duplicado no tiene efecto; no se busca atomicidad imposible entre broker y base. |
+| 4a | `complete` ignora el booleano de `transition` y devuelve la versión vieja | **Aceptado** | `requestScanIfComplete` hace `.then(...)` sobre el booleano y `.thenReturn(completed)` con `version` previa. FR-032. |
+| 4b | `expiresAt` no se compara al completar; no hay limpieza | **Aceptado** | FR-033 y FR-034 (Q7, Q8). |
+| 5a | PUT prefirmado sigue vigente tras `complete` y sin límite de tamaño ni tipo | **Aceptado, con matiz** | Lo escrito después de `complete` no llega a ninguna notificación, porque el escaneo copia por ETag a `clean/` y las notificaciones solo referencian `clean/`. El riesgo real es memoria (hallazgo 2) y almacenamiento sin vigilancia. Q6 elige el mecanismo. |
+| 5b | `Instant.now()` en lugar del `Clock` | **Aceptado** | `MinioAttachmentStorageAdapter` línea 113. FR-036. |
+| 5c | `copyIfMatch` antes de `transition`: copia huérfana en `clean/` | **Aceptado** | FR-036. El orden se conserva porque la copia debe existir antes de marcar `CLEAN`; se corrige limpiando la copia si se pierde la carrera. |
+| 6a | SC-011 sin prueba | **Descartado** | `AttachmentUploadE2ETest.aCleanTenMegabyteFileIsScannedInTimeAndDeliveredByReference` afirma `scanTime <= 30 s` con 10 MB y `Duration`. |
+| 6b | SC-012 sin prueba | **Descartado** | `NotificationAttachmentE2ETest.fiveEmbeddedFilesOfOneMegabyteAreAcceptedWithinFiveSeconds` afirma `<= 5 s`. |
+| 6c | FR-026 (8 MB) sin prueba | **Descartado** | `NotificationAttachmentE2ETest` (caso `sc002-413`) espera `413` y comprueba que nada se guardó; `NotificationControllerTest` cubre `PAYLOAD_TOO_LARGE`. |
+| 6d | Sin prueba del caso del punto 1, del mensaje venenoso, del fallo del `send`; `atLeast(2)` | **Aceptado** | Confirmado: `AttachmentScanListenerTest` usa `atLeast(2)` en la prueba de DLQ. Tareas T079 a T084. |
+| 7a | `tasks.md` cita `infra-main/` e `infra-test/` que no existen | **Descartado como defecto, mejorado como legibilidad** | Son alias definidos en `## Path Conventions` (`infra-main/` = `infrastructure/src/main/java/...`, `core-main/` = `core/src/main/java/...`) y resuelven a rutas reales. No hay `utils` citado. Se propone T091 para sustituirlos por rutas reales, de baja prioridad. |
+| 7b | Spec y plan deben reflejar la autenticación vigente | **Aceptado, parcial** | El spec no mencionaba `X-Tenant-Id` (se añadió el supuesto); el plan lo citaba en dos lugares (corregidos en esta enmienda) y `quickstart.md` línea 71 también (T091). |
+| 8a | `UploadId.of` fuera de `Mono.defer` en `complete` y `get` | **Aceptado** | Confirmado en `AttachmentUploadController`; `issue` sí usa `Mono.defer`. FR-037. |
+| 8b | Lista negra sin `.docm .xlsm .html .svg .iso` | **Aceptado** | Confirmado. Es defensa en profundidad: la lista blanca de tipos ya excluye esos tipos y Tika detectaría el contenido. FR-038. |
+| 8c | `uploadIdFromKey` acepta `.` y `..` | **Aceptado** | `isUnreserved` incluye `.`. FR-039. |
+| 9 | Javadoc en clase interna y record de `AttachmentContentLoader`; comentarios en código de adjuntos | **Aceptado** | Confirmado en `AttachmentContentLoader` (tres bloques `/** */`). Se revisan también `BrevoEmailRequest` y `BrevoNotificationProvider`, que aparecen con comentarios y tocan adjuntos (HU2-093): T090 los trata si son de código de adjuntos. |
+
+Observación fuera de los hallazgos (no se corrige aquí): el consumidor de escaneo usa `.block()` en el hilo
+del listener; está declarado en T073 y es el patrón del consumidor de despacho.
+
+### Diseño de la enmienda
+
+- **Estado `FAILED`** (FR-027): `ScanState.FAILED` y un enum de motivo (`OBJECT_MISSING`, `SIZE_MISMATCH`,
+  `SCAN_EXHAUSTED`, `EXPIRED`) junto a `AttachmentRejectionReason`. `AttachmentUpload.markFailed` exige
+  `PENDING_SCAN`, como `markClean` y `markInfected`. `AttachmentUploadDocument` guarda el motivo.
+- **Escaneo** (FR-028, FR-029): `stat` vacío → `FAILED(OBJECT_MISSING)`; `stat.size != sizeBytes` o `> 10 MB`
+  → sin leer, `FAILED(SIZE_MISMATCH)`; lectura acotada. Orden de salida: persistir la transición, y solo
+  entonces borrar. Si `markClean` pierde la carrera: borrar la copia de `clean/` y registrar.
+- **Cierre** (FR-032, FR-033): `transition` devuelve `Boolean`; si es falso, se relee la subida y se
+  devuelve; si es verdadero, se publica el escaneo y se devuelve `completed` con la versión nueva. Vencida →
+  `FAILED(EXPIRED)` y `409`; una notificación que referencia una subida `FAILED` recibe `400` (Q8 = A).
+- **Consumidor** (FR-030, FR-031): se clasifica el fallo. Irrecuperable (JSON ilegible, identificadores
+  inválidos) → DLQ en el primer intento. Recuperable → contador por encabezado `x-scan-attempt` y reenvío con
+  confirmación del publicador. Si el reenvío o la DLQ fallan → `basicNack(requeue=false)` hacia el DLX de la
+  cola de escaneo y confirmaciones del publicador antes del ack (Q9 = A + C). `AttachmentObjectChangedException` sigue siendo recuperable.
+- **Dirección de subida** (FR-035, Q6 = A): política POST de MinIO (`PostPolicy`) con `content-length-range`
+  exacto y `Content-Type` igual al declarado; la respuesta de emisión devuelve la URL del formulario y los
+  campos firmados, y el cliente envía un multipart. Primer paso: actualizar el contrato OpenAPI (T076) y una
+  prueba de integración con MinIO real que demuestre que un tamaño o tipo distintos son rechazados por el
+  almacén. El borrado del huérfano de `uploads/` al resolverse la subida y la regla de ciclo de vida del
+  bucket completan la defensa.
+- **Abandonadas** (FR-034, Q7 = A más ciclo de vida): una regla de ciclo de vida de MinIO sobre `uploads/` elimina los temporales huérfanos (se aplica al crear el bucket); el estado inicial real es `PENDING_SCAN`. `ExpireAbandonedUploadsService` en `core` (caso de uso disparado desde
+  `infrastructure` por un programador con intervalo configurable) busca por un índice `(state, expiresAt)`
+  y aplica la transición condicionada a `FAILED`; es seguro con varias réplicas porque el que pierde la
+  transición no hace nada.
+- **Constitución**: Principio I (el caso de uso y el puerto de consulta de vencidas en `core`, el
+  programador en `infrastructure`); II (contrato primero, T076); III (se retiran los comentarios, T090);
+  IV (E2E explícita T089, pruebas con conteo exacto); VII (la excepción de subidas abandonadas se resuelve o,
+  si se elige C, se declara con dueño y fecha); **ack manual y DLQ**: se mantiene `MANUAL`, se añade el DLX
+  de la cola de escaneo y no hay excepciones nuevas.
+- **Riesgos de la enmienda**: añadir `x-dead-letter-exchange` a una cola existente falla con
+  `PRECONDITION_FAILED` en un broker que ya la declaró sin argumentos (en desarrollo hay que eliminar y recrear la cola; se
+  anota en `quickstart.md`); cambiar el PUT por un POST multipart cambia el contrato del cliente (Q6 = A); sin despliegue fuera de desarrollo, no rompe clientes.
+
+### Pruebas de la enmienda
+
+Siguen el patrón del repositorio. Reglas de las trampas de HU2-072: mensajes producidos con el publicador
+real; las pruebas de "no llega nada" con control positivo; umbrales de tiempo con `Duration`; conteos
+exactos (`times(n)`) en lugar de `atLeast`.
+
+### Tareas propuestas (T076 en adelante; no están en `tasks.md` hasta la aprobación)
+
+Orden por tarea: prueba, verla fallar por la razón correcta, implementar, ejecutar la clase, `spotless:apply`.
+
+- [ ] T076 Contrato primero, primer paso de la enmienda (Principio II): en `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`, añadir el estado `FAILED` y su motivo a la respuesta de subida, `409` de `:complete` por vencimiento y, la nueva forma de la subida (formulario multipart con política POST firmada, Q6 = A, en lugar de PUT); reflejarlo en `contracts/api-notificaciones-cambios.md`
+- [ ] T077 [P] Pruebas en `core/src/test/.../domain/AttachmentUploadTest.java`: `markFailed` solo desde `PENDING_SCAN`, con cada motivo; `FAILED` es final (FR-027)
+- [ ] T078 `ScanState.FAILED`, enum de motivo, `AttachmentUpload.markFailed`, `AttachmentUploadDocument` y su mapeo, y la regla del resolvedor (`FAILED` → `400`) con prueba en `AttachmentResolverTest` — depende de T077
+- [ ] T079 [P] Pruebas en `core/src/test/.../usecase/ScanAttachmentUploadServiceTest.java` con `StepVerifier`: `stat` vacío → `FAILED(OBJECT_MISSING)`; tamaño distinto o mayor a 10 MB → `verify(storage, never()).read(...)` y `FAILED(SIZE_MISMATCH)`; la transición se persiste antes del `delete` (`InOrder`); transición perdida no borra el objeto de otra réplica y borra la copia de `clean/`; control positivo CLEAN (FR-028, FR-029, FR-036, SC-015, SC-019)
+- [ ] T080 Implementar T079 en `ScanAttachmentUploadService` y registrar cada paso a `FAILED` (FR-010) — depende de T078, T079
+- [ ] T081 [P] Pruebas en `core/src/test/.../usecase/CompleteAttachmentUploadServiceTest.java`: la transición perdida no publica y devuelve el estado vigente; la respuesta lleva la versión nueva; vencida → `FAILED(EXPIRED)` y error; 10 `complete` concurrentes con un repositorio atómico de prueba publican exactamente 1 escaneo (FR-032, FR-033, SC-018)
+- [ ] T082 Implementar T081 en `CompleteAttachmentUploadService` — depende de T078, T081
+- [ ] T083 [P] Reescribir las pruebas de `infrastructure/src/test/.../adapter/in/rabbit/AttachmentScanListenerTest.java` con RabbitMQ real y el publicador real: mensaje ilegible → DLQ con 1 intento; fallo del reenvío y fallo del `recover` → el mensaje termina en la DLQ, no reaparece y no se pierde; un mensaje que siempre falla se intenta `times(maxAttempts)` (reemplaza `atLeast(2)`); `AttachmentObjectChangedException` se reintenta; duplicado de un mensaje ya resuelto sin efecto; control positivo (FR-030, FR-031, SC-016, SC-017)
+- [ ] T084 Implementar T083 en `AttachmentScanListener` y añadir DLX a la cola de escaneo en `AttachmentScanRabbitConfig` y `basicNack(requeue=false)` si falla el reenvío o la DLQ (Q9 = A + C), con confirmaciones del publicador antes del ack — depende de T083
+- [ ] T085 [P] Pruebas de `ExpireAbandonedUploadsService` en `core` y de la consulta de vencidas en `AttachmentUploadMongoAdapterTest` (Testcontainers): vencida y pendiente → `FAILED`; no vencida, `CLEAN` e `INFECTED` no se tocan; dos ejecuciones simultáneas, una sola gana (FR-034, SC-021)
+- [ ] T086 Implementar `ExpireAbandonedUploadsService`, el puerto de consulta de vencidas, su índice `(state, expiresAt)`, el programador en `infrastructure` con intervalo configurable en `AttachmentProperties`, y la regla de ciclo de vida de MinIO sobre `uploads/` con su prueba de integración — depende de T085 (Q7 = A más ciclo de vida)
+- [ ] T087 [P] Pruebas en `MinioAttachmentStorageAdapterTest` con MinIO real: la subida de un objeto de tamaño o tipo distintos del declarado es rechazada (SC-020); el vencimiento usa el `Clock` inyectado (reloj fijo) (FR-035, FR-036)
+- [ ] T088 Implementar T087 en `MinioAttachmentStorageAdapter` (inyectar `Clock`; política POST de Q6 = A) y el borrado del huérfano de `uploads/` al resolverse la subida — depende de T076, T087
+- [ ] T089 **E2E explícita** en `AttachmentUploadE2ETest`: objeto re-subido con otro tamaño tras `:complete` → `FAILED(SIZE_MISMATCH)` sin leerse; subida abandonada → `FAILED(EXPIRED)` con el objeto borrado en un plazo afirmado con `Duration`; 10 `:complete` simultáneos → un solo escaneo; control positivo: una subida sana llega a `CLEAN` y se entrega; y los casos de dos tenants existentes siguen verdes (SC-015, SC-018, SC-019, SC-021)
+- [ ] T090 [P] Pruebas y cambio de política/controlador: `AttachmentPolicyTest` y `AttachmentUploadTest` (`.docm .xlsm .html .htm .svg .iso`, `.` y `..` en `uploadIdFromKey`, control positivo `informe.pdf`), `AttachmentUploadControllerTest` (identificador inválido en `complete` y `get` responde por el flujo, no por excepción síncrona); implementar en `AttachmentPolicy`, `AttachmentUpload.uploadIdFromKey` y `AttachmentUploadController` (FR-037 a FR-039, SC-022)
+- [ ] T091 Retirar los comentarios y el Javadoc del código de adjuntos (`AttachmentContentLoader` y lo que muestre `grep -rn "/\*\*\|^\s*//"` en los archivos de adjuntos); actualizar `tasks.md` (alias de ruta por rutas reales) y `quickstart.md` (autenticación con token en lugar de `X-Tenant-Id`, recrear la cola de escaneo por el DLX) (FR-040)
+- [ ] T092 `./mvnw -B -ntp spotless:apply`, `HexagonalArchitectureTest` y `ModularityTests`, y `./mvnw -B -ntp verify` completo en verde (cobertura ≥ 80 % líneas / ≥ 70 % ramas); si solo fallan `DeadLetterQueueE2ETest` y `RabbitRetryConfigCustomAttemptsTest`, repetir excluyéndolas y decirlo
+
 ## Pendientes declarados (Principio VII)
 
 | Pendiente | Dueño | Fecha de revisión |
 |---|---|---|
 | Retención y borrado de archivos: `BinData` en `notifications`, objetos limpios en MinIO, subidas y veredictos. El servicio pasa a custodiar documentos de destinatarios. Hasta resolverlo, nada se borra salvo los objetos `INFECTED` y los de un tamaño incorrecto. | andrualv | 2026-12-31 |
-| Subidas abandonadas (emitidas y nunca completadas) y escaneos agotados en la DLQ: quedan en `PENDING_SCAN` sin limpieza automática. No afectan a ninguna notificación aceptada. | andrualv | 2026-12-31 |
+| ~~Subidas abandonadas y escaneos agotados sin limpieza~~: resuelto en la Enmienda 3.1 (FR-027, FR-034; Q7 = A más ciclo de vida). Ya no es una excepción. | — | — |
 | Decisión de arquitectura sobre MinIO y ClamAV fuera de desarrollo (servicio gestionado, dimensionamiento, actualización de firmas). | andrualv | antes de desplegar fuera de desarrollo, a más tardar 2026-12-31 |
 | Motivo textual del fallo por proveedor sin adjuntos (heredado de la v1). | andrualv | 2026-12-31 |
 | Registros estructurados (JSON) incompletos (heredado de la v1; brecha RNF-10). | andrualv | 2026-12-31 |

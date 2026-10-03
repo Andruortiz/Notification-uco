@@ -107,7 +107,7 @@ Resumen:
           format: uri
           maxLength: 2048
           description: >
-            uploadUrl devuelta por POST /attachment-uploads para el mismo tenant, cuya subida está en
+            attachmentUrl devuelta por POST /attachment-uploads para el mismo tenant, cuya subida está en
             estado CLEAN. Cualquier otra dirección se rechaza; el servicio no la descarga. La parte de
             consulta se ignora y la dirección no se guarda.
 ```
@@ -131,7 +131,7 @@ Resumen:
         '409':
           description: >
             Un adjunto referencia una subida todavía en PENDING_SCAN. Reintentar cuando
-            GET /attachment-uploads/{uploadId} devuelva CLEAN.
+            GET /attachment-uploads/{uploadId} devuelva CLEAN. Una subida en FAILED se rechaza con 400.
           content:
             application/json:
               schema:
@@ -166,10 +166,13 @@ Reemplaza la frase añadida en la v1:
       tags: [Adjuntos]
       summary: Pedir una dirección de subida para un archivo grande
       description: >
-        Emite una dirección prefirmada (PUT) para subir al almacén del servicio un archivo de más de 1 MB
-        y hasta 10 MB. La subida nace en PENDING_SCAN. Después de subir el archivo con un PUT a uploadUrl
-        (antes de expiresAt), avisar con POST /attachment-uploads/{uploadId}:complete. uploadUrl es una
-        credencial temporal: solo aparece en esta respuesta.
+        Emite una política de subida firmada (formulario multipart por POST) para subir al almacén del
+        servicio un archivo de más de 1 MB y hasta 10 MB. La subida nace en PENDING_SCAN. El cliente envía un
+        POST multipart a uploadUrl con todos los campos de uploadFields y el campo "file" al final, antes de
+        expiresAt; el almacén rechaza un archivo de tamaño distinto de sizeBytes o de un tipo distinto de
+        contentType. Después avisa con POST /attachment-uploads/{uploadId}:complete y referencia el archivo
+        en la notificación con attachmentUrl. uploadFields es una credencial temporal: solo aparece en esta
+        respuesta.
       operationId: issueAttachmentUpload
       parameters:
         - $ref: '#/components/parameters/TenantId'
@@ -211,8 +214,9 @@ Reemplaza la frase añadida en la v1:
       summary: Avisar que la subida terminó
       description: >
         Comprueba que el archivo está en el almacén y que su tamaño coincide con el declarado, y encola
-        su análisis. La subida sigue en PENDING_SCAN hasta que el análisis termina en CLEAN o INFECTED.
-        Si la subida ya está resuelta, devuelve su estado sin volver a analizar.
+        su análisis. La subida sigue en PENDING_SCAN hasta que el análisis termina en CLEAN, INFECTED o
+        FAILED. Si la subida ya está resuelta, o si otra llamada simultánea ganó la transición, devuelve su
+        estado vigente sin volver a analizar. Si la subida ya venció, responde 409 y pasa a FAILED.
       operationId: completeAttachmentUpload
       parameters:
         - $ref: '#/components/parameters/TenantId'
@@ -227,7 +231,7 @@ Reemplaza la frase añadida en la v1:
         '400':
           description: >
             El tamaño del archivo subido no coincide con el declarado. El archivo se descarta y la subida
-            sigue en PENDING_SCAN: puede volver a subirse mientras uploadUrl esté vigente.
+            sigue en PENDING_SCAN: puede volver a subirse mientras la política de subida esté vigente.
           content:
             application/json:
               schema:
@@ -239,7 +243,9 @@ Reemplaza la frase añadida en la v1:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: El archivo todavía no está en el almacén.
+          description: >
+            El archivo todavía no está en el almacén, o la subida venció (pasa a FAILED con motivo
+            EXPIRED y debe pedirse una nueva).
           content:
             application/json:
               schema:
@@ -305,7 +311,7 @@ Reemplaza la frase añadida en la v1:
           description: Tamaño exacto del archivo que se subirá.
     AttachmentUploadState:
       type: string
-      enum: [PENDING_SCAN, CLEAN, INFECTED]
+      enum: [PENDING_SCAN, CLEAN, INFECTED, FAILED]
     AttachmentUploadResponse:
       type: object
       required: [uploadId, state, fileName, contentType, sizeBytes]
@@ -339,5 +345,11 @@ Reemplaza la frase añadida en la v1:
           type: string
           format: date-time
           nullable: true
-          description: Vencimiento de uploadUrl. Solo en la respuesta de POST /attachment-uploads.
+          description: Vencimiento de la política de subida. Solo en la respuesta de POST /attachment-uploads.
 ```
+
+## Enmienda 3.1 (2026-10-03)
+
+- La respuesta de POST /attachment-uploads devuelve uploadUrl (destino del formulario), uploadFields (campos firmados, credencial temporal) y attachmentUrl (referencia para Attachment.url, sin firma).
+- AttachmentUploadState gana FAILED; rejectionReason gana OBJECT_MISSING, SIZE_MISMATCH, SCAN_EXHAUSTED y EXPIRED.
+- :complete responde 409 si la subida venció (pasa a FAILED).

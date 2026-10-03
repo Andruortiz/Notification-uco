@@ -4,12 +4,17 @@
 
 **Created**: 2026-09-28
 
-**Updated**: 2026-09-29
+**Updated**: 2026-10-03
 
 **Status**: Plan v3 aceptado. Q1 (cómo viaja el archivo), la decisión reservada por el usuario, se
 reabrió el 2026-09-29: la referencia https confirmada el 2026-09-28 queda **superada** por un modelo
 híbrido por tamaño (embebido hasta 1 MB; por encima, subida a un almacén propio del servicio). Q2–Q5 siguen
 confirmadas tal como se aceptaron el 2026-09-28.
+
+**Enmienda 2026-10-03 (fix/HU2-092-hallazgos-revision)**: la historia ya está en `develop`. Una revisión
+independiente encontró defectos de robustez y seguridad en lo implementado; se corrigen con FR-027 a
+FR-040, SC-015 a SC-022 y la User Story 8, sin renumerar nada de lo existente. Q6 a Q9 de la sesión
+2026-10-03 fueron resueltas por el usuario el 2026-10-03; la enmienda espera su aprobación explícita.
 
 **Input**: User description: "Como sistema cliente, quiero poder adjuntar un archivo a una notificación,
 para enviar comprobantes, documentos o imágenes junto con el mensaje de una forma segura."
@@ -106,6 +111,57 @@ respuesta recomendada. El usuario confirmó las cinco al aprobar el plan v1. Q1 
   - Afecta a: FR-001, FR-005, FR-006, FR-007, FR-008, FR-009, FR-010, FR-013, FR-015, FR-016 y
     FR-017 a FR-026, User Stories 1, 2, 4, 6 y 7, Key Entities, Edge Cases, Out of Scope, Assumptions,
     Risks y SC-001, SC-002, SC-003, SC-007 a SC-014.
+
+### Session 2026-10-03 — hallazgos de la revisión independiente (resueltas por el usuario el 2026-10-03)
+
+Las opciones se plantearon con una recomendación y el usuario resolvió las cuatro el 2026-10-03.
+
+- **Q6 — ¿Cómo se limita el tamaño y el tipo de lo que se sube con la dirección prefirmada?**
+  - Opciones: (A) cambiar de PUT prefirmado a una política de subida POST de MinIO con condiciones de
+    tamaño exacto (`content-length-range` = `sizeBytes`) y tipo igual al declarado; (B) mantener el PUT y
+    firmar `Content-Type` y `Content-Length` como encabezados obligatorios; (C) mantener el PUT sin límite
+    en la subida y reforzar solo el lado del servicio (comprobar el tamaño antes de leer y expirar el
+    prefijo `uploads/` por ciclo de vida del bucket).
+  - **Respuesta del usuario (2026-10-03)**: **A**. El contrato de subida pasa de PUT a un formulario
+    multipart con la política firmada (`content-length-range` exacto y tipo igual al declarado); se
+    actualiza primero el contrato OpenAPI (Principio II). La comprobación con MinIO real de que el
+    almacén rechaza un tamaño o tipo distinto es el primer paso del plan. El servicio no está desplegado
+    fuera de desarrollo, así que el cambio de contrato no rompe clientes.
+  - Afecta a: FR-035, SC-020.
+- **Q7 — ¿Qué se hace con las subidas abandonadas (nunca completadas) y con las que agotan sus
+  reintentos?**
+  - Opciones: (A) un proceso periódico del propio servicio las pasa a un estado terminal `FAILED` (motivo
+    `EXPIRED` o `SCAN_EXHAUSTED`) y borra su objeto, con transición condicionada para que varias réplicas
+    no se pisen; (B) solo reglas de ciclo de vida del bucket (borran el objeto) y un índice TTL de MongoDB
+    (borra el documento), sin estado terminal; (C) dejarlas como riesgo declarado.
+  - **Respuesta del usuario (2026-10-03)**: **A más ciclo de vida**. Un proceso periódico identifica las
+    subidas que permanecen sin resolverse más allá del tiempo permitido, las marca como `FAILED` y elimina
+    sus objetos asociados; además MinIO aplica una regla de ciclo de vida sobre `uploads/` que elimina los
+    objetos temporales huérfanos. El proceso es seguro con varias réplicas (actualización condicionada
+    atómica). Nombre real del estado inicial en el código: `PENDING_SCAN` (el usuario lo llamó
+    "UPLOADING"); el spec usa `PENDING_SCAN`, y no se crea un estado nuevo.
+  - Afecta a: FR-027, FR-034, SC-015, SC-021.
+- **Q8 — ¿Qué responde `:complete` cuando la subida ya venció y qué ve el cliente de una subida fallida?**
+  - Opciones: (A) `:complete` de una subida vencida → `409` y la subida pasa a `FAILED` (`EXPIRED`); una
+    notificación que referencia una subida `FAILED` → `400`; (B) `410 Gone` en ambos casos.
+  - **Respuesta del usuario (2026-10-03)**: **A**. Reutiliza los códigos que el contrato ya tiene; el
+    cliente distingue el motivo por el cuerpo.
+  - Afecta a: FR-027, FR-033.
+- **Q9 — ¿Cómo se evita que un mensaje de escaneo se pierda o gire sin tope cuando falla el reenvío o el
+  envío a la DLQ?**
+  - Opciones: (A) declarar la cola de escaneo con `x-dead-letter-exchange` hacia su DLQ y, si el reenvío o
+    la DLQ fallan, `basicNack(requeue=false)` para que el broker lo dirija a la DLQ; (B)
+    `basicNack(requeue=true)` con pausa fija; (C) confirmaciones del publicador (publisher confirms) y ack
+    solo tras la confirmación, sin cambiar la cola.
+  - **Respuesta del usuario (2026-10-03)**: **A + C**, interpretación del coordinador de la
+    recomendación; el usuario puede corregirla luego. La cola de escaneo hoy se declara sin DLX, así que
+    un `nack` sin reencolar descartaría el mensaje: se añade el DLX. Declarar un argumento nuevo en una
+    cola existente falla con `PRECONDITION_FAILED`: en desarrollo hay que eliminar y recrear la cola
+    (se anota en `quickstart.md`).
+  - Afecta a: FR-030, FR-031, SC-017.
+
+Los hallazgos de la revisión que se descartaron o se redujeron al verificarlos contra el código están en
+`plan.md § Hallazgos de la revisión del 2026-10-03`.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -331,6 +387,39 @@ confirmar que A sí puede usarla (control positivo).
 
 ---
 
+### User Story 8 - Una subida nunca queda atascada ni se pierde su mensaje (Priority: P1)
+
+Como responsable de la operación, quiero que toda subida llegue a un estado final con un motivo registrado
+y que ningún mensaje de escaneo se pierda, gire sin tope o salte la cola de mensajes muertos, para no
+tener subidas "pendientes de análisis" para siempre ni escaneos que nadie atiende.
+
+**Why this priority**: Hoy una subida cuyo objeto desaparece, cambia de tamaño o pierde la transición queda
+pendiente sin rastro, y un fallo del reenvío del escaneo puede reencolar el mensaje indefinidamente.
+
+**Independent Test**: Provocar cada causa de fallo (objeto ausente, tamaño distinto, transición perdida,
+subida vencida, mensaje ilegible, fallo del reenvío) y confirmar que la subida termina en `FAILED` con su
+motivo, o que el mensaje llega a la DLQ con el número exacto de intentos, con un control positivo (una
+subida sana sigue llegando a `CLEAN`).
+
+**Acceptance Scenarios**:
+
+1. **Given** una subida cuyo objeto ya no está al escanear, **When** corre el escaneo, **Then** la subida
+   pasa a `FAILED` con motivo `OBJECT_MISSING` y queda registrado.
+2. **Given** una subida cuyo objeto tiene un tamaño distinto del declarado, **When** corre el escaneo,
+   **Then** no se lee el objeto, se descarta y la subida pasa a `FAILED` con motivo `SIZE_MISMATCH`.
+3. **Given** un fallo al registrar la transición, **When** ocurre, **Then** el objeto no se borra antes de
+   que la transición se haya persistido y la subida no queda pendiente sin remedio.
+4. **Given** dos `:complete` simultáneos de la misma subida, **When** se procesan, **Then** se publica un
+   solo escaneo y ambos responden el estado vigente de la subida.
+5. **Given** una subida vencida, **When** se llama a `:complete`, **Then** se rechaza y la subida pasa a
+   `FAILED` con motivo `EXPIRED`.
+6. **Given** un mensaje de escaneo ilegible, **When** lo recibe el consumidor, **Then** va a la DLQ en el
+   primer intento, sin reintentos.
+7. **Given** que el reenvío del mensaje o el envío a la DLQ lanzan una excepción, **When** ocurre, **Then**
+   el mensaje no se confirma en silencio ni se reencola sin tope: termina en la DLQ.
+
+---
+
 ### Edge Cases
 
 - **Tamaño exactamente igual al límite del canal**: se acepta; el límite es inclusivo, igual que el largo
@@ -373,6 +462,14 @@ confirmar que A sí puede usarla (control positivo).
 - **Notificación duplicada (mismo identificador externo) con un adjunto distinto**: si el nuevo adjunto es
   válido, se devuelve la original como duplicada y el nuevo adjunto no la reemplaza; si es inválido, se
   rechaza como cualquier solicitud inválida (FR-012).
+- **Objeto re-subido tras `:complete`** (dirección aún vigente): el tamaño de `stat` debe coincidir con
+  `sizeBytes` y no superar 10 MB antes de leer; si no, la subida pasa a `FAILED` (`SIZE_MISMATCH`).
+- **Dos `:complete` concurrentes**: gana uno; el otro devuelve el estado vigente y no publica.
+- **Perder la carrera al fijar la copia limpia** (otra réplica ya resolvió la subida): la copia en `clean/`
+  se borra y queda registrado.
+- **Segmento `.` o `..` como identificador de subida** en la dirección: se rechaza.
+- **Extensiones `.docm` `.xlsm` `.html` `.svg` `.iso`**: se rechazan por extensión aunque el tipo declarado
+  esté permitido.
 
 ## Requirements *(mandatory)*
 
@@ -474,6 +571,60 @@ confirmar que A sí puede usarla (control positivo).
 - **FR-026**: El componente MUST aceptar solicitudes de hasta 8 MB, suficientes para 5 adjuntos
   embebidos de 1 MB codificados; una solicitud mayor se rechaza como demasiado grande.
 
+#### Enmienda 2026-10-03 — requisitos de corrección (FR-027 a FR-040)
+
+- **FR-027**: Toda subida MUST terminar en un estado final con motivo registrado. Se agrega el estado final
+  `FAILED` (además de `CLEAN` e `INFECTED`), alcanzable solo desde `PENDING_SCAN`, con un motivo de este
+  conjunto: `OBJECT_MISSING`, `SIZE_MISMATCH`, `SCAN_EXHAUSTED`, `EXPIRED`. Modifica FR-019, que decía que
+  "infectada" era el único estado final no apto. Cada paso a `FAILED` se registra con tenant, `uploadId` y
+  motivo (FR-010). Una notificación que referencia una subida `FAILED` se rechaza como solicitud inválida
+ .
+- **FR-028**: El escaneo MUST comparar el tamaño que informa el almacén (`stat`) con `sizeBytes` y con el
+  tope de 10 MB **antes** de leer el objeto, y la lectura MUST estar acotada a `sizeBytes`. Con tamaño
+  distinto no se lee: el objeto se descarta y la subida pasa a `FAILED` (`SIZE_MISMATCH`). Un objeto ausente
+  (`stat` vacío) pasa a `FAILED` (`OBJECT_MISSING`).
+- **FR-029**: El escaneo MUST persistir la transición de la subida **antes** de borrar su objeto, y ninguna
+  ruta de salida puede terminar el mensaje de escaneo sin haber dejado la subida en un estado final o haber
+  enviado el mensaje a reintento o DLQ. Una transición perdida (otra réplica ya resolvió la subida) no es un
+  error, pero deja registro.
+- **FR-030**: El consumidor de escaneo MUST enviar directamente a la DLQ, sin reintentos, un mensaje
+  irrecuperable (cuerpo no interpretable, identificadores inválidos). Un objeto que cambió durante la
+  lectura (`AttachmentObjectChangedException`) sigue reintentándose, porque FR-025 exige volver a analizar
+  el archivo nuevo. Los reintentos de errores recuperables respetan el máximo de intentos configurado
+ .
+- **FR-031**: Si el reenvío del mensaje a reintento o el envío a la DLQ fallan, el consumidor MUST NOT
+  confirmar el mensaje en silencio ni dejarlo reencolarse sin pasar por el contador de intentos: el mensaje
+  termina en la DLQ. El consumo es "al menos una vez" e idempotente por diseño (la transición exige
+  `PENDING_SCAN`), así que un duplicado por un ack fallido después de publicar no tiene efecto (depende de
+  Q9).
+- **FR-032**: `:complete` MUST respetar el resultado de la transición condicionada: solo quien la gana
+  publica el escaneo; quien la pierde devuelve el estado vigente leído del repositorio. La respuesta MUST
+  llevar la versión y el estado posteriores a la transición, no los previos.
+- **FR-033**: `:complete` sobre una subida vencida (`expiresAt` anterior al instante actual, medido con el
+  reloj inyectado) MUST rechazarse y llevar la subida a `FAILED` (`EXPIRED`).
+- **FR-034**: Un proceso periódico MUST identificar las subidas que permanecen en `PENDING_SCAN` más allá del
+  tiempo permitido (vencidas) y las que agotan los reintentos de escaneo, marcarlas `FAILED` (`EXPIRED` o
+  `SCAN_EXHAUSTED`) y eliminar sus objetos; además, MinIO MUST aplicar una regla de ciclo de vida sobre
+  `uploads/` que elimine los objetos temporales huérfanos. El proceso MUST ser seguro con varias réplicas
+  (actualización condicionada atómica).
+- **FR-035**: La dirección de subida MUST limitar lo que se puede escribir con ella al tamaño y al tipo
+  declarados, y lo que se escriba tras `:complete` MUST NOT afectar a ninguna notificación
+  ni quedar sin vigilancia: el objeto huérfano de `uploads/` se descarta al resolverse la subida y por ciclo
+  de vida del bucket.
+- **FR-036**: El adaptador de almacén MUST calcular el vencimiento de la dirección con el reloj inyectado,
+  no con `Instant.now()`. Si en el escaneo la copia limpia se hace y la transición se pierde, la copia MUST
+  borrarse y registrarse.
+- **FR-037**: `AttachmentUploadController` MUST construir el identificador de subida dentro del flujo
+  reactivo (`Mono.defer`) en `complete` y `get`, de modo que un identificador inválido produzca el mismo
+  error que cualquier otro fallo del flujo y no una excepción síncrona.
+- **FR-038**: La lista de extensiones prohibidas (FR-005) MUST incluir además `.docm` `.xlsm` `.html`
+  `.svg` `.iso`, y `.htm` por ser equivalente a `.html` (confirmado por el usuario el 2026-10-03).
+- **FR-039**: La extracción del identificador de subida desde una clave o dirección MUST rechazar los
+  segmentos `.` y `..`.
+- **FR-040**: El código de adjuntos MUST NOT contener comentarios explicativos ni Javadoc en clases
+  internas o records (Principio III), y los artefactos de la historia MUST reflejar la autenticación
+  vigente (JWT interino con roles; el tenant sale del token y no de `X-Tenant-Id`).
+
 ### Key Entities *(include if feature involves data)*
 
 - **Adjunto**: archivo asociado a una notificación. Atributos: tenant, nombre de archivo, tipo de
@@ -481,8 +632,8 @@ confirmar que A sí puede usarla (control positivo).
   MB) o referencia a una subida limpia (más de 1 MB). Pertenece a una sola notificación y se guarda con
   ella. El contenido es un dato sensible.
 - **Subida de archivo**: archivo grande que un tenant sube al almacén del servicio. Atributos: tenant,
-  identificador, nombre, tipo, tamaño, estado ("pendiente de análisis", "limpia", "infectada"), motivo si
-  está infectada, huella, fechas de emisión, vencimiento, aviso y análisis. Su dirección de subida es una
+  identificador, nombre, tipo, tamaño, estado ("pendiente de análisis", "limpia", "infectada", "fallida"), motivo si
+  está infectada o fallida, huella, fechas de emisión, vencimiento, aviso y análisis. Su dirección de subida es una
   credencial temporal y no se guarda.
 - **Resultado de análisis**: veredicto del antivirus para una huella dentro de un tenant, con la versión
   de firmas y la fecha del análisis.
@@ -532,6 +683,24 @@ confirmar que A sí puede usarla (control positivo).
 - **SC-014**: Con el antivirus no disponible, el 100 % de las notificaciones con adjuntos embebidos se
   rechaza como error temporal del servicio, y en cero casos se acepta un archivo sin analizar; las
   notificaciones sin adjuntos siguen aceptándose (control positivo).
+- **SC-015**: En cero casos una subida queda `PENDING_SCAN` tras agotarse su ciclo: para cada causa
+  (objeto ausente, tamaño distinto, transición perdida, vencimiento, reintentos agotados) una prueba
+  automatizada comprueba que termina en `FAILED` con su motivo o que su mensaje llega a la DLQ.
+- **SC-016**: Un mensaje de escaneo ilegible llega a la DLQ en exactamente 1 intento, afirmado por conteo
+  exacto de invocaciones.
+- **SC-017**: Con fallo forzado del reenvío o del envío a la DLQ, el mensaje termina en la DLQ y no reaparece
+  en la cola de escaneo, y un mensaje que siempre falla se intenta exactamente `maxAttempts` veces (conteo
+  exacto, no "al menos").
+- **SC-018**: Con 10 `:complete` simultáneos de la misma subida se publica exactamente 1 mensaje de escaneo
+  y todas las respuestas llevan el mismo estado final.
+- **SC-019**: Con un objeto cuyo tamaño real difiere del declarado, el almacén registra 0 lecturas del
+  objeto y la subida termina `FAILED` (`SIZE_MISMATCH`).
+- **SC-020**: Un intento de escribir con la dirección de subida un objeto de tamaño o tipo distintos de los
+  declarados es rechazado por el almacén, probado con MinIO real.
+- **SC-021**: Una subida emitida y nunca completada pasa a `FAILED` (`EXPIRED`) y su objeto desaparece en un
+  plazo afirmado con `Duration` tras su vencimiento.
+- **SC-022**: Las extensiones nuevas y los segmentos `.` y `..` se rechazan, cada uno con una prueba, y un
+  control positivo (`informe.pdf`) sigue aceptándose.
 
 ## Out of Scope
 
@@ -541,7 +710,8 @@ confirmar que A sí puede usarla (control positivo).
 - Descargar o leer archivos desde direcciones que envía el cliente.
 - Descargar un adjunto por la API del servicio (no hay operación de lectura del contenido).
 - Política de retención y borrado de archivos, subidas y resultados de análisis (pendiente en Risks).
-- Limpieza automática de subidas abandonadas o de análisis agotados (pendiente en Risks).
+- Limpieza automática de subidas abandonadas o de análisis agotados: **entra en alcance** por la enmienda
+  del 2026-10-03 (FR-034).
 - Transformar el archivo (redimensionar imágenes, comprimir, convertir formato).
 - Mostrar los adjuntos en las consultas de estado, de histórico o de actualizaciones en vivo.
 - Adjuntos distintos por destinatario dentro de un lote.
@@ -564,7 +734,8 @@ confirmar que A sí puede usarla (control positivo).
 - La caída del antivirus o del almacén solo afecta a las notificaciones con adjuntos; por eso no sacan al
   servicio de la lista de instancias listas para recibir tráfico, aunque su estado se informa en la
   consulta de salud.
-- El identificador de tenant sigue siendo el sustituto provisional de la identidad del cliente.
+- El tenant de cada solicitud sale del token JWT interino (HU2-096), no de un encabezado `X-Tenant-Id`;
+  la identidad real depende de DEP-01.
 - El envío en lote está descrito en el contrato público y existe como caso de uso, pero hoy no tiene una
   operación HTTP que lo atienda. La regla de Q5 se aplica y se prueba en el caso de uso de lote.
 
@@ -574,9 +745,9 @@ confirmar que A sí puede usarla (control positivo).
   queda en la base de datos y los archivos grandes en el almacén, sin borrado. Ninguna política futura
   puede borrar un archivo referenciado por una notificación que no esté en estado final. Dueño: andrualv.
   Revisión: 2026-12-31.
-- **Subidas abandonadas y análisis agotados**: una subida emitida y nunca terminada, o cuyo análisis agotó
-  los reintentos, queda "pendiente de análisis" sin limpieza automática. No afecta a ninguna notificación
-  aceptada. Dueño: andrualv. Revisión: 2026-12-31.
+- **Subidas abandonadas y análisis agotados**: **resuelto por la enmienda del 2026-10-03** (FR-027,
+  FR-034); antes quedaban "pendientes de análisis" sin limpieza. Queda abierta solo la retención de los
+  archivos limpios (riesgo anterior).
 - **Decisión de arquitectura del almacén y del antivirus fuera de desarrollo** (servicio gestionado,
   dimensionamiento, actualización de firmas): no está registrada. Dueño: andrualv. Revisión: antes de
   desplegar fuera de desarrollo, a más tardar 2026-12-31.

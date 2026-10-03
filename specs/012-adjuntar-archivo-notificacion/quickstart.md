@@ -68,7 +68,7 @@ Esperar a que el contenedor de ClamAV termine de cargar las firmas.
 5. **Camino grande**: `POST /attachment-uploads` con un PDF de 5 MB → `201` con `uploadUrl`;
    `curl -X PUT --upload-file contrato.pdf "<uploadUrl>"`; `POST /attachment-uploads/{uploadId}:complete`
    → `202`; `GET /attachment-uploads/{uploadId}` hasta `CLEAN`.
-6. `POST /notifications` con ese adjunto en `url` → `202` → `DELIVERED`. Con otro `X-Tenant-Id` → `400`,
+6. `POST /notifications` con ese adjunto en `url` → `202` → `DELIVERED`. Con el token de otro tenant → `400`,
    igual que con una dirección inventada; `GET /attachment-uploads/{uploadId}` con ese otro tenant → `404`.
 7. Revisar la salida del servicio: aparecen nombre, tipo, tamaño y huella; ni el contenido ni `uploadUrl`.
 8. Restaurar el `contentSchema` de EMAIL a `null`.

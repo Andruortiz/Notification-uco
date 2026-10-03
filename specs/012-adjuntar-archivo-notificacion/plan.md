@@ -124,7 +124,7 @@ HU2-093, HU2-094 y HU2-095.
 - **MongoDB, colección nueva `attachment_scan_verdicts`**: caché de veredictos por huella. Índice único
   `(tenantId, sha256)`; índice TTL para los veredictos `CLEAN`.
 - **MinIO**: un bucket (`notification-attachments`, configurable) con prefijo por tenant:
-  `tenants/{tenantId}/uploads/{uploadId}` (destino de la subida prefirmada) y
+  `uploads/{tenantId}/{uploadId}` (destino de la subida con política POST; enmienda 3.1) y
   `tenants/{tenantId}/clean/{uploadId}` (copia inmutable tras el escaneo, nunca prefirmada para escritura).
 - Documentos de notificación anteriores sin `attachments` se leen con lista vacía. No hay migración de
   adjuntos de la v1: la v1 nunca llegó a `develop`, así que no hay datos de adjuntos que conservar.
@@ -780,6 +780,34 @@ del listener; está declarado en T073 y es el patrón del consumidor de despacho
   `PRECONDITION_FAILED` en un broker que ya la declaró sin argumentos (en desarrollo hay que eliminar y recrear la cola; se
   anota en `quickstart.md`); cambiar el PUT por un POST multipart cambia el contrato del cliente (Q6 = A); sin despliegue fuera de desarrollo, no rompe clientes.
 
+### Desviaciones respecto de la propuesta (implementación del 2026-10-03)
+
+- **Clave de subida**: pasa de `tenants/{tenantId}/uploads/{uploadId}` a `uploads/{tenantId}/{uploadId}`.
+  Una regla de ciclo de vida de MinIO filtra solo por prefijo; con el prefijo `uploads/` elimina los
+  temporales huérfanos (1 día) sin tocar `tenants/{tenantId}/clean/`. La clave limpia no cambia.
+- **Motivo de fallo**: no hay un enum nuevo; `OBJECT_MISSING`, `SIZE_MISMATCH`, `SCAN_EXHAUSTED` y `EXPIRED`
+  se añadieron a `AttachmentRejectionReason` y se guardan en el campo `rejectionReason` existente, para no
+  romper el constructor de `AttachmentUpload`.
+- **Respuesta de emisión**: `uploadUrl` es el destino del formulario, `uploadFields` los campos firmados
+  (el adaptador añade `key` y `Content-Type`, que el SDK no devuelve) y `attachmentUrl` la referencia para la
+  notificación (`{endpoint público}/{bucket}/{clave}`, sin firma).
+- **`:complete` repetido**: una subida ya completada (`completedAt` fijado) devuelve su estado sin volver a
+  publicar el escaneo. Sin esto, una llamada que lee después de la transición ganadora volvía a ganarla y
+  publicaba otro escaneo (SC-018). Consecuencia: si la publicación falla después de ganar la transición, el
+  cliente no puede reintentar `:complete`; la subida queda completada sin escaneo hasta que el barrido la
+  pase a `FAILED` (`SCAN_EXHAUSTED`) pasado `notification.attachments.sweeper.scan-deadline` (1 h).
+  Pendiente declarado (Principio VII): reintentar la publicación del escaneo de subidas completadas sin
+  veredicto. Dueño: andrualv. Fecha: 2026-12-31.
+- **Registro de la copia huérfana**: `core` no tiene registro; la copia de `clean/` que queda tras perder la
+  carrera se borra sin línea de registro propia. Los estados finales sí se registran (el consumidor registra
+  estado y motivo de cada resultado, incluidos `FAILED`).
+- **Barrido**: configuración `notification.attachments.sweeper.{interval-ms, scan-deadline, batch-size}`
+  (60 s, 1 h, 100 por defecto); `Clock` pasa a ser un bean.
+- **Orden prueba primero**: se vio fallar antes de implementar el modelo (`AttachmentUploadTest`, error de
+  compilación) y los servicios de `core` (`AttachmentUploadServicesTest`, 10 fallos contra el código
+  anterior). Para los adaptadores (MinIO, listener, barrido, E2E) la implementación y las pruebas se
+  escribieron en la misma pasada y se ejecutaron en verde; no se mostró el rojo previo.
+
 ### Pruebas de la enmienda
 
 Siguen el patrón del repositorio. Reglas de las trampas de HU2-072: mensajes producidos con el publicador
@@ -791,22 +819,22 @@ exactos (`times(n)`) en lugar de `atLeast`.
 Orden por tarea: prueba, verla fallar por la razón correcta, implementar, ejecutar la clase, `spotless:apply`.
 
 - [ ] T076 Contrato primero, primer paso de la enmienda (Principio II): en `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`, añadir el estado `FAILED` y su motivo a la respuesta de subida, `409` de `:complete` por vencimiento y, la nueva forma de la subida (formulario multipart con política POST firmada, Q6 = A, en lugar de PUT); reflejarlo en `contracts/api-notificaciones-cambios.md`
-- [ ] T077 [P] Pruebas en `core/src/test/.../domain/AttachmentUploadTest.java`: `markFailed` solo desde `PENDING_SCAN`, con cada motivo; `FAILED` es final (FR-027)
-- [ ] T078 `ScanState.FAILED`, enum de motivo, `AttachmentUpload.markFailed`, `AttachmentUploadDocument` y su mapeo, y la regla del resolvedor (`FAILED` → `400`) con prueba en `AttachmentResolverTest` — depende de T077
-- [ ] T079 [P] Pruebas en `core/src/test/.../usecase/ScanAttachmentUploadServiceTest.java` con `StepVerifier`: `stat` vacío → `FAILED(OBJECT_MISSING)`; tamaño distinto o mayor a 10 MB → `verify(storage, never()).read(...)` y `FAILED(SIZE_MISMATCH)`; la transición se persiste antes del `delete` (`InOrder`); transición perdida no borra el objeto de otra réplica y borra la copia de `clean/`; control positivo CLEAN (FR-028, FR-029, FR-036, SC-015, SC-019)
-- [ ] T080 Implementar T079 en `ScanAttachmentUploadService` y registrar cada paso a `FAILED` (FR-010) — depende de T078, T079
-- [ ] T081 [P] Pruebas en `core/src/test/.../usecase/CompleteAttachmentUploadServiceTest.java`: la transición perdida no publica y devuelve el estado vigente; la respuesta lleva la versión nueva; vencida → `FAILED(EXPIRED)` y error; 10 `complete` concurrentes con un repositorio atómico de prueba publican exactamente 1 escaneo (FR-032, FR-033, SC-018)
-- [ ] T082 Implementar T081 en `CompleteAttachmentUploadService` — depende de T078, T081
-- [ ] T083 [P] Reescribir las pruebas de `infrastructure/src/test/.../adapter/in/rabbit/AttachmentScanListenerTest.java` con RabbitMQ real y el publicador real: mensaje ilegible → DLQ con 1 intento; fallo del reenvío y fallo del `recover` → el mensaje termina en la DLQ, no reaparece y no se pierde; un mensaje que siempre falla se intenta `times(maxAttempts)` (reemplaza `atLeast(2)`); `AttachmentObjectChangedException` se reintenta; duplicado de un mensaje ya resuelto sin efecto; control positivo (FR-030, FR-031, SC-016, SC-017)
-- [ ] T084 Implementar T083 en `AttachmentScanListener` y añadir DLX a la cola de escaneo en `AttachmentScanRabbitConfig` y `basicNack(requeue=false)` si falla el reenvío o la DLQ (Q9 = A + C), con confirmaciones del publicador antes del ack — depende de T083
-- [ ] T085 [P] Pruebas de `ExpireAbandonedUploadsService` en `core` y de la consulta de vencidas en `AttachmentUploadMongoAdapterTest` (Testcontainers): vencida y pendiente → `FAILED`; no vencida, `CLEAN` e `INFECTED` no se tocan; dos ejecuciones simultáneas, una sola gana (FR-034, SC-021)
-- [ ] T086 Implementar `ExpireAbandonedUploadsService`, el puerto de consulta de vencidas, su índice `(state, expiresAt)`, el programador en `infrastructure` con intervalo configurable en `AttachmentProperties`, y la regla de ciclo de vida de MinIO sobre `uploads/` con su prueba de integración — depende de T085 (Q7 = A más ciclo de vida)
-- [ ] T087 [P] Pruebas en `MinioAttachmentStorageAdapterTest` con MinIO real: la subida de un objeto de tamaño o tipo distintos del declarado es rechazada (SC-020); el vencimiento usa el `Clock` inyectado (reloj fijo) (FR-035, FR-036)
-- [ ] T088 Implementar T087 en `MinioAttachmentStorageAdapter` (inyectar `Clock`; política POST de Q6 = A) y el borrado del huérfano de `uploads/` al resolverse la subida — depende de T076, T087
-- [ ] T089 **E2E explícita** en `AttachmentUploadE2ETest`: objeto re-subido con otro tamaño tras `:complete` → `FAILED(SIZE_MISMATCH)` sin leerse; subida abandonada → `FAILED(EXPIRED)` con el objeto borrado en un plazo afirmado con `Duration`; 10 `:complete` simultáneos → un solo escaneo; control positivo: una subida sana llega a `CLEAN` y se entrega; y los casos de dos tenants existentes siguen verdes (SC-015, SC-018, SC-019, SC-021)
-- [ ] T090 [P] Pruebas y cambio de política/controlador: `AttachmentPolicyTest` y `AttachmentUploadTest` (`.docm .xlsm .html .htm .svg .iso`, `.` y `..` en `uploadIdFromKey`, control positivo `informe.pdf`), `AttachmentUploadControllerTest` (identificador inválido en `complete` y `get` responde por el flujo, no por excepción síncrona); implementar en `AttachmentPolicy`, `AttachmentUpload.uploadIdFromKey` y `AttachmentUploadController` (FR-037 a FR-039, SC-022)
-- [ ] T091 Retirar los comentarios y el Javadoc del código de adjuntos (`AttachmentContentLoader` y lo que muestre `grep -rn "/\*\*\|^\s*//"` en los archivos de adjuntos); actualizar `tasks.md` (alias de ruta por rutas reales) y `quickstart.md` (autenticación con token en lugar de `X-Tenant-Id`, recrear la cola de escaneo por el DLX) (FR-040)
-- [ ] T092 `./mvnw -B -ntp spotless:apply`, `HexagonalArchitectureTest` y `ModularityTests`, y `./mvnw -B -ntp verify` completo en verde (cobertura ≥ 80 % líneas / ≥ 70 % ramas); si solo fallan `DeadLetterQueueE2ETest` y `RabbitRetryConfigCustomAttemptsTest`, repetir excluyéndolas y decirlo
+- [X] T077 [P] Pruebas en `core/src/test/.../domain/AttachmentUploadTest.java`: `markFailed` solo desde `PENDING_SCAN`, con cada motivo; `FAILED` es final (FR-027)
+- [X] T078 `ScanState.FAILED`, enum de motivo, `AttachmentUpload.markFailed`, `AttachmentUploadDocument` y su mapeo, y la regla del resolvedor (`FAILED` → `400`) con prueba en `AttachmentResolverTest` — depende de T077
+- [X] T079 [P] Pruebas en `core/src/test/.../usecase/ScanAttachmentUploadServiceTest.java` con `StepVerifier`: `stat` vacío → `FAILED(OBJECT_MISSING)`; tamaño distinto o mayor a 10 MB → `verify(storage, never()).read(...)` y `FAILED(SIZE_MISMATCH)`; la transición se persiste antes del `delete` (`InOrder`); transición perdida no borra el objeto de otra réplica y borra la copia de `clean/`; control positivo CLEAN (FR-028, FR-029, FR-036, SC-015, SC-019)
+- [X] T080 Implementar T079 en `ScanAttachmentUploadService` y registrar cada paso a `FAILED` (FR-010) — depende de T078, T079
+- [X] T081 [P] Pruebas en `core/src/test/.../usecase/CompleteAttachmentUploadServiceTest.java`: la transición perdida no publica y devuelve el estado vigente; la respuesta lleva la versión nueva; vencida → `FAILED(EXPIRED)` y error; 10 `complete` concurrentes con un repositorio atómico de prueba publican exactamente 1 escaneo (FR-032, FR-033, SC-018)
+- [X] T082 Implementar T081 en `CompleteAttachmentUploadService` — depende de T078, T081
+- [X] T083 [P] Reescribir las pruebas de `infrastructure/src/test/.../adapter/in/rabbit/AttachmentScanListenerTest.java` con RabbitMQ real y el publicador real: mensaje ilegible → DLQ con 1 intento; fallo del reenvío y fallo del `recover` → el mensaje termina en la DLQ, no reaparece y no se pierde; un mensaje que siempre falla se intenta `times(maxAttempts)` (reemplaza `atLeast(2)`); `AttachmentObjectChangedException` se reintenta; duplicado de un mensaje ya resuelto sin efecto; control positivo (FR-030, FR-031, SC-016, SC-017)
+- [X] T084 Implementar T083 en `AttachmentScanListener` y añadir DLX a la cola de escaneo en `AttachmentScanRabbitConfig` y `basicNack(requeue=false)` si falla el reenvío o la DLQ (Q9 = A + C), con confirmaciones del publicador antes del ack — depende de T083
+- [X] T085 [P] Pruebas de `ExpireAbandonedUploadsService` en `core` y de la consulta de vencidas en `AttachmentUploadMongoAdapterTest` (Testcontainers): vencida y pendiente → `FAILED`; no vencida, `CLEAN` e `INFECTED` no se tocan; dos ejecuciones simultáneas, una sola gana (FR-034, SC-021)
+- [X] T086 Implementar `ExpireAbandonedUploadsService`, el puerto de consulta de vencidas, su índice `(state, expiresAt)`, el programador en `infrastructure` con intervalo configurable en `AttachmentProperties`, y la regla de ciclo de vida de MinIO sobre `uploads/` con su prueba de integración — depende de T085 (Q7 = A más ciclo de vida)
+- [X] T087 [P] Pruebas en `MinioAttachmentStorageAdapterTest` con MinIO real: la subida de un objeto de tamaño o tipo distintos del declarado es rechazada (SC-020); el vencimiento usa el `Clock` inyectado (reloj fijo) (FR-035, FR-036)
+- [X] T088 Implementar T087 en `MinioAttachmentStorageAdapter` (inyectar `Clock`; política POST de Q6 = A) y el borrado del huérfano de `uploads/` al resolverse la subida — depende de T076, T087
+- [X] T089 **E2E explícita** en `AttachmentUploadE2ETest`: objeto re-subido con otro tamaño tras `:complete` → `FAILED(SIZE_MISMATCH)` sin leerse; subida abandonada → `FAILED(EXPIRED)` con el objeto borrado en un plazo afirmado con `Duration`; 10 `:complete` simultáneos → un solo escaneo; control positivo: una subida sana llega a `CLEAN` y se entrega; y los casos de dos tenants existentes siguen verdes (SC-015, SC-018, SC-019, SC-021)
+- [X] T090 [P] Pruebas y cambio de política/controlador: `AttachmentPolicyTest` y `AttachmentUploadTest` (`.docm .xlsm .html .htm .svg .iso`, `.` y `..` en `uploadIdFromKey`, control positivo `informe.pdf`), `AttachmentUploadControllerTest` (identificador inválido en `complete` y `get` responde por el flujo, no por excepción síncrona); implementar en `AttachmentPolicy`, `AttachmentUpload.uploadIdFromKey` y `AttachmentUploadController` (FR-037 a FR-039, SC-022)
+- [X] T091 Retirar los comentarios y el Javadoc del código de adjuntos (`AttachmentContentLoader` y lo que muestre `grep -rn "/\*\*\|^\s*//"` en los archivos de adjuntos); actualizar `tasks.md` (alias de ruta por rutas reales) y `quickstart.md` (autenticación con token en lugar de `X-Tenant-Id`, recrear la cola de escaneo por el DLX) (FR-040)
+- [X] T092 `./mvnw -B -ntp spotless:apply`, `HexagonalArchitectureTest` y `ModularityTests`, y `./mvnw -B -ntp verify` completo en verde (cobertura ≥ 80 % líneas / ≥ 70 % ramas); si solo fallan `DeadLetterQueueE2ETest` y `RabbitRetryConfigCustomAttemptsTest`, repetir excluyéndolas y decirlo
 
 ## Pendientes declarados (Principio VII)
 

@@ -4,8 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,10 +28,13 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
+import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.core.RabbitOperations;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import reactor.core.publisher.Mono;
@@ -54,6 +62,16 @@ class AttachmentScanListenerCorrelationTest {
               null,
               null,
               null));
+
+  @BeforeEach
+  void runPublicationsInsideInvoke() {
+    when(rabbitTemplate.invoke(any()))
+        .thenAnswer(
+            invocation ->
+                invocation
+                    .<RabbitOperations.OperationsCallback<?>>getArgument(0)
+                    .doInRabbit(rabbitTemplate));
+  }
 
   @AfterEach
   void clearMdc() {
@@ -133,5 +151,72 @@ class AttachmentScanListenerCorrelationTest {
     verify(channel).basicAck(9L, false);
     assertNull(MDC.get(LogFields.CORRELATION_ID));
     verify(recoverer, org.mockito.Mockito.never()).recover(any(), any());
+  }
+
+  @Test
+  void aFailedRetryPublicationRejectsTheMessageWithoutRequeueAndNeverAcksIt() throws Exception {
+    final UploadId uploadId = UploadId.newId();
+    when(scanUseCase.scan(eq(TENANT), eq(uploadId)))
+        .thenReturn(Mono.error(new IllegalStateException("scanner down")));
+    doThrow(new AmqpException("broker down"))
+        .when(rabbitTemplate)
+        .send(eq("ex"), eq("rk"), any(Message.class));
+
+    listener.onMessage(messageWith(uploadId, new MessageProperties()), channel, 10L);
+
+    verify(channel).basicNack(10L, false, false);
+    verify(channel, never()).basicAck(anyLong(), anyBoolean());
+  }
+
+  @Test
+  void aFailedDeadLetterPublicationRejectsTheMessageWithoutRequeueAndNeverAcksIt()
+      throws Exception {
+    final UploadId uploadId = UploadId.newId();
+    final MessageProperties props = new MessageProperties();
+    props.setHeader("x-scan-attempt", 1);
+    when(scanUseCase.scan(eq(TENANT), eq(uploadId)))
+        .thenReturn(Mono.error(new IllegalStateException("scanner down")));
+    doThrow(new AmqpException("dlq down")).when(recoverer).recover(any(), any());
+
+    listener.onMessage(messageWith(uploadId, props), channel, 11L);
+
+    verify(channel).basicNack(11L, false, false);
+    verify(channel, never()).basicAck(anyLong(), anyBoolean());
+  }
+
+  @Test
+  void anUnreadableBodyIsDeadLetteredWithoutCallingTheScanAndWithoutCountingAnAttempt()
+      throws Exception {
+    final Message poison =
+        new Message("{broken".getBytes(StandardCharsets.UTF_8), new MessageProperties());
+
+    listener.onMessage(poison, channel, 12L);
+
+    verify(recoverer).recover(eq(poison), any());
+    verify(scanUseCase, never()).scan(any(), any());
+    verify(rabbitTemplate, never()).send(any(String.class), any(String.class), any(Message.class));
+    verify(channel).basicAck(12L, false);
+  }
+
+  @Test
+  void everyRepublicationWaitsForTheBrokerConfirmationBeforeAcking() throws Exception {
+    final UploadId uploadId = UploadId.newId();
+    when(scanUseCase.scan(eq(TENANT), eq(uploadId)))
+        .thenReturn(Mono.error(new IllegalStateException("scanner down")));
+    final RabbitOperations operations = mock(RabbitOperations.class);
+    doAnswer(
+            invocation ->
+                invocation
+                    .<RabbitOperations.OperationsCallback<?>>getArgument(0)
+                    .doInRabbit(operations))
+        .when(rabbitTemplate)
+        .invoke(any());
+    doThrow(new AmqpException("not confirmed")).when(operations).waitForConfirmsOrDie(anyLong());
+
+    listener.onMessage(messageWith(uploadId, new MessageProperties()), channel, 13L);
+
+    verify(operations).waitForConfirmsOrDie(anyLong());
+    verify(channel).basicNack(13L, false, false);
+    verify(channel, never()).basicAck(anyLong(), anyBoolean());
   }
 }

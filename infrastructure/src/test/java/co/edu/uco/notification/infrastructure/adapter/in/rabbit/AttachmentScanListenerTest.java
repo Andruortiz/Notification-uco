@@ -2,11 +2,13 @@ package co.edu.uco.notification.infrastructure.adapter.in.rabbit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -15,6 +17,7 @@ import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
 import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
+import co.edu.uco.notification.core.exception.AttachmentObjectChangedException;
 import co.edu.uco.notification.core.port.in.ScanAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyProperties;
@@ -177,6 +180,50 @@ class AttachmentScanListenerTest {
     assertTrue(
         String.valueOf(dead.getMessageProperties().getHeaders().get("x-exception-message"))
             .contains("clamav down"));
-    verify(scanUseCase, atLeast(2)).scan(TENANT, uploadId);
+    verify(scanUseCase, times(2)).scan(TENANT, uploadId);
+    assertEquals(0, messagesIn(topology.queue()));
+    assertEquals(0, messagesIn(topology.dlqQueue()));
+  }
+
+  @Test
+  void anUnreadableMessageGoesStraightToTheDeadLetterQueueWithoutAnyScanAttempt() {
+    rabbitTemplate.send(
+        topology.exchange(),
+        topology.routingKey(),
+        new Message("{not json".getBytes(StandardCharsets.UTF_8)));
+
+    final Message dead = rabbitTemplate.receive(topology.dlqQueue(), 20_000);
+
+    assertNotNull(dead);
+    assertEquals("{not json", new String(dead.getBody(), StandardCharsets.UTF_8));
+    verify(scanUseCase, never()).scan(any(), any());
+    assertEquals(0, messagesIn(topology.queue()));
+    assertNull(dead.getMessageProperties().getHeaders().get("x-scan-attempt"));
+  }
+
+  @Test
+  void aMessageWithoutIdentifiersGoesStraightToTheDeadLetterQueue() {
+    rabbitTemplate.send(
+        topology.exchange(),
+        topology.routingKey(),
+        new Message("{\"tenantId\":null,\"uploadId\":null}".getBytes(StandardCharsets.UTF_8)));
+
+    assertNotNull(rabbitTemplate.receive(topology.dlqQueue(), 20_000));
+    verify(scanUseCase, never()).scan(any(), any());
+  }
+
+  @Test
+  void anObjectThatChangedWhileScanningIsRetriedAndScannedAgain() {
+    final UploadId uploadId = UploadId.newId();
+    when(scanUseCase.scan(TENANT, uploadId))
+        .thenReturn(Mono.error(new AttachmentObjectChangedException()))
+        .thenReturn(Mono.just(clean(uploadId)));
+
+    scanRequestPort.requestScan(TENANT, uploadId).block();
+
+    verify(scanUseCase, timeout(10_000).times(2)).scan(TENANT, uploadId);
+    Mono.delay(Duration.ofSeconds(1)).block();
+    assertEquals(0, messagesIn(topology.queue()));
+    assertEquals(0, messagesIn(topology.dlqQueue()));
   }
 }

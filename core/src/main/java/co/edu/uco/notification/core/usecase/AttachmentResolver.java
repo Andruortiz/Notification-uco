@@ -115,6 +115,10 @@ public final class AttachmentResolver {
       throw new InvalidAttachmentException(
           position, "the upload was rejected by the scan", submission.fileName());
     }
+    if (upload.state() == ScanState.FAILED) {
+      throw new InvalidAttachmentException(
+          position, "the upload failed and cannot be used", submission.fileName());
+    }
     return new Attachment(
         tenantId,
         upload.fileName(),

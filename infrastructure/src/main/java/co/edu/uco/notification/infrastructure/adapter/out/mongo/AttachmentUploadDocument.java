@@ -7,6 +7,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document(collection = "attachment_uploads")
 @CompoundIndex(name = "tenant_upload", def = "{'tenantId': 1, '_id': 1}")
+@CompoundIndex(name = "state_expires", def = "{'state': 1, 'expiresAt': 1}")
 public record AttachmentUploadDocument(
     @Id String id,
     String tenantId,

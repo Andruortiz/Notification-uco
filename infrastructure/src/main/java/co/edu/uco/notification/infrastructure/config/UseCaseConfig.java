@@ -27,6 +27,22 @@ import org.springframework.context.annotation.Configuration;
 public class UseCaseConfig {
 
   @Bean
+  Clock clock() {
+    return Clock.systemUTC();
+  }
+
+  @Bean
+  ExpireAbandonedUploadsUseCase expireAbandonedUploadsUseCase(
+      final AttachmentUploadRepository attachmentUploadRepository,
+      final AttachmentStoragePort attachmentStoragePort,
+      final Clock clock,
+      @Value("${notification.attachments.sweeper.scan-deadline:1h}") final Duration scanDeadline,
+      @Value("${notification.attachments.sweeper.batch-size:100}") final int batchSize) {
+    return new ExpireAbandonedUploadsService(
+        attachmentUploadRepository, attachmentStoragePort, scanDeadline, batchSize, clock);
+  }
+
+  @Bean
   RetryPolicy retryPolicy() {
     return new RetryPolicy();
   }

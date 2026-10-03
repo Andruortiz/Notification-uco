@@ -51,11 +51,18 @@ public final class IssueAttachmentUploadService implements IssueAttachmentUpload
             now,
             now.plus(expiration));
     return storage
-        .presignUpload(upload.uploadKey(), expiration)
+        .presignUpload(upload.uploadKey(), upload.contentType(), upload.sizeBytes(), expiration)
         .flatMap(
             presigned ->
                 repository
                     .insert(upload)
-                    .map(saved -> new IssuedUpload(saved, presigned.url(), presigned.expiresAt())));
+                    .map(
+                        saved ->
+                            new IssuedUpload(
+                                saved,
+                                presigned.url(),
+                                presigned.fields(),
+                                presigned.attachmentUrl(),
+                                presigned.expiresAt())));
   }
 }

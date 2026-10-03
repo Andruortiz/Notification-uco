@@ -8,12 +8,14 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
 import co.edu.uco.notification.utils.Preconditions;
+import java.time.Instant;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Component
@@ -77,6 +79,27 @@ public class AttachmentUploadMongoAdapter implements AttachmentUploadRepository 
             AttachmentUploadDocument.class)
         .map(document -> Boolean.TRUE)
         .defaultIfEmpty(Boolean.FALSE);
+  }
+
+  @Override
+  public Flux<AttachmentUpload> findStalePending(
+      final Instant expiredBefore, final Instant scanRequestedBefore, final int limit) {
+    Preconditions.requireNonNull(expiredBefore, "expiredBefore must not be null");
+    Preconditions.requireNonNull(scanRequestedBefore, "scanRequestedBefore must not be null");
+    final Criteria stale =
+        new Criteria()
+            .orOperator(
+                Criteria.where("completedAt").is(null).and("expiresAt").lt(expiredBefore),
+                Criteria.where("completedAt").lt(scanRequestedBefore));
+    return mongoTemplate
+        .find(
+            Query.query(
+                    new Criteria()
+                        .andOperator(
+                            Criteria.where("state").is(ScanState.PENDING_SCAN.name()), stale))
+                .limit(limit),
+            AttachmentUploadDocument.class)
+        .map(AttachmentUploadMongoAdapter::toDomain);
   }
 
   private static AttachmentUploadDocument toDocument(

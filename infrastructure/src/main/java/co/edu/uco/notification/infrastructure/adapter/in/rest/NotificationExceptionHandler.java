@@ -3,6 +3,7 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
 import co.edu.uco.notification.core.exception.AttachmentNotReadyException;
 import co.edu.uco.notification.core.exception.AttachmentNotUploadedException;
+import co.edu.uco.notification.core.exception.AttachmentUploadExpiredException;
 import co.edu.uco.notification.core.exception.AttachmentUploadNotFoundException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
@@ -48,7 +49,11 @@ public class NotificationExceptionHandler {
         .body(new ErrorResponse(e.getMessage(), correlationIdOf(exchange)));
   }
 
-  @ExceptionHandler({AttachmentNotReadyException.class, AttachmentNotUploadedException.class})
+  @ExceptionHandler({
+    AttachmentNotReadyException.class,
+    AttachmentNotUploadedException.class,
+    AttachmentUploadExpiredException.class
+  })
   public ResponseEntity<ErrorResponse> handleAttachmentConflict(
       final RuntimeException e, final ServerWebExchange exchange) {
     return ResponseEntity.status(HttpStatus.CONFLICT)

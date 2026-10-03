@@ -166,4 +166,84 @@ class AttachmentUploadMongoAdapterTest {
     assertEquals(AttachmentRejectionReason.CONTENT_TYPE_MISMATCH, found.rejectionReason());
     assertNull(found.signature());
   }
+
+  @Test
+  void aFailedUploadKeepsItsReason() {
+    final AttachmentUpload inserted = adapter.insert(issued(TENANT_A)).block();
+
+    adapter
+        .transition(inserted, inserted.markFailed(AttachmentRejectionReason.SIZE_MISMATCH, NOW))
+        .block();
+
+    final AttachmentUpload found = adapter.findByTenantAndId(TENANT_A, inserted.uploadId()).block();
+    assertEquals(ScanState.FAILED, found.state());
+    assertEquals(AttachmentRejectionReason.SIZE_MISMATCH, found.rejectionReason());
+  }
+
+  private static AttachmentUpload issuedAt(final Instant issuedAt, final Instant expiresAt) {
+    return AttachmentUpload.issue(
+        UploadId.newId(),
+        TENANT_A,
+        "contract.pdf",
+        "application/pdf",
+        2_000_000L,
+        issuedAt,
+        expiresAt);
+  }
+
+  @Test
+  void findStalePendingReturnsOnlyExpiredNeverCompletedAndOldScanRequests() {
+    final Instant hourAgo = NOW.minusSeconds(3600);
+    final AttachmentUpload abandoned =
+        adapter.insert(issuedAt(hourAgo.minusSeconds(900), hourAgo)).block();
+    final AttachmentUpload vigent = adapter.insert(issuedAt(NOW, NOW.plusSeconds(900))).block();
+    final AttachmentUpload scanStuck =
+        adapter.insert(issuedAt(hourAgo.minusSeconds(900), hourAgo)).block();
+    adapter.transition(scanStuck, scanStuck.markCompleted(NOW.minusSeconds(7200))).block();
+    final AttachmentUpload scanRecent =
+        adapter.insert(issuedAt(hourAgo.minusSeconds(900), hourAgo)).block();
+    adapter.transition(scanRecent, scanRecent.markCompleted(NOW.minusSeconds(60))).block();
+    final AttachmentUpload resolved =
+        adapter.insert(issuedAt(hourAgo.minusSeconds(900), hourAgo)).block();
+    adapter.transition(resolved, resolved.markClean(SHA, NOW)).block();
+
+    final List<UploadId> stale =
+        adapter
+            .findStalePending(NOW, NOW.minusSeconds(3600), 10)
+            .map(AttachmentUpload::uploadId)
+            .collectList()
+            .block();
+
+    assertEquals(2, stale.size());
+    assertTrue(stale.contains(abandoned.uploadId()));
+    assertTrue(stale.contains(scanStuck.uploadId()));
+    assertFalse(stale.contains(vigent.uploadId()));
+    assertFalse(stale.contains(scanRecent.uploadId()));
+    assertFalse(stale.contains(resolved.uploadId()));
+  }
+
+  @Test
+  void findStalePendingHonoursTheLimit() {
+    final Instant hourAgo = NOW.minusSeconds(3600);
+    for (int i = 0; i < 4; i++) {
+      adapter.insert(issuedAt(hourAgo.minusSeconds(900), hourAgo)).block();
+    }
+
+    assertEquals(
+        2, adapter.findStalePending(NOW, NOW.minusSeconds(3600), 2).collectList().block().size());
+  }
+
+  @Test
+  void twoReplicasFailingTheSameStaleUploadSeeExactlyOneWinner() {
+    final AttachmentUpload abandoned =
+        adapter.insert(issuedAt(NOW.minusSeconds(4500), NOW.minusSeconds(3600))).block();
+    final AttachmentUpload failed = abandoned.markFailed(AttachmentRejectionReason.EXPIRED, NOW);
+
+    final List<Boolean> outcomes =
+        Flux.merge(adapter.transition(abandoned, failed), adapter.transition(abandoned, failed))
+            .collectList()
+            .block();
+
+    assertEquals(1, outcomes.stream().filter(Boolean::booleanValue).count());
+  }
 }

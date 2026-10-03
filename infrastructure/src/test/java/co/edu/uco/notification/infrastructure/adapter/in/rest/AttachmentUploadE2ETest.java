@@ -17,16 +17,23 @@ import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import co.edu.uco.notification.core.domain.valueobject.UploadId;
+import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
+import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyProperties;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.infrastructure.support.AttachmentTestContainers;
 import co.edu.uco.notification.infrastructure.support.RecordingAttachmentSender;
 import co.edu.uco.notification.infrastructure.support.SampleFiles;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
+import io.minio.MinioAsyncClient;
+import io.minio.PutObjectArgs;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -57,7 +64,11 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.context.annotation.Bean;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.MediaType;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -65,7 +76,9 @@ import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -73,9 +86,11 @@ import reactor.core.publisher.Mono;
       "MONGO_USERNAME=test",
       "MONGO_PASSWORD=test",
       "notification.catalog.refresh-interval-ms=1000",
-      "notification.scheduler.requeue-interval-ms=600000"
+      "notification.scheduler.requeue-interval-ms=600000",
+      "notification.attachments.sweeper.interval-ms=1000"
     })
 @Testcontainers
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class AttachmentUploadE2ETest {
 
   private static final String TENANT_A = "tenant-uploads-a";
@@ -115,6 +130,10 @@ class AttachmentUploadE2ETest {
   @Autowired private RecordingAttachmentSender uploadsRecorder;
 
   @Autowired private AttachmentStoragePort storage;
+
+  @Autowired private AttachmentScanRequestPort scanRequestPort;
+
+  @Autowired private AttachmentScanTopologyProperties scanTopology;
 
   @Autowired private AmqpAdmin amqpAdmin;
 
@@ -179,15 +198,43 @@ class AttachmentUploadE2ETest {
     return response;
   }
 
-  private static int put(final Object url, final byte[] content)
+  @SuppressWarnings("unchecked")
+  private static int upload(final Map<String, Object> issued, final byte[] content)
       throws IOException, InterruptedException {
+    final String boundary = "----form" + System.nanoTime();
+    final ByteArrayOutputStream body = new ByteArrayOutputStream();
+    for (final Map.Entry<String, String> field :
+        ((Map<String, String>) issued.get("uploadFields")).entrySet()) {
+      body.writeBytes(
+          ("--"
+                  + boundary
+                  + "\r\nContent-Disposition: form-data; name=\""
+                  + field.getKey()
+                  + "\"\r\n\r\n"
+                  + field.getValue()
+                  + "\r\n")
+              .getBytes(StandardCharsets.UTF_8));
+    }
+    body.writeBytes(
+        ("--"
+                + boundary
+                + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f\"\r\n"
+                + "Content-Type: application/octet-stream\r\n\r\n")
+            .getBytes(StandardCharsets.UTF_8));
+    body.writeBytes(content);
+    body.writeBytes(("\r\n--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
     return HttpClient.newHttpClient()
         .send(
-            HttpRequest.newBuilder(URI.create(url.toString()))
-                .PUT(HttpRequest.BodyPublishers.ofByteArray(content))
+            HttpRequest.newBuilder(URI.create(issued.get("uploadUrl").toString()))
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(body.toByteArray()))
                 .build(),
             HttpResponse.BodyHandlers.discarding())
         .statusCode();
+  }
+
+  private static String uploadKeyOf(final Map<String, Object> issued) {
+    return "uploads/" + TENANT_A + "/" + issued.get("uploadId");
   }
 
   private WebTestClient.ResponseSpec complete(final String tenant, final Object uploadId) {
@@ -230,7 +277,7 @@ class AttachmentUploadE2ETest {
       final String tenant, final String fileName, final String type, final byte[] content)
       throws IOException, InterruptedException {
     final Map<String, Object> issued = issue(tenant, fileName, type, content.length);
-    assertEquals(200, put(issued.get("uploadUrl"), content));
+    assertEquals(204, upload(issued, content));
     complete(tenant, issued.get("uploadId")).expectStatus().isAccepted();
     return issued;
   }
@@ -304,9 +351,9 @@ class AttachmentUploadE2ETest {
     return logs.list.stream().map(LogLines::render).toList();
   }
 
-  private static String signatureOf(final Object uploadUrl) {
-    final String url = uploadUrl.toString();
-    return url.substring(url.indexOf("X-Amz-Signature=") + "X-Amz-Signature=".length());
+  @SuppressWarnings("unchecked")
+  private static String signatureOf(final Map<String, Object> issued) {
+    return ((Map<String, String>) issued.get("uploadFields")).get("x-amz-signature");
   }
 
   @Test
@@ -314,7 +361,7 @@ class AttachmentUploadE2ETest {
     final byte[] content = SampleFiles.pdfOfSize(10_485_760, 42);
     final Map<String, Object> issued = issue(TENANT_A, "contract.pdf", PDF, content.length);
     assertEquals("PENDING_SCAN", issued.get("state"));
-    assertEquals(200, put(issued.get("uploadUrl"), content));
+    assertEquals(204, upload(issued, content));
 
     final Instant completedAt = Instant.now();
     complete(TENANT_A, issued.get("uploadId")).expectStatus().isAccepted();
@@ -330,7 +377,11 @@ class AttachmentUploadE2ETest {
         send(
                 TENANT_A,
                 notificationWith(
-                    "sc001-large", "contract.pdf", PDF, content.length, issued.get("uploadUrl")))
+                    "sc001-large",
+                    "contract.pdf",
+                    PDF,
+                    content.length,
+                    issued.get("attachmentUrl")))
             .expectStatus()
             .isAccepted()
             .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
@@ -347,7 +398,7 @@ class AttachmentUploadE2ETest {
     final AttachmentSource.StoredObject stored =
         assertInstanceOf(AttachmentSource.StoredObject.class, attachment.source());
     assertEquals((long) content.length, storage.stat(stored.objectKey()).block().sizeBytes());
-    assertNull(storage.stat("tenants/" + TENANT_A + "/uploads/" + issued.get("uploadId")).block());
+    assertNull(storage.stat(uploadKeyOf(issued)).block());
     final Document document =
         mongoTemplate
             .getCollection("notifications")
@@ -364,7 +415,7 @@ class AttachmentUploadE2ETest {
         send(
             TENANT_A,
             notificationWith(
-                "sc009-pending", "pending.pdf", PDF, 2_000_000L, issued.get("uploadUrl"))),
+                "sc009-pending", "pending.pdf", PDF, 2_000_000L, issued.get("attachmentUrl"))),
         409);
     final String foreign =
         bodyOf(
@@ -390,13 +441,17 @@ class AttachmentUploadE2ETest {
 
     assertEquals("INFECTED", result.get("state"));
     assertEquals("MALWARE", result.get("rejectionReason"));
-    assertNull(storage.stat("tenants/" + TENANT_A + "/uploads/" + issued.get("uploadId")).block());
+    assertNull(storage.stat(uploadKeyOf(issued)).block());
     final String rejected =
         bodyOf(
             send(
                 TENANT_A,
                 notificationWith(
-                    "sc008-large", "virus.docx", DOCX, infected.length, issued.get("uploadUrl"))),
+                    "sc008-large",
+                    "virus.docx",
+                    DOCX,
+                    infected.length,
+                    issued.get("attachmentUrl"))),
             400);
     assertTrue(rejected.contains("the upload was rejected by the scan"), rejected);
     assertTrue(
@@ -406,23 +461,181 @@ class AttachmentUploadE2ETest {
   }
 
   @Test
-  void completingWithoutTheFileOrWithAnotherSizeKeepsTheUploadPending() throws Exception {
+  void completingWithoutTheFileKeepsTheUploadPendingAndTheStoreRejectsAnotherSize()
+      throws Exception {
     final Map<String, Object> issued = issue(TENANT_A, "late.pdf", PDF, 2_000_000L);
 
     bodyOf(complete(TENANT_A, issued.get("uploadId")), 409);
-    assertEquals(200, put(issued.get("uploadUrl"), SampleFiles.pdfOfSize(1_500_000, 5)));
-    final String wrongSize = bodyOf(complete(TENANT_A, issued.get("uploadId")), 400);
-
-    assertTrue(wrongSize.contains("size does not match"), wrongSize);
+    assertEquals(400, upload(issued, SampleFiles.pdfOfSize(1_500_000, 5)));
+    assertNull(storage.stat(uploadKeyOf(issued)).block());
+    bodyOf(complete(TENANT_A, issued.get("uploadId")), 409);
     assertEquals(
         "PENDING_SCAN",
         awaitState(TENANT_A, issued.get("uploadId"), "PENDING_SCAN", Duration.ofSeconds(5))
             .get("state"));
-    assertEquals(200, put(issued.get("uploadUrl"), SampleFiles.pdfOfSize(2_000_000, 6)));
+    assertEquals(204, upload(issued, SampleFiles.pdfOfSize(2_000_000, 6)));
     complete(TENANT_A, issued.get("uploadId")).expectStatus().isAccepted();
     assertEquals(
         "CLEAN",
         awaitState(TENANT_A, issued.get("uploadId"), "CLEAN", Duration.ofSeconds(60)).get("state"));
+  }
+
+  private MinioAsyncClient adminClient() {
+    return MinioAsyncClient.builder()
+        .endpoint(AttachmentTestContainers.minioEndpoint())
+        .credentials(AttachmentTestContainers.MINIO_USER, AttachmentTestContainers.MINIO_PASSWORD)
+        .build();
+  }
+
+  private void putDirectly(final String key, final byte[] content) throws Exception {
+    adminClient()
+        .putObject(
+            PutObjectArgs.builder().bucket(AttachmentTestContainers.BUCKET).object(key).stream(
+                    new ByteArrayInputStream(content), content.length, -1)
+                .build())
+        .get();
+  }
+
+  @Test
+  void anObjectReplacedBehindTheScannersBackFailsTheUploadWithSizeMismatchWithoutBeingRead()
+      throws Exception {
+    final Map<String, Object> issued = issue(TENANT_A, "swapped.pdf", PDF, 2_000_000L);
+    putDirectly(uploadKeyOf(issued), SampleFiles.pdfOfSize(3_000_000, 21));
+    mongoTemplate
+        .updateFirst(
+            Query.query(Criteria.where("_id").is(issued.get("uploadId"))),
+            new Update().set("completedAt", Instant.now()),
+            "attachment_uploads")
+        .block();
+
+    scanRequestPort
+        .requestScan(TenantId.of(TENANT_A), UploadId.of(issued.get("uploadId").toString()))
+        .block();
+
+    final Map<String, Object> failed =
+        awaitState(TENANT_A, issued.get("uploadId"), "FAILED", Duration.ofSeconds(30));
+    assertEquals("FAILED", failed.get("state"));
+    assertEquals("SIZE_MISMATCH", failed.get("rejectionReason"));
+    assertNull(storage.stat(uploadKeyOf(issued)).block());
+    assertTrue(
+        logLines().stream()
+            .anyMatch(
+                line ->
+                    line.contains("uploadId=" + issued.get("uploadId"))
+                        && line.contains("state=FAILED")
+                        && line.contains("reason=SIZE_MISMATCH")),
+        "the failure and its reason must be logged");
+    final Map<String, Object> healthy =
+        uploadedAndScanned(TENANT_A, "healthy.pdf", PDF, SampleFiles.pdfOfSize(1_200_000, 22));
+    assertEquals(
+        "CLEAN",
+        awaitState(TENANT_A, healthy.get("uploadId"), "CLEAN", Duration.ofSeconds(60))
+            .get("state"));
+    final String rejected =
+        bodyOf(
+            send(
+                TENANT_A,
+                notificationWith(
+                    "us8-failed", "swapped.pdf", PDF, 2_000_000L, issued.get("attachmentUrl"))),
+            400);
+    assertTrue(rejected.contains("failed"), rejected);
+  }
+
+  @Test
+  void anAbandonedUploadFailsAsExpiredAndItsObjectDisappearsWhileAFreshOneSurvives()
+      throws Exception {
+    final Map<String, Object> abandoned = issue(TENANT_A, "abandoned.pdf", PDF, 1_500_000L);
+    assertEquals(204, upload(abandoned, SampleFiles.pdfOfSize(1_500_000, 31)));
+    final Map<String, Object> fresh = issue(TENANT_A, "fresh.pdf", PDF, 1_500_000L);
+    assertEquals(204, upload(fresh, SampleFiles.pdfOfSize(1_500_000, 32)));
+    assertNotNull(storage.stat(uploadKeyOf(abandoned)).block());
+    mongoTemplate
+        .updateFirst(
+            Query.query(Criteria.where("_id").is(abandoned.get("uploadId"))),
+            new Update().set("expiresAt", Instant.now().minusSeconds(60)),
+            "attachment_uploads")
+        .block();
+    final Instant expiredAt = Instant.now();
+
+    final Map<String, Object> failed =
+        awaitState(TENANT_A, abandoned.get("uploadId"), "FAILED", Duration.ofSeconds(30));
+
+    final Duration elapsed = Duration.between(expiredAt, Instant.now());
+    assertEquals("FAILED", failed.get("state"));
+    assertEquals("EXPIRED", failed.get("rejectionReason"));
+    assertTrue(elapsed.compareTo(Duration.ofSeconds(15)) <= 0, "failed after " + elapsed);
+    assertNull(storage.stat(uploadKeyOf(abandoned)).block());
+    assertEquals(
+        "PENDING_SCAN",
+        getUpload(TENANT_A, fresh.get("uploadId"))
+            .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
+            .returnResult()
+            .getResponseBody()
+            .get("state"));
+    assertNotNull(storage.stat(uploadKeyOf(fresh)).block());
+  }
+
+  @Test
+  void completingAnExpiredUploadIsAConflictAndMarksItFailed() throws Exception {
+    final Map<String, Object> issued = issue(TENANT_A, "expired.pdf", PDF, 1_500_000L);
+    assertEquals(204, upload(issued, SampleFiles.pdfOfSize(1_500_000, 41)));
+    mongoTemplate
+        .updateFirst(
+            Query.query(Criteria.where("_id").is(issued.get("uploadId"))),
+            new Update().set("expiresAt", Instant.now().minusSeconds(60)),
+            "attachment_uploads")
+        .block();
+
+    final String body = bodyOf(complete(TENANT_A, issued.get("uploadId")), 409);
+
+    assertTrue(body.contains("expired"), body);
+    final Map<String, Object> failed =
+        awaitState(TENANT_A, issued.get("uploadId"), "FAILED", Duration.ofSeconds(10));
+    assertEquals("EXPIRED", failed.get("rejectionReason"));
+    assertNull(storage.stat(uploadKeyOf(issued)).block());
+  }
+
+  @Test
+  void tenSimultaneousCompletionsPublishExactlyOneScanAndEveryCallerIsAccepted() throws Exception {
+    final Queue spy = new Queue("scan-spy-" + System.nanoTime(), false, false, true);
+    amqpAdmin.declareQueue(spy);
+    amqpAdmin.declareBinding(
+        new Binding(
+            spy.getName(),
+            Binding.DestinationType.QUEUE,
+            scanTopology.exchange(),
+            scanTopology.routingKey(),
+            null));
+    try {
+      final byte[] content = SampleFiles.pdfOfSize(1_300_000, 51);
+      final Map<String, Object> issued = issue(TENANT_A, "race.pdf", PDF, content.length);
+      assertEquals(204, upload(issued, content));
+
+      final List<Integer> statuses =
+          Flux.range(0, 10)
+              .flatMap(
+                  i ->
+                      Mono.fromCallable(
+                              () ->
+                                  complete(TENANT_A, issued.get("uploadId"))
+                                      .returnResult(String.class)
+                                      .getStatus()
+                                      .value())
+                          .subscribeOn(Schedulers.boundedElastic()))
+              .collectList()
+              .block(Duration.ofSeconds(60));
+
+      assertEquals(10, statuses.size());
+      assertTrue(statuses.stream().allMatch(status -> status == 202), statuses.toString());
+      assertEquals(
+          "CLEAN",
+          awaitState(TENANT_A, issued.get("uploadId"), "CLEAN", Duration.ofSeconds(60))
+              .get("state"));
+      Mono.delay(Duration.ofSeconds(2)).block();
+      assertEquals(1, amqpAdmin.getQueueInfo(spy.getName()).getMessageCount());
+    } finally {
+      amqpAdmin.deleteQueue(spy.getName());
+    }
   }
 
   @Test
@@ -440,7 +653,7 @@ class AttachmentUploadE2ETest {
       final byte[] content = SampleFiles.pdfOfSize(1_500_000, 77);
       final Map<String, Object> issued =
           uploadedAndScanned(TENANT_A, "leak-check.pdf", PDF, content);
-      final String signature = signatureOf(issued.get("uploadUrl"));
+      final String signature = signatureOf(issued);
       final Map<String, Object> clean =
           awaitState(TENANT_A, issued.get("uploadId"), "CLEAN", Duration.ofSeconds(60));
       final String notificationId =
@@ -451,7 +664,7 @@ class AttachmentUploadE2ETest {
                       "leak-check.pdf",
                       PDF,
                       content.length,
-                      issued.get("uploadUrl")))
+                      issued.get("attachmentUrl")))
               .expectStatus()
               .isAccepted()
               .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
@@ -469,7 +682,7 @@ class AttachmentUploadE2ETest {
                       "other.pdf",
                       PDF,
                       content.length,
-                      issued.get("uploadUrl"))),
+                      issued.get("attachmentUrl"))),
               400);
 
       final List<String> everything = new ArrayList<>(logLines());
@@ -534,7 +747,8 @@ class AttachmentUploadE2ETest {
         bodyOf(
             send(
                 TENANT_B,
-                notificationWith("us7-b", "b.pdf", PDF, content.length, issued.get("uploadUrl"))),
+                notificationWith(
+                    "us7-b", "b.pdf", PDF, content.length, issued.get("attachmentUrl"))),
             400);
     final String unknownReference =
         bodyOf(
@@ -586,7 +800,7 @@ class AttachmentUploadE2ETest {
                 "tenant-a-private-contract.pdf",
                 PDF,
                 content.length,
-                issued.get("uploadUrl")))
+                issued.get("attachmentUrl")))
         .expectStatus()
         .isAccepted();
   }

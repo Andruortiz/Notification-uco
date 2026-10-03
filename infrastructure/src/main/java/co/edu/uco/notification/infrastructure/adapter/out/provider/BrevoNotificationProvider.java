@@ -25,11 +25,6 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
   private static final ProviderId PROVIDER_ID = ProviderId.of("brevo");
   private static final String SEND_PATH = "/v3/smtp/email";
 
-  /**
-   * Limite de Brevo para los adjuntos de un correo transaccional (documentacion de Brevo: "less
-   * than 4 MB"). Se toma en bytes decimales y como suma de todos los adjuntos de la notificacion,
-   * que es la lectura mas estricta y la que evita que Brevo rechace un correo ya aceptado.
-   */
   static final long MAX_ATTACHMENTS_BYTES = 4_000_000L;
 
   private final WebClient webClient;

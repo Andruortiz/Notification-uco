@@ -17,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -107,6 +108,7 @@ class BrevoEmailDeliveryE2ETest {
     FAKE_BREVO.reset();
 
     logAppender = new ListAppender<>();
+    logAppender.list = new CopyOnWriteArrayList<>();
     logAppender.start();
     ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).addAppender(logAppender);
 

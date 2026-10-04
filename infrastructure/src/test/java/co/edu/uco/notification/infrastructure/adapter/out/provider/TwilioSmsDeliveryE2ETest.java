@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -129,6 +130,7 @@ class TwilioSmsDeliveryE2ETest {
     fakeTwilio.nextResponse(201, "{\"sid\":\"SM00000000000000000000000000000001\"}");
 
     logAppender = new ListAppender<>();
+    logAppender.list = new CopyOnWriteArrayList<>();
     logAppender.start();
     rootLogger().addAppender(logAppender);
 

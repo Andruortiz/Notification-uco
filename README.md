@@ -47,6 +47,40 @@ db.channel_catalog.updateOne(
 - **Fuera de alcance:** SMS (Twilio) y push (FCM) no envian adjuntos; una notificacion con adjuntos
   despachada por ellos falla sin reintentos.
 
+## Autenticacion
+
+El servicio exige un JWT en `Authorization: Bearer`. El modo se elige con `NOTIFICATION_AUTH_MODE`:
+
+- **`local`** (por defecto): JWT firmado con un secreto compartido (`AUTH_JWT_HS256_SECRET`). Es la autenticacion interina para desarrollo y pruebas.
+- **`platform`**: tokens de la plataforma central de seguridad, validados con **su clave publica** (RSA o EC). Hay un solo adaptador activo por modo; un valor desconocido impide que la aplicacion arranque.
+
+Cada modo es un adaptador del puerto `TokenValidationPort`; el dominio y el filtro de autenticacion no cambian. En modo `platform` el arranque falla si falta la clave publica.
+
+| Variable | Para que sirve | Por defecto |
+| --- | --- | --- |
+| `AUTH_PLATFORM_PUBLIC_KEY` | Clave publica del emisor, en PEM (X.509); admite los saltos de linea como `\n` | obligatoria |
+| `AUTH_PLATFORM_ISSUER` | Si se define, el claim `iss` debe coincidir | sin validar |
+| `AUTH_PLATFORM_AUDIENCE` | Si se define, el claim `aud` debe incluirla | sin validar |
+| `AUTH_PLATFORM_SUBJECT_CLAIM` | Claim con el usuario o sistema | `sub` |
+| `AUTH_PLATFORM_TENANT_CLAIM` | Claim con el tenant | `tenantId` |
+| `AUTH_PLATFORM_ROLE_CLAIM` | Claim con el rol; puede ser un texto o una lista | `role` |
+| `AUTH_PLATFORM_CLOCK_SKEW_SECONDS` | Tolerancia de reloj | `30` |
+
+Los roles de la plataforma se traducen a los del servicio (`CLIENTE`, `OPERADOR`, `ADMINISTRADOR`) con una tabla, que se define en `application.yml` o en un archivo de configuracion (no en variables de entorno):
+
+```yaml
+notification:
+  auth:
+    platform:
+      role-mapping:
+        soporte: OPERADOR
+        sistema-integrado: CLIENTE
+```
+
+Si el token trae varios roles, gana el de mayor privilegio; si ninguno es valido, se rechaza. La firma se comprueba solo con la clave publica: un token firmado con HMAC usando esa clave es rechazado.
+
+**Pendiente de acordar con el equipo de seguridad:** los nombres reales de los claims, la tabla de roles, el emisor y la audiencia, y como se garantiza que la peticion llega a traves del PEP (red privada, mTLS o firma). Esos valores se ajustan por configuracion.
+
 ## Azure Key Vault
 
 Las variables de entorno del servicio (`MONGO_PASSWORD`, `BREVO_API_KEY`, `AUTH_JWT_HS256_SECRET`, etc.)

@@ -13,10 +13,15 @@ import io.jsonwebtoken.security.Keys;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 @Component
+@ConditionalOnProperty(
+    name = "notification.auth.mode",
+    havingValue = "local",
+    matchIfMissing = true)
 public final class LocalJwtTokenValidationAdapter implements TokenValidationPort {
 
   private final SecretKey key;

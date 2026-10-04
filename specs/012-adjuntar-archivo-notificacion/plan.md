@@ -840,7 +840,8 @@ Orden por tarea: prueba, verla fallar por la razón correcta, implementar, ejecu
 
 | Pendiente | Dueño | Fecha de revisión |
 |---|---|---|
-| Retención y borrado de archivos: `BinData` en `notifications`, objetos limpios en MinIO, subidas y veredictos. El servicio pasa a custodiar documentos de destinatarios. Hasta resolverlo, nada se borra salvo los objetos `INFECTED` y los de un tamaño incorrecto. | andrualv | 2026-12-31 |
+| Retención y borrado de archivos: `BinData` en `notifications`, objetos limpios en MinIO, subidas y veredictos. El servicio pasa a custodiar documentos de destinatarios. Hasta resolverlo, solo se borran los objetos `INFECTED`, los de un tamaño incorrecto, los de subidas `FAILED` o vencidas (barrido y `:complete` vencido) y los temporales de `uploads/` por la regla de ciclo de vida del bucket. | andrualv | 2026-12-31 |
+| Publicación del escaneo tras ganar `:complete`: si falla después de la transición, el cliente no puede reintentar `:complete` y la subida queda completada sin escaneo hasta que el barrido la pase a `FAILED` (`SCAN_EXHAUSTED`) pasada 1 h. Hace falta reintentar la publicación de subidas completadas sin veredicto. | andrualv | 2026-12-31 |
 | ~~Subidas abandonadas y escaneos agotados sin limpieza~~: resuelto en la Enmienda 3.1 (FR-027, FR-034; Q7 = A más ciclo de vida). Ya no es una excepción. | — | — |
 | Decisión de arquitectura sobre MinIO y ClamAV fuera de desarrollo (servicio gestionado, dimensionamiento, actualización de firmas). | andrualv | antes de desplegar fuera de desarrollo, a más tardar 2026-12-31 |
 | Motivo textual del fallo por proveedor sin adjuntos (heredado de la v1). | andrualv | 2026-12-31 |

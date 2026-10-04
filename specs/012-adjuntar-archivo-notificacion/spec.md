@@ -577,8 +577,7 @@ subida sana sigue llegando a `CLEAN`).
   `FAILED` (además de `CLEAN` e `INFECTED`), alcanzable solo desde `PENDING_SCAN`, con un motivo de este
   conjunto: `OBJECT_MISSING`, `SIZE_MISMATCH`, `SCAN_EXHAUSTED`, `EXPIRED`. Modifica FR-019, que decía que
   "infectada" era el único estado final no apto. Cada paso a `FAILED` se registra con tenant, `uploadId` y
-  motivo (FR-010). Una notificación que referencia una subida `FAILED` se rechaza como solicitud inválida
- .
+  motivo (FR-010). Una notificación que referencia una subida `FAILED` se rechaza como solicitud inválida.
 - **FR-028**: El escaneo MUST comparar el tamaño que informa el almacén (`stat`) con `sizeBytes` y con el
   tope de 10 MB **antes** de leer el objeto, y la lectura MUST estar acotada a `sizeBytes`. Con tamaño
   distinto no se lee: el objeto se descarta y la subida pasa a `FAILED` (`SIZE_MISMATCH`). Un objeto ausente
@@ -586,12 +585,15 @@ subida sana sigue llegando a `CLEAN`).
 - **FR-029**: El escaneo MUST persistir la transición de la subida **antes** de borrar su objeto, y ninguna
   ruta de salida puede terminar el mensaje de escaneo sin haber dejado la subida en un estado final o haber
   enviado el mensaje a reintento o DLQ. Una transición perdida (otra réplica ya resolvió la subida) no es un
-  error, pero deja registro.
+  error, pero deja registro. El borrado del objeto posterior a una transición ganada es de mejor esfuerzo:
+  si falla, no convierte la transición ya persistida en un error para el cliente ni para el consumidor, el
+  adaptador del almacén registra el fallo con la clave del objeto, y el objeto huérfano lo elimina la regla
+  de ciclo de vida de `uploads/`. Este criterio es el mismo en el escaneo (`CLEAN`, `INFECTED`, `FAILED`),
+  en `:complete` vencido y en el barrido de abandonadas.
 - **FR-030**: El consumidor de escaneo MUST enviar directamente a la DLQ, sin reintentos, un mensaje
   irrecuperable (cuerpo no interpretable, identificadores inválidos). Un objeto que cambió durante la
   lectura (`AttachmentObjectChangedException`) sigue reintentándose, porque FR-025 exige volver a analizar
-  el archivo nuevo. Los reintentos de errores recuperables respetan el máximo de intentos configurado
- .
+  el archivo nuevo. Los reintentos de errores recuperables respetan el máximo de intentos configurado.
 - **FR-031**: Si el reenvío del mensaje a reintento o el envío a la DLQ fallan, el consumidor MUST NOT
   confirmar el mensaje en silencio ni dejarlo reencolarse sin pasar por el contador de intentos: el mensaje
   termina en la DLQ. El consumo es "al menos una vez" e idempotente por diseño (la transición exige

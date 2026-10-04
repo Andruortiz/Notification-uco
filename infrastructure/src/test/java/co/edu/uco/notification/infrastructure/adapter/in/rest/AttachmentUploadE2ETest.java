@@ -233,6 +233,14 @@ class AttachmentUploadE2ETest {
         .statusCode();
   }
 
+  private void assertObjectGone(final String key) {
+    final Instant deadline = Instant.now().plus(Duration.ofSeconds(10));
+    while (Instant.now().isBefore(deadline) && storage.stat(key).block() != null) {
+      Mono.delay(Duration.ofMillis(200)).block();
+    }
+    assertNull(storage.stat(key).block());
+  }
+
   private static String uploadKeyOf(final Map<String, Object> issued) {
     return "uploads/" + TENANT_A + "/" + issued.get("uploadId");
   }
@@ -398,7 +406,7 @@ class AttachmentUploadE2ETest {
     final AttachmentSource.StoredObject stored =
         assertInstanceOf(AttachmentSource.StoredObject.class, attachment.source());
     assertEquals((long) content.length, storage.stat(stored.objectKey()).block().sizeBytes());
-    assertNull(storage.stat(uploadKeyOf(issued)).block());
+    assertObjectGone(uploadKeyOf(issued));
     final Document document =
         mongoTemplate
             .getCollection("notifications")
@@ -441,7 +449,7 @@ class AttachmentUploadE2ETest {
 
     assertEquals("INFECTED", result.get("state"));
     assertEquals("MALWARE", result.get("rejectionReason"));
-    assertNull(storage.stat(uploadKeyOf(issued)).block());
+    assertObjectGone(uploadKeyOf(issued));
     final String rejected =
         bodyOf(
             send(
@@ -467,7 +475,7 @@ class AttachmentUploadE2ETest {
 
     bodyOf(complete(TENANT_A, issued.get("uploadId")), 409);
     assertEquals(400, upload(issued, SampleFiles.pdfOfSize(1_500_000, 5)));
-    assertNull(storage.stat(uploadKeyOf(issued)).block());
+    assertObjectGone(uploadKeyOf(issued));
     bodyOf(complete(TENANT_A, issued.get("uploadId")), 409);
     assertEquals(
         "PENDING_SCAN",
@@ -516,7 +524,7 @@ class AttachmentUploadE2ETest {
         awaitState(TENANT_A, issued.get("uploadId"), "FAILED", Duration.ofSeconds(30));
     assertEquals("FAILED", failed.get("state"));
     assertEquals("SIZE_MISMATCH", failed.get("rejectionReason"));
-    assertNull(storage.stat(uploadKeyOf(issued)).block());
+    assertObjectGone(uploadKeyOf(issued));
     assertTrue(
         logLines().stream()
             .anyMatch(
@@ -564,7 +572,7 @@ class AttachmentUploadE2ETest {
     assertEquals("FAILED", failed.get("state"));
     assertEquals("EXPIRED", failed.get("rejectionReason"));
     assertTrue(elapsed.compareTo(Duration.ofSeconds(15)) <= 0, "failed after " + elapsed);
-    assertNull(storage.stat(uploadKeyOf(abandoned)).block());
+    assertObjectGone(uploadKeyOf(abandoned));
     assertEquals(
         "PENDING_SCAN",
         getUpload(TENANT_A, fresh.get("uploadId"))
@@ -592,7 +600,7 @@ class AttachmentUploadE2ETest {
     final Map<String, Object> failed =
         awaitState(TENANT_A, issued.get("uploadId"), "FAILED", Duration.ofSeconds(10));
     assertEquals("EXPIRED", failed.get("rejectionReason"));
-    assertNull(storage.stat(uploadKeyOf(issued)).block());
+    assertObjectGone(uploadKeyOf(issued));
   }
 
   @Test

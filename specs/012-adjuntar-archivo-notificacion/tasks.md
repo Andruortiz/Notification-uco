@@ -231,6 +231,8 @@ en `GET /channels`; por defecto ningún canal acepta adjuntos.
 
 **Regla**: prueba primero, verla fallar, implementar, ejecutar la clase, `spotless:apply`. Las tareas T001–T075 no se renumeran.
 
+**Desviación (decisión explícita del usuario, 2026-10-03)**: durante la implementación de T077–T092 no se ejecutaron pruebas ni compilaciones intermedias de forma sistemática; la ejecución (`spotless:apply`, compilación, clases nuevas, arquitectura y `verify` completo) se dejó para el final. Se aparta del orden prueba-vista-fallar del plan. Antes de esa decisión sí se vio fallar `AttachmentUploadTest` y `AttachmentUploadServicesTest`.
+
 - [X] T076 Contrato primero, primer paso de la enmienda (Principio II): en `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`, añadir el estado `FAILED` y su motivo a la respuesta de subida, `409` de `:complete` por vencimiento y, la nueva forma de la subida (formulario multipart con política POST firmada, Q6 = A, en lugar de PUT); reflejarlo en `contracts/api-notificaciones-cambios.md`
 - [X] T077 [P] Pruebas en `core/src/test/.../domain/AttachmentUploadTest.java`: `markFailed` solo desde `PENDING_SCAN`, con cada motivo; `FAILED` es final (FR-027)
 - [X] T078 `ScanState.FAILED`, enum de motivo, `AttachmentUpload.markFailed`, `AttachmentUploadDocument` y su mapeo, y la regla del resolvedor (`FAILED` → `400`) con prueba en `AttachmentResolverTest` — depende de T077

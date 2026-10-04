@@ -36,6 +36,7 @@ public class AttachmentScanListener {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AttachmentScanListener.class);
   private static final String ATTEMPT_HEADER = "x-scan-attempt";
+  private static final long CONFIRM_TIMEOUT_MILLIS = 5_000L;
 
   private final ScanAttachmentUploadUseCase scanAttachmentUploadUseCase;
   private final ObjectMapper objectMapper;
@@ -93,10 +94,21 @@ public class AttachmentScanListener {
       final CorrelationId correlationId,
       final TraceParent traceParent)
       throws IOException {
+    final AttachmentScanRequest request;
+    try {
+      request = objectMapper.readValue(message.getBody(), AttachmentScanRequest.class);
+      TenantId.of(request.tenantId());
+      UploadId.of(request.uploadId());
+    } catch (final RuntimeException | IOException cause) {
+      LOGGER.warn(
+          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.PERMANENT_BUSINESS),
+          "Attachment scan message is unreadable, sending it to the dead-letter queue",
+          cause);
+      settle(message, channel, deliveryTag, () -> deadLetterRecoverer.recover(message, cause));
+      return;
+    }
     Exception failure = null;
     try {
-      final AttachmentScanRequest request =
-          objectMapper.readValue(message.getBody(), AttachmentScanRequest.class);
       scanAttachmentUploadUseCase
           .scan(TenantId.of(request.tenantId()), UploadId.of(request.uploadId()))
           .doOnNext(AttachmentScanListener::logVerdict)
@@ -109,7 +121,7 @@ public class AttachmentScanListener {
                       TraceParent.CONTEXT_KEY,
                       traceParent.value()))
           .block();
-    } catch (final RuntimeException | IOException cause) {
+    } catch (final RuntimeException cause) {
       failure = cause;
     }
     if (failure == null) {
@@ -132,7 +144,7 @@ public class AttachmentScanListener {
               FailureCategory.RECOVERABLE_INFRASTRUCTURE),
           "Attachment scan exhausted attempts, sending the message to the dead-letter queue",
           cause);
-      deadLetterRecoverer.recover(message, cause);
+      settle(message, channel, deliveryTag, () -> deadLetterRecoverer.recover(message, cause));
     } else {
       LOGGER.warn(
           LogFields.fields(
@@ -144,8 +156,37 @@ public class AttachmentScanListener {
               FailureCategory.RECOVERABLE_INFRASTRUCTURE),
           "Attachment scan attempt failed, requeueing",
           cause);
-      rabbitTemplate.send(
-          topology.exchange(), topology.routingKey(), withAttempt(message, attempt));
+      settle(
+          message,
+          channel,
+          deliveryTag,
+          () ->
+              rabbitTemplate.send(
+                  topology.exchange(), topology.routingKey(), withAttempt(message, attempt)));
+    }
+  }
+
+  private void settle(
+      final Message message,
+      final Channel channel,
+      final long deliveryTag,
+      final Runnable publication)
+      throws IOException {
+    try {
+      rabbitTemplate.invoke(
+          operations -> {
+            publication.run();
+            operations.waitForConfirmsOrDie(CONFIRM_TIMEOUT_MILLIS);
+            return Boolean.TRUE;
+          });
+    } catch (final RuntimeException publicationFailure) {
+      LOGGER.error(
+          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          "Attachment scan message could not be republished, rejecting it so the broker"
+              + " dead-letters it",
+          publicationFailure);
+      channel.basicNack(deliveryTag, false, false);
+      return;
     }
     channel.basicAck(deliveryTag, false);
   }

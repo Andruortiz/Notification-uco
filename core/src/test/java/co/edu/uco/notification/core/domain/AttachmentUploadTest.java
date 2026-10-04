@@ -13,6 +13,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class AttachmentUploadTest {
 
@@ -38,7 +40,7 @@ class AttachmentUploadTest {
     final AttachmentUpload upload = issued();
 
     assertEquals(ScanState.PENDING_SCAN, upload.state());
-    assertEquals("tenants/tenant-1/uploads/upload-1", upload.uploadKey());
+    assertEquals("uploads/tenant-1/upload-1", upload.uploadKey());
     assertNull(upload.cleanKey());
     assertNull(upload.sha256());
     assertNull(upload.completedAt());
@@ -78,6 +80,47 @@ class AttachmentUploadTest {
     assertNull(infected.cleanKey());
   }
 
+  @ParameterizedTest
+  @EnumSource(
+      value = AttachmentRejectionReason.class,
+      names = {"OBJECT_MISSING", "SIZE_MISMATCH", "SCAN_EXHAUSTED", "EXPIRED"})
+  void markFailedIsTerminalAndRecordsItsReason(final AttachmentRejectionReason reason) {
+    final AttachmentUpload failed = issued().markFailed(reason, LATER);
+
+    assertEquals(ScanState.FAILED, failed.state());
+    assertEquals(reason, failed.rejectionReason());
+    assertEquals(LATER, failed.scannedAt());
+    assertNull(failed.cleanKey());
+    assertThrows(IllegalStateException.class, () -> failed.markCompleted(LATER));
+    assertThrows(IllegalStateException.class, () -> failed.markClean(SHA, LATER));
+    assertThrows(IllegalStateException.class, () -> failed.markFailed(reason, LATER));
+  }
+
+  @Test
+  void markFailedRejectsAReasonThatBelongsToTheScan() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> issued().markFailed(AttachmentRejectionReason.MALWARE, LATER));
+    assertThrows(NullPointerException.class, () -> issued().markFailed(null, LATER));
+  }
+
+  @Test
+  void aCleanUploadCannotFail() {
+    final AttachmentUpload clean = issued().markClean(SHA, LATER);
+
+    assertThrows(
+        IllegalStateException.class,
+        () -> clean.markFailed(AttachmentRejectionReason.EXPIRED, LATER));
+  }
+
+  @Test
+  void expiryIsMeasuredAgainstTheGivenInstant() {
+    final AttachmentUpload upload = issued();
+
+    assertEquals(false, upload.isExpiredAt(ISSUED.plusSeconds(900)));
+    assertEquals(true, upload.isExpiredAt(ISSUED.plusSeconds(901)));
+  }
+
   @Test
   void terminalStatesDoNotTransitionAgain() {
     final AttachmentUpload clean = issued().markClean(SHA, LATER);
@@ -96,7 +139,7 @@ class AttachmentUploadTest {
   @Test
   void keysAreDerivedFromTenantAndUpload() {
     assertEquals(
-        "tenants/tenant-2/uploads/abc",
+        "uploads/tenant-2/abc",
         AttachmentUpload.uploadKeyFor(TenantId.of("tenant-2"), UploadId.of("abc")));
     assertEquals(
         "tenants/tenant-2/clean/abc",
@@ -112,18 +155,22 @@ class AttachmentUploadTest {
     assertEquals(
         Optional.empty(),
         AttachmentUpload.uploadIdFromKey(TENANT, "tenants/tenant-1/clean/upload-1"));
-    assertEquals(
-        Optional.empty(), AttachmentUpload.uploadIdFromKey(TENANT, "tenants/tenant-1/uploads/"));
+    assertEquals(Optional.empty(), AttachmentUpload.uploadIdFromKey(TENANT, "uploads/tenant-1/"));
     assertEquals(
         Optional.empty(),
-        AttachmentUpload.uploadIdFromKey(TENANT, "tenants/tenant-1/uploads/a/../../tenant-2/x"));
+        AttachmentUpload.uploadIdFromKey(TENANT, "uploads/tenant-1/a/../../tenant-2/x"));
+    assertEquals(Optional.empty(), AttachmentUpload.uploadIdFromKey(TENANT, "uploads/tenant-1/."));
+    assertEquals(Optional.empty(), AttachmentUpload.uploadIdFromKey(TENANT, "uploads/tenant-1/.."));
+    assertEquals(
+        Optional.of(UploadId.of("a.b")),
+        AttachmentUpload.uploadIdFromKey(TENANT, "uploads/tenant-1/a.b"));
     assertEquals(Optional.empty(), AttachmentUpload.uploadIdFromKey(TENANT, null));
   }
 
   @Test
   void keySegmentsCannotEscapeTheirTenantPrefix() {
     assertEquals(
-        "tenants/a%2F..%2Fb%20c/uploads/x%2Fy",
+        "uploads/a%2F..%2Fb%20c/x%2Fy",
         AttachmentUpload.uploadKeyFor(TenantId.of("a/../b c"), UploadId.of("x/y")));
   }
 }

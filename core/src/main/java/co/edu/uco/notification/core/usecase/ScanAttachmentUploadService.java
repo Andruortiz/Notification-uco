@@ -1,6 +1,9 @@
 package co.edu.uco.notification.core.usecase;
 
 import co.edu.uco.notification.core.domain.AttachmentUpload;
+import co.edu.uco.notification.core.domain.policy.AttachmentPolicy;
+import co.edu.uco.notification.core.domain.valueobject.AttachmentRejectionReason;
+import co.edu.uco.notification.core.domain.valueobject.ScanState;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
 import co.edu.uco.notification.core.port.in.ScanAttachmentUploadUseCase;
@@ -9,6 +12,7 @@ import co.edu.uco.notification.core.port.out.StoredObjectInfo;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Clock;
+import java.util.Optional;
 import reactor.core.publisher.Mono;
 
 public final class ScanAttachmentUploadService implements ScanAttachmentUploadUseCase {
@@ -38,18 +42,36 @@ public final class ScanAttachmentUploadService implements ScanAttachmentUploadUs
         .filter(AttachmentUpload::isPendingScan)
         .flatMap(
             upload ->
-                storage.stat(upload.uploadKey()).flatMap(info -> scanStoredObject(upload, info)));
+                storage
+                    .stat(upload.uploadKey())
+                    .map(Optional::of)
+                    .defaultIfEmpty(Optional.empty())
+                    .flatMap(info -> scanIfPresent(upload, info)));
   }
 
-  private Mono<AttachmentUpload> scanStoredObject(
-      final AttachmentUpload upload, final StoredObjectInfo info) {
+  private Mono<AttachmentUpload> scanIfPresent(
+      final AttachmentUpload upload, final Optional<StoredObjectInfo> info) {
+    if (info.isEmpty()) {
+      return fail(upload, AttachmentRejectionReason.OBJECT_MISSING);
+    }
+    final long size = info.get().sizeBytes();
+    if (size != upload.sizeBytes() || size > AttachmentPolicy.MAX_SIZE_BYTES) {
+      return fail(upload, AttachmentRejectionReason.SIZE_MISMATCH);
+    }
     return storage
-        .read(upload.uploadKey(), info.etag())
+        .read(upload.uploadKey(), info.get().etag())
+        .flatMap(content -> inspectAndResolve(upload, info.get(), content));
+  }
+
+  private Mono<AttachmentUpload> fail(
+      final AttachmentUpload upload, final AttachmentRejectionReason reason) {
+    final AttachmentUpload failed = upload.markFailed(reason, clock.instant());
+    return repository
+        .transition(upload, failed)
+        .filter(Boolean::booleanValue)
         .flatMap(
-            content ->
-                content.length == upload.sizeBytes()
-                    ? inspectAndResolve(upload, info, content)
-                    : storage.delete(upload.uploadKey()).then(Mono.<AttachmentUpload>empty()));
+            won ->
+                StorageCleanup.bestEffort(storage.delete(upload.uploadKey())).thenReturn(failed));
   }
 
   private Mono<AttachmentUpload> inspectAndResolve(
@@ -71,8 +93,21 @@ public final class ScanAttachmentUploadService implements ScanAttachmentUploadUs
     return storage
         .copyIfMatch(upload.uploadKey(), clean.cleanKey(), info.etag())
         .then(Mono.defer(() -> repository.transition(upload, clean)))
-        .filter(Boolean::booleanValue)
-        .flatMap(won -> storage.delete(upload.uploadKey()).thenReturn(clean));
+        .flatMap(
+            won ->
+                won
+                    ? StorageCleanup.bestEffort(storage.delete(upload.uploadKey()))
+                        .thenReturn(clean)
+                    : discardOrphanCopy(upload, clean));
+  }
+
+  private Mono<AttachmentUpload> discardOrphanCopy(
+      final AttachmentUpload upload, final AttachmentUpload clean) {
+    return repository
+        .findByTenantAndId(upload.tenantId(), upload.uploadId())
+        .filter(current -> current.state() != ScanState.CLEAN)
+        .flatMap(current -> storage.delete(clean.cleanKey()))
+        .then(Mono.empty());
   }
 
   private Mono<AttachmentUpload> markInfected(
@@ -83,10 +118,11 @@ public final class ScanAttachmentUploadService implements ScanAttachmentUploadUs
             inspection.rejectionReason(),
             inspection.signature(),
             clock.instant());
-    return storage
-        .delete(upload.uploadKey())
-        .then(Mono.defer(() -> repository.transition(upload, infected)))
+    return repository
+        .transition(upload, infected)
         .filter(Boolean::booleanValue)
-        .map(won -> infected);
+        .flatMap(
+            won ->
+                StorageCleanup.bestEffort(storage.delete(upload.uploadKey())).thenReturn(infected));
   }
 }

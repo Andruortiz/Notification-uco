@@ -15,6 +15,7 @@ spring:
     port: ${RABBITMQ_PORT:5673}
     username: ${RABBITMQ_USERNAME}
     password: ${RABBITMQ_PASSWORD}
+    publisher-confirm-type: correlated
 
 management:
   endpoint:
@@ -115,6 +116,10 @@ notification:
       max-attempts: ${NOTIFICATION_ATTACHMENTS_SCAN_MAX_ATTEMPTS:3}
     upload:
       expiration: ${NOTIFICATION_ATTACHMENTS_UPLOAD_EXPIRATION:15m}
+    sweeper:
+      interval-ms: ${NOTIFICATION_ATTACHMENTS_SWEEPER_INTERVAL_MS:60000}
+      scan-deadline: ${NOTIFICATION_ATTACHMENTS_SWEEPER_SCAN_DEADLINE:1h}
+      batch-size: ${NOTIFICATION_ATTACHMENTS_SWEEPER_BATCH_SIZE:100}
     storage:
       bucket: ${MINIO_BUCKET:notification-attachments}
       endpoint: ${MINIO_ENDPOINT:http://localhost:9000}

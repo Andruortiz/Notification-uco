@@ -64,7 +64,7 @@ Agregado de la subida.
 | `uploadId` | `UploadId` | |
 | `tenantId` | `TenantId` | propio; toda búsqueda lo incluye |
 | `fileName`, `contentType`, `sizeBytes` | | declarados en la emisión, ya validados |
-| `uploadKey` | `String` | `tenants/{tenantId}/uploads/{uploadId}` |
+| `uploadKey` | `String` | `uploads/{tenantId}/{uploadId}` (enmienda 3.1: el prefijo `uploads/` permite la regla de ciclo de vida del bucket) |
 | `cleanKey` | `String` | `tenants/{tenantId}/clean/{uploadId}`; solo en `CLEAN` |
 | `state` | `ScanState` | nace en `PENDING_SCAN` |
 | `rejectionReason`, `signature` | | solo en `INFECTED` |

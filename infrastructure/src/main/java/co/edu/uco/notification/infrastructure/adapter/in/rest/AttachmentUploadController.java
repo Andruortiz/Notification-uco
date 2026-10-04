@@ -65,8 +65,7 @@ public class AttachmentUploadController {
   @PostMapping("/{uploadId}:complete")
   public Mono<ResponseEntity<AttachmentUploadResponse>> complete(
       final AuthenticatedPrincipal principal, @PathVariable("uploadId") final String uploadId) {
-    return completeUseCase
-        .complete(principal.tenantId(), UploadId.of(uploadId))
+    return Mono.defer(() -> completeUseCase.complete(principal.tenantId(), UploadId.of(uploadId)))
         .doOnNext(upload -> log("completed", upload))
         .map(
             upload ->
@@ -77,8 +76,7 @@ public class AttachmentUploadController {
   @GetMapping("/{uploadId}")
   public Mono<AttachmentUploadResponse> get(
       final AuthenticatedPrincipal principal, @PathVariable("uploadId") final String uploadId) {
-    return getUseCase
-        .get(principal.tenantId(), UploadId.of(uploadId))
+    return Mono.defer(() -> getUseCase.get(principal.tenantId(), UploadId.of(uploadId)))
         .map(AttachmentUploadResponse::of);
   }
 

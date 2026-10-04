@@ -1,36 +1,54 @@
 package co.edu.uco.notification.infrastructure.adapter.out.storage;
 
+import co.edu.uco.notification.core.domain.AttachmentUpload;
 import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
 import co.edu.uco.notification.core.exception.AttachmentObjectChangedException;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.port.out.PresignedUpload;
 import co.edu.uco.notification.core.port.out.StoredObjectInfo;
 import co.edu.uco.notification.infrastructure.config.AttachmentProperties;
+import co.edu.uco.notification.infrastructure.config.LogFields;
+import co.edu.uco.notification.utils.FailureCategory;
 import co.edu.uco.notification.utils.Preconditions;
 import io.minio.BucketExistsArgs;
 import io.minio.CopyObjectArgs;
 import io.minio.CopySource;
+import io.minio.GetBucketLifecycleArgs;
 import io.minio.GetObjectArgs;
 import io.minio.GetObjectResponse;
-import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioAsyncClient;
+import io.minio.PostPolicy;
 import io.minio.RemoveObjectArgs;
+import io.minio.SetBucketLifecycleArgs;
 import io.minio.StatObjectArgs;
 import io.minio.errors.ErrorResponseException;
-import io.minio.http.Method;
+import io.minio.messages.Expiration;
+import io.minio.messages.LifecycleConfiguration;
+import io.minio.messages.LifecycleRule;
+import io.minio.messages.RuleFilter;
+import io.minio.messages.Status;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -43,15 +61,20 @@ public class MinioAttachmentStorageAdapter implements AttachmentStoragePort {
   private static final Set<String> ALREADY_EXISTS =
       Set.of("BucketAlreadyOwnedByYou", "BucketAlreadyExists");
   private static final String PRECONDITION_FAILED = "PreconditionFailed";
+  private static final String LIFECYCLE_RULE_ID = "expire-orphaned-uploads";
+  private static final String NO_LIFECYCLE_CONFIGURATION = "NoSuchLifecycleConfiguration";
+  private static final Logger LOGGER = LoggerFactory.getLogger(MinioAttachmentStorageAdapter.class);
 
   private final MinioAsyncClient client;
   private final MinioAsyncClient signer;
   private final String bucket;
   private final URI publicEndpoint;
   private final Mono<Void> bucketReady;
+  private final Clock clock;
 
-  public MinioAttachmentStorageAdapter(final AttachmentProperties properties) {
+  public MinioAttachmentStorageAdapter(final AttachmentProperties properties, final Clock clock) {
     Preconditions.requireNonNull(properties, "properties must not be null");
+    this.clock = Preconditions.requireNonNull(clock, "clock must not be null");
     final AttachmentProperties.Storage storage = properties.storage();
     this.bucket = Preconditions.requireNonBlank(storage.bucket(), "bucket must not be blank");
     this.publicEndpoint = URI.create(storage.publicEndpoint());
@@ -94,26 +117,41 @@ public class MinioAttachmentStorageAdapter implements AttachmentStoragePort {
   }
 
   @Override
-  public Mono<PresignedUpload> presignUpload(final String key, final Duration expiresIn) {
+  public Mono<PresignedUpload> presignUpload(
+      final String key, final String contentType, final long sizeBytes, final Duration expiresIn) {
     Preconditions.requireNonBlank(key, "key must not be blank");
+    Preconditions.requireNonBlank(contentType, "contentType must not be blank");
     Preconditions.requireNonNull(expiresIn, "expiresIn must not be null");
     return bucketReady
-        .then(
-            Mono.fromCallable(
-                () ->
-                    new PresignedUpload(
-                        signer()
-                            .getPresignedObjectUrl(
-                                GetPresignedObjectUrlArgs.builder()
-                                    .method(Method.PUT)
-                                    .bucket(bucket)
-                                    .object(key)
-                                    .expiry((int) expiresIn.toSeconds())
-                                    .build()),
-                        Instant.now().plus(expiresIn))))
+        .then(Mono.fromCallable(() -> signedForm(key, contentType, sizeBytes, expiresIn)))
         .onErrorMap(
             MinioAttachmentStorageAdapter::isUnexpected,
             MinioAttachmentStorageAdapter::unavailable);
+  }
+
+  private PresignedUpload signedForm(
+      final String key, final String contentType, final long sizeBytes, final Duration expiresIn)
+      throws Exception {
+    final Instant expiresAt = clock.instant().plus(expiresIn);
+    final PostPolicy policy =
+        new PostPolicy(bucket, ZonedDateTime.ofInstant(expiresAt, ZoneOffset.UTC));
+    policy.addEqualsCondition("key", key);
+    policy.addEqualsCondition("Content-Type", contentType);
+    policy.addContentLengthRangeCondition(sizeBytes, sizeBytes);
+    final Map<String, String> fields = new LinkedHashMap<>();
+    fields.put("key", key);
+    fields.put("Content-Type", contentType);
+    fields.putAll(signer().getPresignedPostFormData(policy));
+    final String base = trimTrailingSlash(publicEndpoint.toString());
+    return new PresignedUpload(
+        base + "/" + bucket,
+        fields,
+        base + "/" + bucket + "/" + key.replace("%", "%25"),
+        expiresAt);
+  }
+
+  private static String trimTrailingSlash(final String value) {
+    return value.endsWith("/") ? value.substring(0, value.length() - 1) : value;
   }
 
   @Override
@@ -173,8 +211,17 @@ public class MinioAttachmentStorageAdapter implements AttachmentStoragePort {
             client().removeObject(RemoveObjectArgs.builder().bucket(bucket).object(key).build()))
         .then()
         .onErrorMap(
-            MinioAttachmentStorageAdapter::isUnexpected,
-            MinioAttachmentStorageAdapter::unavailable);
+            MinioAttachmentStorageAdapter::isUnexpected, MinioAttachmentStorageAdapter::unavailable)
+        .doOnError(
+            error ->
+                LOGGER.warn(
+                    LogFields.fields(
+                        "objectKey",
+                        key,
+                        LogFields.FAILURE_CATEGORY,
+                        FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+                    "Attachment object could not be deleted",
+                    error));
   }
 
   public Mono<Boolean> ping() {
@@ -231,7 +278,53 @@ public class MinioAttachmentStorageAdapter implements AttachmentStoragePort {
                         .then()
                         .onErrorResume(
                             MinioAttachmentStorageAdapter::isAlreadyExisting,
-                            error -> Mono.empty()));
+                            error -> Mono.empty()))
+        .then(Mono.defer(this::applyUploadsLifecycle));
+  }
+
+  private Mono<Void> applyUploadsLifecycle() {
+    final LifecycleRule rule =
+        new LifecycleRule(
+            Status.ENABLED,
+            null,
+            new Expiration((ZonedDateTime) null, 1, null),
+            new RuleFilter(AttachmentUpload.UPLOADS_PREFIX),
+            LIFECYCLE_RULE_ID,
+            null,
+            null,
+            null);
+    return existingLifecycleRules()
+        .flatMap(
+            existing -> {
+              final List<LifecycleRule> rules = new ArrayList<>();
+              existing.stream()
+                  .filter(current -> !LIFECYCLE_RULE_ID.equals(current.id()))
+                  .forEach(rules::add);
+              rules.add(rule);
+              return call(
+                  () ->
+                      client()
+                          .setBucketLifecycle(
+                              SetBucketLifecycleArgs.builder()
+                                  .bucket(bucket)
+                                  .config(new LifecycleConfiguration(rules))
+                                  .build()));
+            })
+        .then();
+  }
+
+  private Mono<List<LifecycleRule>> existingLifecycleRules() {
+    return call(() ->
+            client().getBucketLifecycle(GetBucketLifecycleArgs.builder().bucket(bucket).build()))
+        .map(
+            configuration ->
+                configuration.rules() == null
+                    ? List.<LifecycleRule>of()
+                    : List.copyOf(configuration.rules()))
+        .onErrorResume(
+            error -> NO_LIFECYCLE_CONFIGURATION.equals(errorCode(error)),
+            error -> Mono.just(List.<LifecycleRule>of()))
+        .defaultIfEmpty(List.<LifecycleRule>of());
   }
 
   private static <T> Mono<T> call(final FutureCall<T> operation) {

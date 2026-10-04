@@ -118,9 +118,40 @@ class AttachmentPolicyTest {
   @ParameterizedTest
   @ValueSource(
       strings = {
-        ".exe", ".msi", ".bat", ".cmd", ".com", ".scr", ".pif", ".vbs", ".vbe", ".js", ".jse",
-        ".wsf", ".wsh", ".ps1", ".hta", ".cpl", ".msc", ".reg", ".lnk", ".jar", ".dll", ".sh",
-        ".apk", ".app", ".gadget", ".com.pif", ".msix", ".war"
+        ".exe",
+        ".msi",
+        ".bat",
+        ".cmd",
+        ".com",
+        ".scr",
+        ".pif",
+        ".vbs",
+        ".vbe",
+        ".js",
+        ".jse",
+        ".wsf",
+        ".wsh",
+        ".ps1",
+        ".hta",
+        ".cpl",
+        ".msc",
+        ".reg",
+        ".lnk",
+        ".jar",
+        ".dll",
+        ".sh",
+        ".apk",
+        ".app",
+        ".gadget",
+        ".com.pif",
+        ".msix",
+        ".war",
+        ".docm",
+        ".xlsm",
+        ".html",
+        ".htm",
+        ".svg",
+        ".iso"
       })
   void rejectsEveryForbiddenExtension(final String extension) {
     final InvalidAttachmentException exception = rejected(withName("factura" + extension));

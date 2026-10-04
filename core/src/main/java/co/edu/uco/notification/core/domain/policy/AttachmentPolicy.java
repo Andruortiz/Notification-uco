@@ -55,7 +55,13 @@ public final class AttachmentPolicy {
           ".gadget",
           ".com.pif",
           ".msix",
-          ".war");
+          ".war",
+          ".docm",
+          ".xlsm",
+          ".html",
+          ".htm",
+          ".svg",
+          ".iso");
 
   private static final String FORBIDDEN_EXTENSION = "fileName extension is not allowed";
   private static final String INVALID_BASE64 = "content must be valid Base64";

@@ -203,6 +203,19 @@ class AttachmentResolverTest {
   }
 
   @Test
+  void rejectsAFailedUploadAsInvalid() {
+    when(uploads.findByTenantAndId(TENANT_A, UPLOAD_ID))
+        .thenReturn(Mono.just(upload(TENANT_A).markFailed(AttachmentRejectionReason.EXPIRED, NOW)));
+
+    final InvalidAttachmentException exception =
+        rejected(InvalidAttachmentException.class, TENANT_A, reference(TENANT_A));
+
+    assertEquals(
+        "attachments[0]: the upload failed and cannot be used (contract.pdf)",
+        exception.getMessage());
+  }
+
+  @Test
   void anUnknownUploadAnotherTenantsUploadAndAForeignUrlAreRejectedIdentically() {
     when(uploads.findByTenantAndId(TENANT_A, UPLOAD_ID))
         .thenReturn(Mono.just(upload(TENANT_A).markClean(LARGE_SHA, NOW)));

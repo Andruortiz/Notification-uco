@@ -29,6 +29,8 @@ public record AttachmentUpload(
     Instant scannedAt,
     Long version) {
 
+  public static final String UPLOADS_PREFIX = "uploads/";
+
   public AttachmentUpload {
     Preconditions.requireNonNull(uploadId, "uploadId must not be null");
     Preconditions.requireNonNull(tenantId, "tenantId must not be null");
@@ -67,7 +69,7 @@ public record AttachmentUpload(
   }
 
   public static String uploadKeyFor(final TenantId tenantId, final UploadId uploadId) {
-    return "tenants/" + keySegment(tenantId.value()) + "/uploads/" + keySegment(uploadId.value());
+    return UPLOADS_PREFIX + keySegment(tenantId.value()) + "/" + keySegment(uploadId.value());
   }
 
   public static String cleanKeyFor(final TenantId tenantId, final UploadId uploadId) {
@@ -75,12 +77,15 @@ public record AttachmentUpload(
   }
 
   public static Optional<UploadId> uploadIdFromKey(final TenantId tenantId, final String key) {
-    final String prefix = "tenants/" + keySegment(tenantId.value()) + "/uploads/";
+    final String prefix = UPLOADS_PREFIX + keySegment(tenantId.value()) + "/";
     if (key == null || !key.startsWith(prefix)) {
       return Optional.empty();
     }
     final String segment = key.substring(prefix.length());
-    if (segment.isEmpty() || !segment.chars().allMatch(c -> isUnreserved((char) c))) {
+    if (segment.isEmpty()
+        || ".".equals(segment)
+        || "..".equals(segment)
+        || !segment.chars().allMatch(c -> isUnreserved((char) c))) {
       return Optional.empty();
     }
     return Optional.of(UploadId.of(segment));
@@ -110,6 +115,36 @@ public record AttachmentUpload(
 
   public boolean isPendingScan() {
     return state == ScanState.PENDING_SCAN;
+  }
+
+  public boolean isExpiredAt(final Instant now) {
+    Preconditions.requireNonNull(now, "now must not be null");
+    return now.isAfter(expiresAt);
+  }
+
+  public AttachmentUpload markFailed(final AttachmentRejectionReason reason, final Instant now) {
+    Preconditions.requireNonNull(reason, "reason must not be null");
+    if (!reason.isFailure()) {
+      throw new IllegalArgumentException("reason " + reason + " does not describe a failed upload");
+    }
+    requirePendingScan();
+    return new AttachmentUpload(
+        uploadId,
+        tenantId,
+        fileName,
+        contentType,
+        sizeBytes,
+        uploadKey,
+        null,
+        ScanState.FAILED,
+        reason,
+        null,
+        sha256,
+        issuedAt,
+        expiresAt,
+        completedAt,
+        now,
+        version);
   }
 
   public AttachmentUpload markCompleted(final Instant now) {

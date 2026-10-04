@@ -6,7 +6,8 @@ import reactor.core.publisher.Mono;
 
 public interface AttachmentStoragePort {
 
-  Mono<PresignedUpload> presignUpload(String key, Duration expiresIn);
+  Mono<PresignedUpload> presignUpload(
+      String key, String contentType, long sizeBytes, Duration expiresIn);
 
   Mono<StoredObjectInfo> stat(String key);
 

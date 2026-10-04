@@ -48,7 +48,6 @@ public record BrevoEmailRequest(
 
   public record Contact(String email) {}
 
-  /** Adjunto en el formato de Brevo: el nombre con su extension y el contenido en Base64. */
   public record Attachment(String name, String content) {
 
     @Override

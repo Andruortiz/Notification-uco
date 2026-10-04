@@ -51,7 +51,12 @@ class StructuredLogLayoutTest {
   private List<JsonNode> flushedLines() throws Exception {
     context.stop();
     final String output = captured.toString(StandardCharsets.UTF_8).strip();
-    return output.lines().filter(line -> !line.isBlank()).map(this::parse).toList();
+    return output
+        .lines()
+        .filter(line -> !line.isBlank())
+        .map(this::parse)
+        .filter(entry -> "test.layout".equals(entry.path("logger_name").asText()))
+        .toList();
   }
 
   private JsonNode parse(final String line) {

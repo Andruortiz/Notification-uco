@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -84,6 +85,7 @@ class BrevoDisabledProviderE2ETest {
             .responseTimeout(Duration.ofSeconds(20))
             .build();
     logAppender = new ListAppender<>();
+    logAppender.list = new CopyOnWriteArrayList<>();
     logAppender.start();
     ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).addAppender(logAppender);
 

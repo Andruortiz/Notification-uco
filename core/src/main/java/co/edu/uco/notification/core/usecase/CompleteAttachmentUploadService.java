@@ -65,7 +65,7 @@ public final class CompleteAttachmentUploadService implements CompleteAttachment
     return repository
         .transition(upload, failed)
         .filter(Boolean::booleanValue)
-        .flatMap(won -> storage.delete(upload.uploadKey()))
+        .flatMap(won -> StorageCleanup.bestEffort(storage.delete(upload.uploadKey())))
         .then(Mono.error(new AttachmentUploadExpiredException()));
   }
 

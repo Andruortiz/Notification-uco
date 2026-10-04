@@ -272,6 +272,29 @@ class AttachmentUploadServicesTest {
     }
 
     @Test
+    void aDeleteFailureAfterTheExpiredTransitionStillAnswersExpiredNotAServerError() {
+      final AttachmentUpload expired =
+          AttachmentUpload.issue(
+              UPLOAD_ID,
+              TENANT,
+              "contract.pdf",
+              "application/pdf",
+              SIZE,
+              NOW.minus(EXPIRATION).minusSeconds(60),
+              NOW.minusSeconds(1));
+      when(repository.findByTenantAndId(TENANT, UPLOAD_ID)).thenReturn(Mono.just(expired));
+      when(storage.delete(anyString()))
+          .thenReturn(Mono.error(new AttachmentInspectionUnavailableException("storage down")));
+
+      StepVerifier.create(service().complete(TENANT, UPLOAD_ID))
+          .expectError(AttachmentUploadExpiredException.class)
+          .verify();
+
+      verify(repository)
+          .transition(expired, expired.markFailed(AttachmentRejectionReason.EXPIRED, NOW));
+    }
+
+    @Test
     void anUploadWhoseScanWasAlreadyRequestedIsReturnedWithoutRequestingItAgain() {
       final AttachmentUpload requested =
           AttachmentUpload.issue(
@@ -576,6 +599,46 @@ class AttachmentUploadServicesTest {
           .verify();
 
       verify(repository, never()).transition(any(), any());
+    }
+
+    @Test
+    void aDeleteFailureAfterTheFailedTransitionIsNotAnErrorForTheScan() {
+      when(repository.findByTenantAndId(TENANT, UPLOAD_ID)).thenReturn(Mono.just(pending()));
+      when(storage.stat(anyString())).thenReturn(Mono.just(new StoredObjectInfo(10, "etag-2")));
+      when(storage.delete(anyString()))
+          .thenReturn(Mono.error(new AttachmentInspectionUnavailableException("storage down")));
+
+      final AttachmentUpload result = service().scan(TENANT, UPLOAD_ID).block();
+
+      assertEquals(ScanState.FAILED, result.state());
+      verify(repository)
+          .transition(
+              pending(), pending().markFailed(AttachmentRejectionReason.SIZE_MISMATCH, NOW));
+    }
+
+    @Test
+    void aDeleteFailureAfterTheInfectedTransitionIsNotAnErrorForTheScan() {
+      givenStoredObject();
+      when(inspector.inspect(any(), any(), any(), any()))
+          .thenReturn(
+              Mono.just(
+                  AttachmentInspection.rejected(
+                      sha, AttachmentRejectionReason.MALWARE, "Eicar-Test-Signature", null)));
+      when(storage.delete(anyString()))
+          .thenReturn(Mono.error(new AttachmentInspectionUnavailableException("storage down")));
+
+      assertEquals(ScanState.INFECTED, service().scan(TENANT, UPLOAD_ID).block().state());
+    }
+
+    @Test
+    void aDeleteFailureAfterTheCleanTransitionIsNotAnErrorForTheScan() {
+      givenStoredObject();
+      when(inspector.inspect(any(), any(), any(), any()))
+          .thenReturn(Mono.just(AttachmentInspection.clean(sha)));
+      when(storage.delete(anyString()))
+          .thenReturn(Mono.error(new AttachmentInspectionUnavailableException("storage down")));
+
+      assertEquals(ScanState.CLEAN, service().scan(TENANT, UPLOAD_ID).block().state());
     }
 
     @Test

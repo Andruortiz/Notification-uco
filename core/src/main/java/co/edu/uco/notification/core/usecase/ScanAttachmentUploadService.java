@@ -69,7 +69,9 @@ public final class ScanAttachmentUploadService implements ScanAttachmentUploadUs
     return repository
         .transition(upload, failed)
         .filter(Boolean::booleanValue)
-        .flatMap(won -> storage.delete(upload.uploadKey()).thenReturn(failed));
+        .flatMap(
+            won ->
+                StorageCleanup.bestEffort(storage.delete(upload.uploadKey())).thenReturn(failed));
   }
 
   private Mono<AttachmentUpload> inspectAndResolve(
@@ -94,7 +96,8 @@ public final class ScanAttachmentUploadService implements ScanAttachmentUploadUs
         .flatMap(
             won ->
                 won
-                    ? storage.delete(upload.uploadKey()).thenReturn(clean)
+                    ? StorageCleanup.bestEffort(storage.delete(upload.uploadKey()))
+                        .thenReturn(clean)
                     : discardOrphanCopy(upload, clean));
   }
 
@@ -118,6 +121,8 @@ public final class ScanAttachmentUploadService implements ScanAttachmentUploadUs
     return repository
         .transition(upload, infected)
         .filter(Boolean::booleanValue)
-        .flatMap(won -> storage.delete(upload.uploadKey()).thenReturn(infected));
+        .flatMap(
+            won ->
+                StorageCleanup.bestEffort(storage.delete(upload.uploadKey())).thenReturn(infected));
   }
 }

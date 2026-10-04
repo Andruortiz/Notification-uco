@@ -6,17 +6,25 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
 import co.edu.uco.notification.core.exception.AttachmentObjectChangedException;
 import co.edu.uco.notification.core.port.out.PresignedUpload;
 import co.edu.uco.notification.core.port.out.StoredObjectInfo;
 import co.edu.uco.notification.infrastructure.config.AttachmentProperties;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.AttachmentTestContainers;
 import co.edu.uco.notification.infrastructure.support.SampleFiles;
 import io.minio.GetBucketLifecycleArgs;
+import io.minio.MakeBucketArgs;
 import io.minio.MinioAsyncClient;
+import io.minio.SetBucketLifecycleArgs;
+import io.minio.messages.Expiration;
 import io.minio.messages.LifecycleConfiguration;
 import io.minio.messages.LifecycleRule;
+import io.minio.messages.RuleFilter;
 import io.minio.messages.Status;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -29,11 +37,14 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import reactor.test.StepVerifier;
 
 class MinioAttachmentStorageAdapterTest {
@@ -352,5 +363,84 @@ class MinioAttachmentStorageAdapterTest {
   void pingIsTrueOnlyWhenTheStorageAnswers() {
     assertTrue(adapter("bucket-" + UUID.randomUUID()).ping().block());
     assertFalse(unreachable("bucket").ping().block());
+  }
+
+  private static MinioAsyncClient adminClient() {
+    return MinioAsyncClient.builder()
+        .endpoint(AttachmentTestContainers.minioEndpoint())
+        .credentials(AttachmentTestContainers.MINIO_USER, AttachmentTestContainers.MINIO_PASSWORD)
+        .build();
+  }
+
+  @Test
+  void aPreexistingLifecycleRuleSurvivesAndTheOwnRuleIsKeptExactlyOnce() throws Exception {
+    final String bucket = "bucket-" + UUID.randomUUID();
+    final MinioAsyncClient admin = adminClient();
+    admin.makeBucket(MakeBucketArgs.builder().bucket(bucket).build()).get();
+    admin
+        .setBucketLifecycle(
+            SetBucketLifecycleArgs.builder()
+                .bucket(bucket)
+                .config(
+                    new LifecycleConfiguration(
+                        List.of(
+                            new LifecycleRule(
+                                Status.ENABLED,
+                                null,
+                                new Expiration((ZonedDateTime) null, 7, null),
+                                new RuleFilter("foreign/"),
+                                "foreign-rule",
+                                null,
+                                null,
+                                null))))
+                .build())
+        .get();
+
+    presign(adapter(bucket), freshKey(), new byte[1_200_000]);
+    presign(adapter(bucket), freshKey(), new byte[1_200_000]);
+
+    final List<LifecycleRule> rules =
+        admin
+            .getBucketLifecycle(GetBucketLifecycleArgs.builder().bucket(bucket).build())
+            .get()
+            .rules();
+    assertEquals(2, rules.size());
+    final LifecycleRule foreign =
+        rules.stream().filter(rule -> "foreign-rule".equals(rule.id())).findFirst().orElseThrow();
+    assertEquals("foreign/", foreign.filter().prefix());
+    assertEquals(7, foreign.expiration().days());
+    final LifecycleRule own =
+        rules.stream()
+            .filter(rule -> "expire-orphaned-uploads".equals(rule.id()))
+            .findFirst()
+            .orElseThrow();
+    assertEquals("uploads/", own.filter().prefix());
+    assertEquals(1, own.expiration().days());
+  }
+
+  @Test
+  void aFailedDeleteIsLoggedWithItsKeyAndASuccessfulOneIsNot() {
+    final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    logs.start();
+    final Logger logger = (Logger) LoggerFactory.getLogger(MinioAttachmentStorageAdapter.class);
+    logger.addAppender(logs);
+    try {
+      final String key = "uploads/tenant-1/" + UUID.randomUUID();
+
+      final MinioAttachmentStorageAdapter reachable = adapter("bucket-" + UUID.randomUUID());
+      presign(reachable, key, new byte[1_200_000]);
+      reachable.delete(key).block();
+      assertEquals(0, logs.list.size());
+
+      StepVerifier.create(unreachable("bucket").delete(key))
+          .expectError(AttachmentInspectionUnavailableException.class)
+          .verify(Duration.ofSeconds(30));
+      assertEquals(1, logs.list.size());
+      final String line = LogLines.render(logs.list.get(0));
+      assertTrue(line.contains("could not be deleted"), line);
+      assertTrue(line.contains(key), line);
+    } finally {
+      logger.detachAppender(logs);
+    }
   }
 }

@@ -2,7 +2,6 @@ package co.edu.uco.notification.core.usecase;
 
 import co.edu.uco.notification.core.domain.AttachmentUpload;
 import co.edu.uco.notification.core.domain.valueobject.AttachmentRejectionReason;
-import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
 import co.edu.uco.notification.core.port.in.ExpireAbandonedUploadsUseCase;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
@@ -56,10 +55,6 @@ public final class ExpireAbandonedUploadsService implements ExpireAbandonedUploa
         .filter(Boolean::booleanValue)
         .flatMap(
             won ->
-                storage
-                    .delete(upload.uploadKey())
-                    .onErrorResume(
-                        AttachmentInspectionUnavailableException.class, e -> Mono.empty())
-                    .thenReturn(failed));
+                StorageCleanup.bestEffort(storage.delete(upload.uploadKey())).thenReturn(failed));
   }
 }

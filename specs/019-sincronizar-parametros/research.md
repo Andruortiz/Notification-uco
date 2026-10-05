@@ -188,3 +188,17 @@ No hay aislamiento por tenant en esta historia: la configuración es global por 
   (`BrevoEmailDeliveryE2ETest`, `TwilioSmsDeliveryE2ETest`, `FcmPushDeliveryE2ETest`); deben seguir en verde.
 - **Riesgo R-2**: conflicto de fusión con E4 en `RabbitRetryConfig` y `NotificationDispatchListener`.
 - **Riesgo R-3**: el contrato SUP-02 puede cambiar la forma del adaptador HTTP; el puerto aísla el cambio.
+
+### Límites de contenido por proveedor (T003, regla (d))
+
+Consultados el 2026-10-05. Solo se registra un valor con fuente verificable; los demás quedan fuera de la
+tabla `ProviderContentLimits` y la regla (d) no impone límite a ese canal hasta que se verifiquen.
+
+| Proveedor | Canal | Límite (clave) | Valor | Fuente | Consulta |
+|---|---|---|---|---|---|
+| Twilio | SMS | `body.maxLength` | 1 600 caracteres | https://www.twilio.com/docs/messaging/api/message-resource (campo `Body`: "Can be up to 1,600 characters in length") | 2026-10-05 |
+| Brevo | EMAIL | tamaño total de adjuntos | sin fuente verificable | la referencia pública de `sendTransacEmail` consultada (https://developers.brevo.com/reference/sendtransacemail) no declara el tope de adjuntos y el artículo de ayuda respondió 403 | 2026-10-05 |
+| FCM | PUSH | tamaño máximo del mensaje | sin fuente verificable | las páginas de documentación de FCM consultadas por HTTP no devolvieron el valor en el texto recuperado | 2026-10-05 |
+
+Consecuencia: `ProviderContentLimits` contiene únicamente la fila de Twilio. Para Brevo y FCM no se impone límite
+en la regla (d); confirmarlos queda en el pendiente de `plan.md` (dueño andrualv, antes de producción).

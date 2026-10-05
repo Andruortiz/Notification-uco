@@ -107,7 +107,7 @@ Reevaluación tras el diseño: sin cambios; sin violaciones, por lo que no hay t
 | Pendiente | Dueño | Fecha de revisión |
 |---|---|---|
 | Sustituir el adaptador HTTP provisional por el contrato definitivo de SUP-02 y decidir sondeo frente a evento | andrualv, con el equipo del Componente de Parámetros | 2026-11-15 |
-| Confirmar los valores de `ProviderContentLimits` contra la documentación vigente de Brevo, Twilio y FCM antes de producción | andrualv | antes del primer despliegue a producción |
+| Confirmar los valores de `ProviderContentLimits` contra la documentación vigente de Brevo, Twilio y FCM antes de producción (a 2026-10-05 solo Twilio SMS `body.maxLength` 1 600 tiene fuente; Brevo y FCM: sin fuente verificable, fuera de la tabla; ver research.md) | andrualv | antes del primer despliegue a producción |
 | Descriptor gestionable para el `RetryPolicy` del dominio y para la ventana de barrido de adjuntos | andrualv | 2026-11-30 |
 
 ## Project Structure

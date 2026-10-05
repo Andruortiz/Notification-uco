@@ -155,9 +155,10 @@ por fecha de aceptación descendente.
 - [x] T016 [P] Confirmar Spotless/SpotBugs/FindSecBugs sin hallazgos sobre todos los archivos nuevos o
       modificados de esta historia — `mvn verify` pasó ambas puertas (llegó hasta jacoco-check sin
       fallos de Spotless ni SpotBugs) tras corregir el hallazgo real de T013
-- [ ] T017 Ejecutar manualmente los cuatro escenarios de [quickstart.md](./quickstart.md) (filtros
+- [X] T017 Ejecutar manualmente los cuatro escenarios de [quickstart.md](./quickstart.md) (filtros
       combinados, paginación, validación de entrada, aislamiento por tenant) contra el `docker
       compose` local — queda como validación manual pendiente, igual que en historias anteriores
+  Verificado 2026-10-05 contra el servicio local con proveedores simulados y tokens JWT de desarrollo: filtros por estado, destinatario y combinados; paginación (limit, offset y fin de página); validación (from>to, limit=0, limit=500 y offset negativo dan 400); y aislamiento por tenant, comprobado directamente con dos tenants nuevos donde cada operador ve solo sus propias notificaciones. Los tres primeros escenarios los ejecutó un agente delegado.
 - [ ] T018 [P] Confirmar que `Listado.tsx` (Front-Notification) puede conectarse al nuevo endpoint sin
       cambios adicionales del lado del backend — no es parte de esta historia (cae en HU2-070), pero
       vale la pena verificar que el contrato resultante es consumible sin sorpresas

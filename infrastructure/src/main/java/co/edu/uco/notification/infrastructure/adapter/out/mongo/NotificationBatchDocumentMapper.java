@@ -8,6 +8,7 @@ import co.edu.uco.notification.core.port.in.BatchAcceptedResult;
 import co.edu.uco.notification.core.port.in.BatchItemOutcome;
 import co.edu.uco.notification.core.port.in.BatchItemResult;
 import java.time.Instant;
+import java.util.List;
 
 final class NotificationBatchDocumentMapper {
 
@@ -24,9 +25,11 @@ final class NotificationBatchDocumentMapper {
   }
 
   static BatchAcceptedResult toResult(final NotificationBatchDocument document) {
+    final List<BatchItemResultDocument> stored =
+        document.results() == null ? List.of() : document.results();
     return new BatchAcceptedResult(
         BatchId.of(document.batchId()),
-        document.results().stream().map(NotificationBatchDocumentMapper::toResult).toList(),
+        stored.stream().map(NotificationBatchDocumentMapper::toResult).toList(),
         true);
   }
 

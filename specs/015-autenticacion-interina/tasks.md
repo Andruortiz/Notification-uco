@@ -340,9 +340,10 @@ token, autorización por rol — sobre la API pública completa.
 - [X] T042 Ejecutar `./mvnw -B -ntp spotless:apply` sobre todos los archivos `.java` nuevos/modificados
   de esta historia (normaliza formato y CRLF).
   Verificado 2026-10-05: `./mvnw spotless:check` sin diferencias.
-- [ ] T043 Ejecutar manualmente los pasos de `specs/015-autenticacion-interina/quickstart.md` contra
+- [X] T043 Ejecutar manualmente los pasos de `specs/015-autenticacion-interina/quickstart.md` contra
   el servicio levantado localmente (`docker compose up -d mongodb rabbitmq`,
   `./mvnw -pl infrastructure spring-boot:run`) y confirmar que cada resultado esperado se cumple.
+  Verificado 2026-10-05 con el servicio local (Mongo, Rabbit, MinIO y ClamAV en Docker, proveedores simulados): pasos 1, 3, 4, 5 y 6 del quickstart con el resultado esperado (401 sin token; 202 con token CLIENTE; GET /notifications 403 con CLIENTE y 200 con OPERADOR; la notificación de tenant-b da 404 con el token de tenant-a; SSE con access_token da 200). El paso 2 es la generación de tokens, que se hizo con el script de desarrollo. Ejecutado por un agente delegado a partir del reporte de sus salidas.
 - [X] T044 Confirmar que `HexagonalArchitectureTest`/`ModularityTests` siguen en verde con el árbol de
   archivos final de la historia.
   Verificado 2026-10-05: `HexagonalArchitectureTest` (3 pruebas) y `ModularityTests` (2) en verde, 0 fallos.

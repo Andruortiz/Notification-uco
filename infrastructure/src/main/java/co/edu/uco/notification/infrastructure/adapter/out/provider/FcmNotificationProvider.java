@@ -4,15 +4,17 @@ import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
+import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.infrastructure.config.FcmCredentials;
 import co.edu.uco.notification.infrastructure.config.FcmProviderProperties;
 import co.edu.uco.notification.infrastructure.config.FcmServiceAccount;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.ClientResponse;
@@ -27,16 +29,36 @@ public class FcmNotificationProvider implements NotificationSenderPort {
   private static final String SEND_PATH = "/v1/projects/{projectId}/messages:send";
   private static final int UNAUTHORIZED = 401;
 
-  private final WebClient webClient;
+  private final Supplier<WebClient> clientSource;
   private final Optional<String> disabledReason;
   private final String projectId;
   private final FcmAccessTokenProvider tokenProvider;
 
+  @Autowired
   public FcmNotificationProvider(
-      @Qualifier("fcmWebClient") final WebClient fcmWebClient,
+      final ProviderHttpClients providerHttpClients,
+      final ConfigurationView configurationView,
       final FcmProviderProperties properties,
       final FcmCredentials credentials) {
-    this.webClient = Preconditions.requireNonNull(fcmWebClient, "fcmWebClient must not be null");
+    this(
+        ProviderHttpClients.providerClientSource(
+            PROVIDER_ID.value(), properties.baseUrl(), providerHttpClients, configurationView),
+        properties,
+        credentials);
+  }
+
+  FcmNotificationProvider(
+      final WebClient fixedClient,
+      final FcmProviderProperties properties,
+      final FcmCredentials credentials) {
+    this(ProviderHttpClients.fixedClientSource(fixedClient), properties, credentials);
+  }
+
+  private FcmNotificationProvider(
+      final Supplier<WebClient> clientSource,
+      final FcmProviderProperties properties,
+      final FcmCredentials credentials) {
+    this.clientSource = Preconditions.requireNonNull(clientSource, "clientSource must not be null");
     Preconditions.requireNonNull(properties, "properties must not be null");
     Preconditions.requireNonNull(credentials, "credentials must not be null");
     this.disabledReason = credentials.disabledReason();
@@ -44,7 +66,8 @@ public class FcmNotificationProvider implements NotificationSenderPort {
     this.projectId = serviceAccount.map(FcmServiceAccount::projectId).orElse(null);
     this.tokenProvider =
         serviceAccount
-            .map(account -> new FcmAccessTokenProvider(webClient, account, properties.tokenUrl()))
+            .map(
+                account -> new FcmAccessTokenProvider(clientSource, account, properties.tokenUrl()))
             .orElse(null);
     disabledReason.ifPresent(reason -> ProviderLogs.disabled(LOGGER, PROVIDER_ID, reason));
   }
@@ -55,19 +78,21 @@ public class FcmNotificationProvider implements NotificationSenderPort {
     if (disabledReason.isPresent()) {
       return Mono.error(new ProviderDisabledException(PROVIDER_ID, disabledReason.get()));
     }
+    final WebClient client = clientSource.get();
     return tokenProvider
         .accessToken()
-        .flatMap(token -> dispatch(notification, token))
+        .flatMap(token -> dispatch(client, notification, token))
         .onErrorResume(error -> Mono.just(authorizationFailure(notification, error)));
   }
 
-  private Mono<AttemptResult> dispatch(final Notification notification, final String token) {
+  private Mono<AttemptResult> dispatch(
+      final WebClient client, final Notification notification, final String token) {
     final FcmSendRequest request =
         FcmSendRequest.of(
             notification.recipient().address(),
             notification.content().subject(),
             notification.content().body());
-    return webClient
+    return client
         .post()
         .uri(SEND_PATH, projectId)
         .headers(headers -> headers.setBearerAuth(token))

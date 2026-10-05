@@ -5,15 +5,17 @@ import co.edu.uco.notification.core.domain.valueobject.Attachment;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
+import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.infrastructure.config.BrevoProviderProperties;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
@@ -27,17 +29,36 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
 
   static final long MAX_ATTACHMENTS_BYTES = 4_000_000L;
 
-  private final WebClient webClient;
+  private final Supplier<WebClient> clientSource;
   private final BrevoProviderProperties properties;
   private final AttachmentContentLoader attachmentContentLoader;
   private final Optional<String> disabledReason;
 
+  @Autowired
   public BrevoNotificationProvider(
-      @Qualifier("brevoWebClient") final WebClient brevoWebClient,
+      final ProviderHttpClients providerHttpClients,
+      final ConfigurationView configurationView,
       final BrevoProviderProperties properties,
       final AttachmentContentLoader attachmentContentLoader) {
-    this.webClient =
-        Preconditions.requireNonNull(brevoWebClient, "brevoWebClient must not be null");
+    this(
+        ProviderHttpClients.providerClientSource(
+            PROVIDER_ID.value(), properties.baseUrl(), providerHttpClients, configurationView),
+        properties,
+        attachmentContentLoader);
+  }
+
+  BrevoNotificationProvider(
+      final WebClient fixedClient,
+      final BrevoProviderProperties properties,
+      final AttachmentContentLoader attachmentContentLoader) {
+    this(ProviderHttpClients.fixedClientSource(fixedClient), properties, attachmentContentLoader);
+  }
+
+  private BrevoNotificationProvider(
+      final Supplier<WebClient> clientSource,
+      final BrevoProviderProperties properties,
+      final AttachmentContentLoader attachmentContentLoader) {
+    this.clientSource = clientSource;
     this.properties = Preconditions.requireNonNull(properties, "properties must not be null");
     this.attachmentContentLoader =
         Preconditions.requireNonNull(
@@ -62,10 +83,11 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
       ProviderLogs.rejectedBeforeCall(LOGGER, notification, PROVIDER_ID, "attachments-too-large");
       return Mono.just(AttemptResult.PERMANENT_FAILURE);
     }
+    final WebClient client = clientSource.get();
     return attachmentContentLoader
         .load(attachments)
         .map(files -> toRequest(notification, subject, files))
-        .flatMap(request -> post(notification, request))
+        .flatMap(request -> post(client, notification, request))
         .onErrorResume(
             AttachmentContentLoader.AttachmentContentException.class,
             error -> {
@@ -82,8 +104,8 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
   }
 
   private Mono<AttemptResult> post(
-      final Notification notification, final BrevoEmailRequest request) {
-    return webClient
+      final WebClient client, final Notification notification, final BrevoEmailRequest request) {
+    return client
         .post()
         .uri(SEND_PATH)
         .header("api-key", properties.apiKey())

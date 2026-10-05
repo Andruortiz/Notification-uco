@@ -71,7 +71,8 @@
 ## Phase 9: Cierre
 
 - [x] T035 Actualizar `specs/016-logs-correlation-id/research.md` y `data-model.md` con las decisiones del usuario; `spotless:apply`; `./mvnw -B -ntp -pl utils,core test`; pruebas de infraestructura ejecutables sin Docker; `HexagonalArchitectureTest` y `ModularityTests` (el contexto Spring puede requerir Docker: marcar). Commit: `docs(specs): cerrar tareas de HU2-056`.
-- [ ] T036 `./mvnw -B -ntp verify` completo con Docker (DOCKER, no ejecutable localmente; lo decide CI).
+- [X] T036 `./mvnw -B -ntp verify` completo con Docker (DOCKER, no ejecutable localmente; lo decide CI).
+  Verificado 2026-10-05: CI de `develop` (ejecución del merge de #55, 2026-10-04): Build, Test, Seguridad, Code Quality e Imagen en verde (el job Test corre contra Docker); `verify` local completo con BUILD SUCCESS el 2026-10-04.
 
 ## Dependencias
 

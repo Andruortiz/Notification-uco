@@ -65,17 +65,23 @@ Repetir el paso 3 con un token de `tenant-b` y confirmar, vía `GET /notificatio
 `tenant-a`, que la notificación de `tenant-b` no es visible (comportamiento ya garantizado por el
 aislamiento multi-tenant existente, ahora alimentado por el token).
 
-## 6. SSE con token por query param
+## 6. SSE con ticket de un solo uso
+
+El parámetro `access_token` ya no se acepta en `GET /notifications:subscribe`. Quien no pueda enviar
+cabeceras (`EventSource` nativo) pide primero un ticket con su credencial normal:
 
 ```bash
-curl -N "http://localhost:8060/notifications:subscribe?access_token=$TOKEN_TENANT_A_CLIENTE"
+TICKET=$(curl -s -X POST -H "Authorization: Bearer $TOKEN_TENANT_A_CLIENTE"   "http://localhost:8060/notifications:subscribeTicket" | jq -r .ticket)
+curl -N "http://localhost:8060/notifications:subscribe?ticket=$TICKET"
 ```
 
 Resultado esperado: `200`, stream `text/event-stream` con la foto inicial de las notificaciones de
-`tenant-a` y luego los eventos en vivo.
+`tenant-a` y luego los eventos en vivo. El ticket vale 30 segundos y se consume al usarlo: repetir el
+segundo `curl` con el mismo ticket, o con `?access_token=...`, responde `401`. La cabecera
+`Authorization`, si llega, tiene prioridad sobre `ticket`.
 
 ## Validación automatizada equivalente
 
 Cada paso de este quickstart tiene una prueba automatizada correspondiente en
-`AuthenticationInterinaE2ETest` (ver `tasks.md`) — este documento es una guía de verificación manual,
+`AuthenticationInterinaE2ETest` y `SubscriptionTicketE2ETest` (ver `tasks.md`) — este documento es una guía de verificación manual,
 no sustituye esa prueba.

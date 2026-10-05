@@ -56,6 +56,8 @@ El servicio exige un JWT en `Authorization: Bearer`. El modo se elige con `NOTIF
 
 Cada modo es un adaptador del puerto `TokenValidationPort`; el dominio y el filtro de autenticacion no cambian. En modo `platform` el arranque falla si falta la clave publica.
 
+Panel en vivo: `GET /notifications:subscribe` acepta la cabecera `Authorization` o, para clientes que no pueden enviar cabeceras (`EventSource` nativo), un ticket de un solo uso. El ticket se pide con `POST /notifications:subscribeTicket` (rol minimo `CLIENTE`), vale 30 segundos (`AUTH_SUBSCRIPTION_TICKET_TTL_SECONDS`), se guarda como huella SHA-256 en MongoDB (coleccion `subscription_tickets`) y se presenta una sola vez como `?ticket=`. El parametro `access_token` ya no se acepta.
+
 | Variable | Para que sirve | Por defecto |
 | --- | --- | --- |
 | `AUTH_PLATFORM_PUBLIC_KEY` | Clave publica del emisor, en PEM (X.509); admite los saltos de linea como `\n` | obligatoria |

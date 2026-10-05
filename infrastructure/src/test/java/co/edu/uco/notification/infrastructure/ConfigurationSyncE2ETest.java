@@ -10,7 +10,10 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationSource;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
+import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.LastKnownConfigurationDocument;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.FakeParametersSource;
@@ -53,6 +56,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
     properties = {
       "MONGO_USERNAME=test",
       "MONGO_PASSWORD=test",
+      "notification.catalog.refresh-interval-ms=500",
       "notification.parameters.poll-interval-ms=1000"
     })
 @Testcontainers
@@ -78,6 +82,8 @@ class ConfigurationSyncE2ETest {
 
   @Autowired private ConfigurationView configurationView;
 
+  @Autowired private ChannelCatalogPort catalogPort;
+
   @Autowired private ReactiveMongoTemplate mongoTemplate;
 
   private ListAppender<ILoggingEvent> logAppender;
@@ -93,6 +99,19 @@ class ConfigurationSyncE2ETest {
   @AfterEach
   void releaseLogs() {
     ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).detachAppender(logAppender);
+  }
+
+  private static void awaitEmailRoute(final ChannelCatalogPort catalog) {
+    assertTrue(
+        awaitCondition(
+            () ->
+                Boolean.TRUE.equals(
+                    catalog
+                        .findActiveRoute(ChannelType.of("EMAIL"), TenantId.of("tenant-1"))
+                        .hasElement()
+                        .block(Duration.ofSeconds(5))),
+            SYNC_WAIT),
+        "the EMAIL channel never became available in the catalog");
   }
 
   private static WebTestClient clientFor(final int serverPort) {
@@ -208,6 +227,7 @@ class ConfigurationSyncE2ETest {
     assertEquals(0, snapshot.version());
     assertEquals(3, snapshot.dispatchMaxAttempts());
 
+    awaitEmailRoute(catalogPort);
     final WebTestClient client = clientFor(port);
     final Map<String, Object> delivered =
         awaitDelivered(client, acceptNotification(client, "sync-defaults-1"));
@@ -235,6 +255,7 @@ class ConfigurationSyncE2ETest {
         "the last known configuration was never persisted");
     assertEquals(1L, ((Number) storedLastKnown().get("version")).longValue());
 
+    awaitEmailRoute(catalogPort);
     final WebTestClient client = clientFor(port);
     final Map<String, Object> delivered =
         awaitDelivered(client, acceptNotification(client, "sync-resumed-1"));
@@ -259,6 +280,7 @@ class ConfigurationSyncE2ETest {
           ConfigurationSource.LAST_KNOWN,
           second.getBean(ConfigurationView.class).snapshot().source());
 
+      awaitEmailRoute(second.getBean(ChannelCatalogPort.class));
       final WebTestClient client =
           clientFor(
               Integer.parseInt(second.getEnvironment().getProperty("local.server.port", "0")));
@@ -362,16 +384,16 @@ class ConfigurationSyncE2ETest {
     return new SpringApplicationBuilder(
             NotificationServiceApplication.class, FakeParametersSourceConfig.class)
         .web(WebApplicationType.REACTIVE)
-        .properties(
-            "server.port=0",
-            "MONGO_USERNAME=test",
-            "MONGO_PASSWORD=test",
-            "spring.data.mongodb.uri=" + MONGO.getReplicaSetUrl(),
-            "spring.rabbitmq.host=" + RABBIT.getHost(),
-            "spring.rabbitmq.port=" + RABBIT.getAmqpPort(),
-            "spring.rabbitmq.username=" + RABBIT.getAdminUsername(),
-            "spring.rabbitmq.password=" + RABBIT.getAdminPassword(),
-            "notification.parameters.poll-interval-ms=1000")
-        .run();
+        .run(
+            "--server.port=0",
+            "--MONGO_USERNAME=test",
+            "--MONGO_PASSWORD=test",
+            "--spring.data.mongodb.uri=" + MONGO.getReplicaSetUrl(),
+            "--spring.rabbitmq.host=" + RABBIT.getHost(),
+            "--spring.rabbitmq.port=" + RABBIT.getAmqpPort(),
+            "--spring.rabbitmq.username=" + RABBIT.getAdminUsername(),
+            "--spring.rabbitmq.password=" + RABBIT.getAdminPassword(),
+            "--notification.catalog.refresh-interval-ms=500",
+            "--notification.parameters.poll-interval-ms=1000");
   }
 }

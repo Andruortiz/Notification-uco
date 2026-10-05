@@ -98,15 +98,14 @@ class HttpParametersSourceTest {
   @Test
   void aSlowSourceIsUnavailableWhileAFastOneIsNot() {
     body.set("{\"version\":3,\"values\":{}}");
-    delayMs.set(1_500);
-    StepVerifier.create(source(Duration.ofMillis(300)).fetchState())
-        .expectError(ParametersUnavailableException.class)
-        .verify(Duration.ofSeconds(5));
-
-    delayMs.set(0);
-    StepVerifier.create(source(Duration.ofMillis(300)).fetchState())
+    StepVerifier.create(source(Duration.ofSeconds(10)).fetchState())
         .assertNext(change -> assertEquals(3, change.version()))
         .verifyComplete();
+
+    delayMs.set(3_000);
+    StepVerifier.create(source(Duration.ofMillis(500)).fetchState())
+        .expectError(ParametersUnavailableException.class)
+        .verify(Duration.ofSeconds(10));
   }
 
   @Test

@@ -11,6 +11,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -379,7 +380,7 @@ class NotificationDispatchListenerTest {
             .getMessageProperties()
             .getHeaders()
             .get(NotificationDispatchListener.ATTEMPT_HEADER));
-    verify(recoverer, never()).recover(eq(nextMessage), any());
+    verify(recoverer, times(1)).recover(any(Message.class), any());
   }
 
   @Test

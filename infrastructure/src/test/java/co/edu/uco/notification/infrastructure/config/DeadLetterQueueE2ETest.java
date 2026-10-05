@@ -2,8 +2,12 @@ package co.edu.uco.notification.infrastructure.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
@@ -68,6 +72,28 @@ class DeadLetterQueueE2ETest {
             .get(RepublishMessageRecoverer.X_EXCEPTION_MESSAGE);
     assertNotNull(exceptionMessage, "el header de causa debe estar presente");
     assertTrue(exceptionMessage.toString().contains(poisonId.value()));
+    verify(dispatchNotificationUseCase, times(3)).dispatch(any());
+    assertEquals(2, deadLettered.getMessageProperties().getHeaders().get("x-dispatch-attempt"));
+    assertNull(rabbitTemplate.receive(properties.dispatch().queue(), 500));
+  }
+
+  @Test
+  void aMessageProcessedSuccessfullyIsAcknowledgedAndNeverReachesTheDeadLetterQueue() {
+    final NotificationId okId = NotificationId.newId();
+    when(dispatchNotificationUseCase.dispatch(any())).thenReturn(Mono.empty());
+
+    rabbitTemplate.convertAndSend(
+        properties.dispatch().exchange(),
+        properties.dispatch().routingKey(),
+        okId.value(),
+        message -> {
+          message.getMessageProperties().setMessageId(okId.value());
+          return message;
+        });
+
+    verify(dispatchNotificationUseCase, timeout(10_000).times(1)).dispatch(any());
+    assertNull(rabbitTemplate.receive(properties.dlq().queue(), 2_000));
+    assertNull(rabbitTemplate.receive(properties.dispatch().queue(), 500));
   }
 
   @Test

@@ -1,9 +1,13 @@
 package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
+import static java.util.stream.Collectors.toSet;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -22,8 +26,11 @@ import co.edu.uco.notification.utils.CorrelationId;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.bson.Document;
 import org.bson.types.Binary;
 import org.junit.jupiter.api.BeforeEach;
@@ -34,10 +41,17 @@ import org.springframework.boot.test.autoconfigure.data.mongo.DataMongoTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.index.CompoundIndexDefinition;
+import org.springframework.data.mongodb.core.index.MongoPersistentEntityIndexResolver;
+import org.springframework.data.mongodb.core.mapping.MongoMappingContext;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 
 @DataMongoTest(properties = {"MONGO_USERNAME=test", "MONGO_PASSWORD=test"})
@@ -48,6 +62,8 @@ class NotificationMongoAdapterTest {
   static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7.0");
 
   @Autowired private ReactiveMongoTemplate mongoTemplate;
+
+  @Autowired private MongoMappingContext mappingContext;
 
   private NotificationMongoAdapter adapter;
 
@@ -174,7 +190,12 @@ class NotificationMongoAdapterTest {
     when(eventPublisherPort.enqueueForDispatch(any())).thenReturn(Mono.empty());
     final RequeuePendingNotificationsService service =
         new RequeuePendingNotificationsService(
-            adapter, eventPublisherPort, new RetryPolicy(), Duration.ofSeconds(60));
+            adapter,
+            eventPublisherPort,
+            new RetryPolicy(),
+            Duration.ofSeconds(60),
+            Duration.ofMinutes(10),
+            100);
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
@@ -199,12 +220,212 @@ class NotificationMongoAdapterTest {
     when(eventPublisherPort.enqueueForDispatch(any())).thenReturn(Mono.empty());
     final RequeuePendingNotificationsService service =
         new RequeuePendingNotificationsService(
-            adapter, eventPublisherPort, new RetryPolicy(), Duration.ofSeconds(60));
+            adapter,
+            eventPublisherPort,
+            new RetryPolicy(),
+            Duration.ofSeconds(60),
+            Duration.ofMinutes(10),
+            100);
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
     verify(eventPublisherPort).enqueueForDispatch(orphaned);
     verify(eventPublisherPort, never()).enqueueForDispatch(recentlyAccepted);
+  }
+
+  @Test
+  void reserveForDispatchIsAtomicAndExactlyOneOfManyConcurrentCallsWins() {
+    final Notification saved = adapter.save(aNotification("order-reserve")).block();
+
+    final List<Notification> winners =
+        Flux.range(0, 20)
+            .flatMap(
+                i ->
+                    adapter
+                        .reserveForDispatch(saved.notificationId())
+                        .subscribeOn(Schedulers.parallel()))
+            .collectList()
+            .block();
+
+    assertEquals(1, winners.size());
+    final Notification reserved = winners.getFirst();
+    assertEquals(NotificationStatus.IN_PROCESS, reserved.status());
+    assertNotNull(reserved.dispatchReservedAt());
+    assertEquals(saved.version() + 1, reserved.version());
+    StepVerifier.create(adapter.findById(saved.notificationId()))
+        .assertNext(found -> assertEquals(NotificationStatus.IN_PROCESS, found.status()))
+        .verifyComplete();
+  }
+
+  @Test
+  void reserveForDispatchReturnsEmptyUnlessTheNotificationIsPending() {
+    final Notification pending = adapter.save(aNotification("order-reserve-control")).block();
+    final Notification delivered = adapter.save(aNotification("order-reserve-delivered")).block();
+    delivered.markQueued();
+    delivered.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    final Notification persistedDelivered = adapter.save(delivered).block();
+
+    StepVerifier.create(adapter.reserveForDispatch(pending.notificationId()))
+        .assertNext(found -> assertEquals(NotificationStatus.IN_PROCESS, found.status()))
+        .verifyComplete();
+    StepVerifier.create(adapter.reserveForDispatch(pending.notificationId())).verifyComplete();
+    StepVerifier.create(adapter.reserveForDispatch(persistedDelivered.notificationId()))
+        .verifyComplete();
+    StepVerifier.create(adapter.reserveForDispatch(NotificationId.newId())).verifyComplete();
+  }
+
+  @Test
+  void theInstanceReturnedByTheReservationCanBeSavedWithoutAFalseVersionConflict() {
+    final Notification saved = adapter.save(aNotification("order-reserve-save")).block();
+    final Notification reserved = adapter.reserveForDispatch(saved.notificationId()).block();
+
+    reserved.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    final Notification persisted = adapter.save(reserved).block();
+
+    assertEquals(NotificationStatus.DELIVERED, persisted.status());
+    assertNull(persisted.dispatchReservedAt());
+    assertEquals(1, persisted.deliveryAttempts().size());
+  }
+
+  @Test
+  void releaseReservationReturnsAnInProcessNotificationToPendingAndClearsTheReservation() {
+    final Notification saved = adapter.save(aNotification("order-release")).block();
+    final Notification reserved = adapter.reserveForDispatch(saved.notificationId()).block();
+
+    StepVerifier.create(adapter.releaseReservation(saved.notificationId()))
+        .assertNext(
+            released -> {
+              assertEquals(NotificationStatus.PENDING, released.status());
+              assertNull(released.dispatchReservedAt());
+              assertFalse(released.pendingSince().isBefore(reserved.dispatchReservedAt()));
+              assertEquals(reserved.version() + 1, released.version());
+              assertTrue(released.deliveryAttempts().isEmpty());
+            })
+        .verifyComplete();
+    StepVerifier.create(adapter.releaseReservation(saved.notificationId())).verifyComplete();
+    StepVerifier.create(adapter.reserveForDispatch(saved.notificationId()))
+        .assertNext(again -> assertEquals(NotificationStatus.IN_PROCESS, again.status()))
+        .verifyComplete();
+  }
+
+  @Test
+  void claimForRequeueTakesEachOrphanOnceEvenWithConcurrentClaimsAndSkipsRecentOnes() {
+    final Instant old = Instant.now().minusSeconds(300);
+    final Set<String> orphanIds = new HashSet<>();
+    for (int i = 0; i < 5; i++) {
+      orphanIds.add(
+          adapter
+              .save(pendingOrphanNotification("order-claim-" + i, old))
+              .block()
+              .notificationId()
+              .value());
+    }
+    final Notification recent =
+        adapter.save(pendingOrphanNotification("order-claim-recent", Instant.now())).block();
+    final Instant threshold = Instant.now().minusSeconds(60);
+
+    final List<Notification> claimed =
+        Flux.merge(
+                adapter.claimForRequeue(threshold, 10).subscribeOn(Schedulers.parallel()),
+                adapter.claimForRequeue(threshold, 10).subscribeOn(Schedulers.parallel()),
+                adapter.claimForRequeue(threshold, 10).subscribeOn(Schedulers.parallel()))
+            .collectList()
+            .block();
+
+    assertEquals(5, claimed.size());
+    assertEquals(orphanIds, claimed.stream().map(n -> n.notificationId().value()).collect(toSet()));
+    assertFalse(claimed.stream().anyMatch(n -> n.notificationId().equals(recent.notificationId())));
+    claimed.forEach(n -> assertTrue(n.pendingSince().isAfter(old)));
+    StepVerifier.create(adapter.claimForRequeue(threshold, 10)).verifyComplete();
+  }
+
+  @Test
+  void claimForRequeueRespectsTheLimit() {
+    final Instant old = Instant.now().minusSeconds(300);
+    for (int i = 0; i < 5; i++) {
+      adapter.save(pendingOrphanNotification("order-limit-" + i, old)).block();
+    }
+
+    StepVerifier.create(adapter.claimForRequeue(Instant.now().minusSeconds(60), 2).collectList())
+        .assertNext(claimed -> assertEquals(2, claimed.size()))
+        .verifyComplete();
+    StepVerifier.create(adapter.claimForRequeue(Instant.now().minusSeconds(60), 10).collectList())
+        .assertNext(claimed -> assertEquals(3, claimed.size()))
+        .verifyComplete();
+  }
+
+  @Test
+  void claimForRequeueFallsBackToAcceptedAtForADocumentWithoutPendingSince() {
+    final Notification legacy =
+        adapter
+            .save(pendingOrphanNotification("order-legacy", Instant.now().minusSeconds(300)))
+            .block();
+    mongoTemplate
+        .updateFirst(
+            Query.query(Criteria.where("_id").is(legacy.notificationId().value())),
+            new Update().unset("pendingSince"),
+            NotificationDocument.class)
+        .block();
+    final Notification recentLegacy =
+        adapter.save(pendingOrphanNotification("order-legacy-recent", Instant.now())).block();
+    mongoTemplate
+        .updateFirst(
+            Query.query(Criteria.where("_id").is(recentLegacy.notificationId().value())),
+            new Update().unset("pendingSince"),
+            NotificationDocument.class)
+        .block();
+
+    StepVerifier.create(adapter.claimForRequeue(Instant.now().minusSeconds(60), 10).collectList())
+        .assertNext(
+            claimed -> {
+              assertEquals(1, claimed.size());
+              assertEquals(legacy.notificationId(), claimed.getFirst().notificationId());
+            })
+        .verifyComplete();
+  }
+
+  @Test
+  void claimStuckInProcessMovesOnlyOldReservationsToRecoverable() {
+    final Notification stuck = adapter.save(aNotification("order-stuck")).block();
+    final Notification fresh = adapter.save(aNotification("order-fresh")).block();
+    adapter.reserveForDispatch(stuck.notificationId()).block();
+    adapter.reserveForDispatch(fresh.notificationId()).block();
+    mongoTemplate
+        .updateFirst(
+            Query.query(Criteria.where("_id").is(stuck.notificationId().value())),
+            new Update().set("dispatchReservedAt", Instant.now().minusSeconds(1200)),
+            NotificationDocument.class)
+        .block();
+
+    StepVerifier.create(adapter.claimStuckInProcess(Instant.now().minusSeconds(600), 10))
+        .assertNext(
+            claimed -> {
+              assertEquals(stuck.notificationId(), claimed.notificationId());
+              assertEquals(NotificationStatus.RECOVERABLE, claimed.status());
+              assertNull(claimed.dispatchReservedAt());
+            })
+        .verifyComplete();
+    StepVerifier.create(adapter.findById(fresh.notificationId()))
+        .assertNext(found -> assertEquals(NotificationStatus.IN_PROCESS, found.status()))
+        .verifyComplete();
+    StepVerifier.create(adapter.claimStuckInProcess(Instant.now().minusSeconds(600), 10))
+        .verifyComplete();
+  }
+
+  @Test
+  void theStatusAndPendingSinceCompoundIndexIsDeclared() {
+    final List<String> names = new ArrayList<>();
+    new MongoPersistentEntityIndexResolver(mappingContext)
+        .resolveIndexFor(NotificationDocument.class)
+        .forEach(
+            holder -> {
+              final Document keys = holder.getIndexKeys();
+              if (keys.containsKey("status") && keys.containsKey("pendingSince")) {
+                names.add(String.valueOf(holder.getIndexOptions().get("name")));
+              }
+            });
+
+    assertEquals(List.of("status_pendingSince"), names);
   }
 
   private static Notification pendingOrphanNotification(
@@ -406,6 +627,9 @@ class NotificationMongoAdapterTest {
                 NotificationStatus.PENDING,
                 Instant.now(),
                 List.of(),
+                null,
+                null,
+                null,
                 null,
                 null))
         .block();

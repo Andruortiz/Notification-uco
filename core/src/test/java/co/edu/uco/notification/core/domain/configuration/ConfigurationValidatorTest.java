@@ -162,6 +162,39 @@ class ConfigurationValidatorTest {
   }
 
   @Test
+  void startupValidationToleratesAChannelWithoutAnEnabledProviderAndReportsItAsAWarning() {
+    final Map<String, Map<String, Long>> limits = fixed().contentLimitsByChannel();
+    final FixedConfiguration noSmsProvider =
+        fixedWith(
+            Map.of("EMAIL", Set.of("simulated"), "SMS", Set.of(), "PUSH", Set.of("fcm")),
+            10_000,
+            3,
+            3_600_000,
+            limits);
+
+    final ValidationResult startup = validator.validateAtStartup(defaults(), noSmsProvider);
+    final List<String> warnings = validator.startupWarnings(defaults(), noSmsProvider);
+
+    assertTrue(startup.isValid(), startup.summary());
+    assertEquals(1, warnings.size());
+    assertTrue(warnings.get(0).contains("ChannelHasEnabledProviderRule"));
+    assertTrue(warnings.get(0).contains("SMS"));
+    assertTrue(validator.startupWarnings(defaults(), fixed()).isEmpty());
+  }
+
+  @Test
+  void startupValidationStillRejectsTheNumericCoherenceRules() {
+    final Map<String, Set<String>> channels = fixed().enabledProvidersByChannel();
+    final Map<String, Map<String, Long>> limits = fixed().contentLimitsByChannel();
+
+    final ValidationResult startup =
+        validator.validateAtStartup(defaults(), fixedWith(channels, 10_000, 3, 30_000, limits));
+
+    assertFalse(startup.isValid());
+    assertTrue(startup.summary().contains("AttachmentSweepWindowRule"));
+  }
+
+  @Test
   void rejectsAChannelContentLimitAboveWhatItsProviderAccepts() {
     final Map<String, Set<String>> channels = fixed().enabledProvidersByChannel();
 

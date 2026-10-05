@@ -12,6 +12,11 @@ public final class ChannelHasEnabledProviderRule implements CrossParameterRule {
   }
 
   @Override
+  public boolean blocksStartup() {
+    return false;
+  }
+
+  @Override
   public Optional<String> violation(
       final Map<String, Long> values, final FixedConfiguration fixed) {
     final List<String> channelsWithoutProvider =

@@ -50,11 +50,18 @@ public final class ConfigurationValidator {
                 candidate.put(key, descriptor.asInteger(raw).orElseThrow());
               }
             });
-    return new ValidationResult(ruleViolations(candidate, fixed));
+    return new ValidationResult(ruleViolations(candidate, fixed, false));
   }
 
   public ValidationResult validate(
       final ConfigurationSnapshot candidate, final FixedConfiguration fixed) {
+    return validate(candidate, fixed, false);
+  }
+
+  private ValidationResult validate(
+      final ConfigurationSnapshot candidate,
+      final FixedConfiguration fixed,
+      final boolean startupOnly) {
     final List<String> violations = new ArrayList<>(entryViolations(asObjects(candidate), fixed));
     registry.descriptors().stream()
         .map(ParameterDescriptor::key)
@@ -62,9 +69,26 @@ public final class ConfigurationValidator {
         .sorted()
         .forEach(key -> violations.add(key + " has no value"));
     if (violations.isEmpty()) {
-      violations.addAll(ruleViolations(candidate.values(), fixed));
+      violations.addAll(ruleViolations(candidate.values(), fixed, startupOnly));
     }
     return new ValidationResult(violations);
+  }
+
+  public ValidationResult validateAtStartup(
+      final ConfigurationSnapshot candidate, final FixedConfiguration fixed) {
+    return validate(candidate, fixed, true);
+  }
+
+  public List<String> startupWarnings(
+      final ConfigurationSnapshot candidate, final FixedConfiguration fixed) {
+    final List<String> warnings = new ArrayList<>();
+    for (final CrossParameterRule rule : rules) {
+      if (!rule.blocksStartup()) {
+        rule.violation(candidate.values(), fixed)
+            .ifPresent(detail -> warnings.add(rule.name() + ": " + detail));
+      }
+    }
+    return warnings;
   }
 
   private static Map<String, Object> asObjects(final ConfigurationSnapshot candidate) {
@@ -116,9 +140,12 @@ public final class ConfigurationValidator {
   }
 
   private List<String> ruleViolations(
-      final Map<String, Long> values, final FixedConfiguration fixed) {
+      final Map<String, Long> values, final FixedConfiguration fixed, final boolean startupOnly) {
     final List<String> violations = new ArrayList<>();
     for (final CrossParameterRule rule : rules) {
+      if (startupOnly && !rule.blocksStartup()) {
+        continue;
+      }
       rule.violation(values, fixed)
           .ifPresent(detail -> violations.add(rule.name() + ": " + detail));
     }

@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -10,12 +11,12 @@ import co.edu.uco.notification.core.domain.configuration.ConfigurationSource;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationValidator;
 import co.edu.uco.notification.core.domain.configuration.FixedConfiguration;
 import co.edu.uco.notification.core.domain.configuration.ParameterRegistry;
+import co.edu.uco.notification.core.domain.configuration.ValidationResult;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.in.RestoreLastKnownConfigurationUseCase;
 import co.edu.uco.notification.core.port.out.LastKnownConfigurationPort;
 import co.edu.uco.notification.core.usecase.ConfigurationHolder;
 import co.edu.uco.notification.core.usecase.RestoreLastKnownConfigurationService;
-import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersProperties;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -194,7 +195,7 @@ class ConfigurationStartupTest {
   }
 
   @Test
-  void defaultsThatLeaveAChannelWithoutAnEnabledProviderFailTheStartupNamingTheRule() {
+  void defaultsThatLeaveAChannelWithoutAnEnabledProviderStartAndAreStillRejectedWhenPublished() {
     runner
         .withPropertyValues(
             properties(
@@ -202,9 +203,18 @@ class ConfigurationStartupTest {
                 "notification.provider.twilio.auth-token="))
         .run(
             context -> {
-              final String messages = failureMessages(context);
-              assertTrue(messages.contains("ChannelHasEnabledProviderRule"), messages);
-              assertTrue(messages.contains("SMS"), messages);
+              assertNull(context.getStartupFailure());
+              final ConfigurationSnapshot snapshot =
+                  context.getBean(ConfigurationView.class).snapshot();
+              assertEquals(ConfigurationSource.DEFAULTS, snapshot.source());
+              final ValidationResult published =
+                  context
+                      .getBean(ConfigurationValidator.class)
+                      .validate(snapshot, context.getBean(FixedConfiguration.class));
+              assertFalse(published.isValid());
+              assertTrue(
+                  published.summary().contains("ChannelHasEnabledProviderRule"),
+                  published.summary());
             });
   }
 

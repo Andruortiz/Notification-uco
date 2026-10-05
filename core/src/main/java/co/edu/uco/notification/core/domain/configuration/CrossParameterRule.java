@@ -7,5 +7,9 @@ public interface CrossParameterRule {
 
   String name();
 
+  default boolean blocksStartup() {
+    return true;
+  }
+
   Optional<String> violation(Map<String, Long> values, FixedConfiguration fixed);
 }

@@ -177,3 +177,4 @@ El estado de aprobación del plan sigue siendo el del encabezado.
 | Q3 | Se implementa la tabla `ProviderContentLimits` con los valores de la documentación pública de Brevo, Twilio y FCM; los valores deben confirmarse antes de producción. | research D8 y sección de límites |
 | Q4 | Se aceptan los rangos de data-model.md como punto de partida. | data-model.md |
 | Q5 | Las reglas (b), (c) y (d) se prueban con pruebas unitarias sobre instantáneas sintéticas y una prueba de arranque fallido; la regla (a) con E2E. | research D8; quickstart.md |
+| Q6 | En el arranque, la regla (c) `ChannelHasEnabledProviderRule` solo genera una advertencia (WARN) y no impide arrancar; las demás reglas siguen bloqueando el arranque y todas rechazan cambios publicados. Desviación de FR-019 para respetar HU2-046 (proveedor deshabilitado, notificación a la DLQ). | tasks.md T018 y T020 |

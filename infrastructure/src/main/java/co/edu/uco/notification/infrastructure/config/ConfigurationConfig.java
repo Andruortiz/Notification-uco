@@ -10,9 +10,6 @@ import co.edu.uco.notification.core.domain.configuration.ValidationResult;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.in.RestoreLastKnownConfigurationUseCase;
 import co.edu.uco.notification.core.usecase.ConfigurationHolder;
-import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogProperties;
-import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersProperties;
-import co.edu.uco.notification.infrastructure.adapter.out.provider.ProviderContentLimits;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
@@ -155,11 +152,14 @@ public class ConfigurationConfig {
     final ConfigurationSnapshot defaults =
         new ConfigurationSnapshot(
             0, ConfigurationSource.DEFAULTS, values, clock.instant(), Set.of());
-    final ValidationResult validation = validator.validate(defaults, fixed);
+    final ValidationResult validation = validator.validateAtStartup(defaults, fixed);
     if (!validation.isValid()) {
       throw new IllegalStateException(
           "Default configuration violates the validation rules: " + validation.summary());
     }
+    validator
+        .startupWarnings(defaults, fixed)
+        .forEach(warning -> LOG.warn("default configuration rule not met warning={}", warning));
     return new ConfigurationHolder(defaults);
   }
 

@@ -251,8 +251,10 @@ expone y que cada evento queda registrado con su resultado y su identificador de
   contenido de un canal no superan lo que acepta su proveedor.
 - **FR-018**: Si la última configuración conocida persistida no supera la validación vigente, el sistema
   MUST descartarla, registrarlo y usar los valores por defecto.
-- **FR-019**: Si los valores por defecto incumplen alguna regla de validación, el sistema MUST fallar el
-  arranque con un mensaje que identifique la regla.
+- **FR-019**: Si los valores por defecto incumplen alguna regla numérica de coherencia entre parámetros, el
+  sistema MUST fallar el arranque con un mensaje que identifique la regla. La regla (c) (canal sin
+  proveedor habilitado) no impide el arranque: se registra como advertencia, porque un proveedor sin
+  credenciales es un estado válido; los cambios publicados se siguen rechazando por todas las reglas.
 
 **Observabilidad**
 

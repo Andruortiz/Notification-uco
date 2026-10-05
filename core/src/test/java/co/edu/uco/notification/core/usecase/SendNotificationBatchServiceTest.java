@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -236,8 +237,9 @@ class SendNotificationBatchServiceTest {
 
   @Test
   void sendBatchReturnsTrackingSavedFalseAndLogsAnErrorWhenPersistingTheBatchRecordFails() {
-    when(notificationBatchRepository.save(any(), any()))
-        .thenReturn(Mono.error(new IllegalStateException("mongo is unreachable")));
+    doReturn(Mono.error(new IllegalStateException("mongo is unreachable")))
+        .when(notificationBatchRepository)
+        .save(any(), any());
     final BatchNotificationItem accepted = item("order-1");
     final NotificationId acceptedId = NotificationId.newId();
     when(sendNotificationUseCase.send(toCommand(accepted)))
@@ -324,7 +326,7 @@ class SendNotificationBatchServiceTest {
         new BatchAcceptedResult(
             BatchId.of("batch-1"),
             List.of(BatchItemResult.accepted(ExternalId.of("order-1"), NotificationId.newId())));
-    when(notificationBatchRepository.save(any(), any())).thenReturn(Mono.just(winner));
+    doReturn(Mono.just(winner)).when(notificationBatchRepository).save(any(), any());
     final BatchNotificationItem accepted = item("order-1");
     when(sendNotificationUseCase.send(toCommand(accepted)))
         .thenReturn(

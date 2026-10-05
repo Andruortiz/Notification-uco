@@ -8,12 +8,15 @@ import co.edu.uco.notification.core.domain.configuration.ParameterDescriptor;
 import co.edu.uco.notification.core.domain.configuration.ParameterRegistry;
 import co.edu.uco.notification.core.domain.configuration.ValidationResult;
 import co.edu.uco.notification.core.port.in.RestoreLastKnownConfigurationUseCase;
+import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.usecase.ConfigurationHolder;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogProperties;
 import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersProperties;
 import co.edu.uco.notification.infrastructure.adapter.out.provider.ProviderContentLimits;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.binder.MeterBinder;
 import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
@@ -51,6 +54,7 @@ public class ConfigurationConfig {
   private static final String FCM = "fcm";
   private static final Duration DEFAULT_SCAN_TIMEOUT = Duration.ofSeconds(10);
   private static final int DEFAULT_SCAN_MAX_ATTEMPTS = 3;
+  public static final String VERSION_METRIC = "notification.configuration.version";
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final Duration STARTUP_RESTORE_MARGIN = Duration.ofSeconds(1);
   private static final Logger LOG = LoggerFactory.getLogger(ConfigurationConfig.class);
@@ -176,6 +180,21 @@ public class ConfigurationConfig {
         LOG.warn(
             "last known configuration could not be restored reason={}",
             exception.getClass().getSimpleName());
+      }
+    };
+  }
+
+  @Bean
+  MeterBinder configurationVersionMetric(final ConfigurationView configurationView) {
+    return registry -> {
+      for (final ConfigurationSource source : ConfigurationSource.values()) {
+        Gauge.builder(
+                VERSION_METRIC,
+                configurationView,
+                view -> view.snapshot().source() == source ? view.snapshot().version() : 0)
+            .tag("source", source.name())
+            .description("Version of the configuration in use by this replica")
+            .register(registry);
       }
     };
   }

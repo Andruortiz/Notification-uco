@@ -14,7 +14,7 @@ primeros son incompatibles con el contrato vigente en el caso indicado.
 | `SendNotificationBatchRequest.items` | Añadir `maxItems: 500` (hoy solo `minItems: 1`) |
 | `400.description` | Incluir "más de 500 elementos"; se rechaza completo sin procesar ningún elemento |
 | `BatchAcceptedResponse.trackingSaved` | Campo nuevo, booleano obligatorio. `true` si el registro del lote quedó guardado o ya existía; `false` si el guardado falló y el seguimiento del lote no está disponible |
-| `description` | Un reenvío con el mismo `batchId` del mismo tenant no reprocesa los elementos: devuelve el resultado original |
+| `description` | Un reenvío con el mismo `batchId` del mismo tenant devuelve el resultado original solo si el registro del lote quedó guardado; si el guardado falló (`trackingSaved=false`) no hay registro y el reenvío vuelve a procesar los elementos (la deduplicación por `externalId` evita duplicar notificaciones) |
 | `BatchItemResult.rejectionReason` | Para `outcome: FAILED` el valor es siempre `Internal error`; los motivos de rechazo de negocio conservan su texto |
 
 Compatibilidad: `trackingSaved` es aditivo. El tope es incompatible solo para quien envíe más de 500

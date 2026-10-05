@@ -140,6 +140,43 @@ class NotificationBatchControllerTest {
   }
 
   @Test
+  void sendBatchExposesOnlyTheFixedReasonForFailedItemsAndKeepsBusinessRejectionMessage() {
+    final String sentinel = "SENTINEL-mongo-host-10.0.0.7-secret";
+    when(sendNotificationBatchUseCase.sendBatch(any()))
+        .thenReturn(
+            Mono.just(
+                new BatchAcceptedResult(
+                    BatchId.of("batch-1"),
+                    List.of(
+                        BatchItemResult.failed(ExternalId.of("order-1")),
+                        BatchItemResult.rejected(
+                            ExternalId.of("order-2"), "Channel FAX is not available")))));
+
+    final String body =
+        new String(
+            post("{\"batchId\": \"batch-1\", \"items\": [" + VALID_ITEM + "]}")
+                .expectStatus()
+                .isEqualTo(HttpStatus.ACCEPTED)
+                .expectBody()
+                .jsonPath("$.results[0].outcome")
+                .isEqualTo("FAILED")
+                .jsonPath("$.results[0].notificationId")
+                .doesNotExist()
+                .jsonPath("$.results[0].rejectionReason")
+                .isEqualTo("Internal error")
+                .jsonPath("$.results[1].outcome")
+                .isEqualTo("REJECTED")
+                .jsonPath("$.results[1].rejectionReason")
+                .isEqualTo("Channel FAX is not available")
+                .returnResult()
+                .getResponseBody(),
+            java.nio.charset.StandardCharsets.UTF_8);
+
+    assertEquals(false, body.contains(sentinel));
+    assertEquals(false, body.contains("IllegalStateException"));
+  }
+
+  @Test
   void sendBatchTranslatesTheRequestIntoTheCommand() {
     when(sendNotificationBatchUseCase.sendBatch(any()))
         .thenReturn(

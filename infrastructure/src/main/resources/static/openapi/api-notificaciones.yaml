@@ -287,7 +287,9 @@ paths:
         ejemplo el escaner de adjuntos no responde) queda como FAILED en vez de tumbar el lote
         completo; su motivo es siempre "Internal error". Los resultados vienen en el mismo orden de
         los elementos de la solicitud. Un lote admite hasta 500 elementos. Un reenvío con el mismo
-        batchId del mismo tenant no reprocesa los elementos: devuelve el resultado original.
+        batchId del mismo tenant devuelve el resultado original solo si el registro del lote quedó
+        guardado; si el guardado falló (trackingSaved=false) no hay registro y el reenvío vuelve a
+        procesar los elementos (la deduplicación por externalId evita duplicar notificaciones).
       operationId: sendNotificationBatch
       requestBody:
         required: true

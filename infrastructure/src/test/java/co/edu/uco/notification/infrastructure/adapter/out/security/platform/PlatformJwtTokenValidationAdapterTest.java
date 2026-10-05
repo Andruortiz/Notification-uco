@@ -249,4 +249,38 @@ class PlatformJwtTokenValidationAdapterTest {
 
     assertThrows(IllegalStateException.class, () -> new PlatformJwtTokenValidationAdapter(invalid));
   }
+
+  @Test
+  void rejectsATokenWithoutExpirationAndReportsTheReasonAndTheTenant() {
+    final String noExpiration =
+        Jwts.builder()
+            .subject("user-1")
+            .claim("tenantId", "tenant-a")
+            .claim("role", "OPERADOR")
+            .signWith(platformKeys.getPrivate(), Jwts.SIG.RS256)
+            .compact();
+
+    StepVerifier.create(adapter(defaults()).validate(noExpiration))
+        .expectErrorSatisfies(
+            error -> {
+              final InvalidTokenException rejected = (InvalidTokenException) error;
+              assertEquals(InvalidTokenException.Reason.MISSING_EXPIRATION, rejected.reason());
+              assertEquals("tenant-a", rejected.tenantId());
+            })
+        .verify();
+  }
+
+  @Test
+  void reportsAnUnknownRoleTogetherWithTheTenantOfTheToken() {
+    final String token = token(platformKeys).claim("role", "NOT-A-ROLE").compact();
+
+    StepVerifier.create(adapter(defaults()).validate(token))
+        .expectErrorSatisfies(
+            error -> {
+              final InvalidTokenException rejected = (InvalidTokenException) error;
+              assertEquals(InvalidTokenException.Reason.UNKNOWN_ROLE, rejected.reason());
+              assertEquals("tenant-a", rejected.tenantId());
+            })
+        .verify();
+  }
 }

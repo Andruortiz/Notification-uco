@@ -36,6 +36,9 @@ target/
 # Environment
 .env
 
+# Script local para emitir tokens de desarrollo: exige AUTH_JWT_HS256_SECRET y no se versiona
+token.mjs
+
 # Credenciales de prueba (claves de cuenta de servicio, etc.) - nunca versionadas
 secrets/
 

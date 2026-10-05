@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.in.web;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ch.qos.logback.classic.Logger;
@@ -284,6 +285,128 @@ class AuthenticationWebFilterTest {
     StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
 
     assertTrue(chainInvoked.get());
+  }
+
+  @Test
+  void anErrorRaisedDownstreamAfterAuthenticationIsNotTreatedAsACredentialRejection() {
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      final String token =
+          issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
+      final ServerWebExchange exchange =
+          exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer " + token);
+      final WebFilterChain failingChain =
+          chainExchange -> Mono.error(new IllegalStateException("downstream failure"));
+
+      StepVerifier.create(filter.filter(exchange, failingChain))
+          .expectError(IllegalStateException.class)
+          .verify();
+
+      assertNull(exchange.getResponse().getStatusCode());
+      assertTrue(
+          lines(logs).stream()
+              .noneMatch(line -> line.contains("Request rejected by authentication")));
+    } finally {
+      release(logs);
+    }
+  }
+
+  @Test
+  void anInvalidTokenIsStillRejectedWithUnauthorizedAndLogged() {
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      final ServerWebExchange exchange =
+          exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer not-a-jwt");
+
+      StepVerifier.create(filter.filter(exchange, recordingChain(new AtomicBoolean())))
+          .verifyComplete();
+
+      assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
+      assertTrue(
+          lines(logs).stream()
+              .anyMatch(line -> line.contains("Request rejected by authentication")));
+    } finally {
+      release(logs);
+    }
+  }
+
+  @Test
+  void routesThatOnlyShareAPrefixWithAnExemptionRequireAuthentication() {
+    for (final String path :
+        List.of("/actuatorX", "/openapiX", "/swagger-uiX", "/v3/api-docsX", "/actuator-private")) {
+      final ServerWebExchange exchange = exchange(HttpMethod.GET, path);
+      final AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+      StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
+
+      assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode(), path);
+      assertFalse(chainInvoked.get(), path);
+    }
+  }
+
+  @Test
+  void exemptsTheDocumentationAndHealthRoutesBySegment() {
+    for (final String path :
+        List.of(
+            "/actuator",
+            "/actuator/health/liveness",
+            "/openapi/api-notificaciones.yaml",
+            "/swagger-ui.html",
+            "/swagger-ui/index.html",
+            "/v3/api-docs/swagger-config")) {
+      final ServerWebExchange exchange = exchange(HttpMethod.GET, path);
+      final AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+      StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
+
+      assertTrue(chainInvoked.get(), path);
+    }
+  }
+
+  @Test
+  void rejectionsOfVerifiedTokensAreLoggedWithTheirReasonAndTheTenant() {
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      final String unknownRole =
+          Jwts.builder()
+              .subject("client-1")
+              .claim("tenantId", "tenant-a")
+              .claim("role", "SUPERADMIN")
+              .expiration(new Date(System.currentTimeMillis() + 60_000))
+              .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
+              .compact();
+      final String wrongTenantType =
+          Jwts.builder()
+              .subject("client-1")
+              .claim("tenantId", 42)
+              .claim("role", "CLIENTE")
+              .expiration(new Date(System.currentTimeMillis() + 60_000))
+              .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
+              .compact();
+      final String noExpiration =
+          Jwts.builder()
+              .subject("client-1")
+              .claim("tenantId", "tenant-b")
+              .claim("role", "CLIENTE")
+              .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
+              .compact();
+      for (final String token : List.of(unknownRole, wrongTenantType, noExpiration)) {
+        StepVerifier.create(
+                filter.filter(
+                    exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer " + token),
+                    recordingChain(new AtomicBoolean())))
+            .verifyComplete();
+      }
+
+      final List<String> lines = lines(logs);
+      assertTrue(
+          lines.stream().anyMatch(l -> l.contains("UNKNOWN_ROLE") && l.contains("tenant-a")));
+      assertTrue(lines.stream().anyMatch(l -> l.contains("MISSING_CLAIMS")));
+      assertTrue(
+          lines.stream().anyMatch(l -> l.contains("MISSING_EXPIRATION") && l.contains("tenant-b")));
+    } finally {
+      release(logs);
+    }
   }
 
   private static ServerWebExchange exchange(final HttpMethod method, final String path) {

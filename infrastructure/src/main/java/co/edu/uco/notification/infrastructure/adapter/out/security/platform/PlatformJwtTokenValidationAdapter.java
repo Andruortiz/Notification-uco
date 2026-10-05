@@ -5,6 +5,7 @@ import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.InvalidTokenException;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
+import co.edu.uco.notification.infrastructure.adapter.out.security.JwtFailures;
 import co.edu.uco.notification.infrastructure.config.AuthPlatformProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -94,24 +95,30 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
     try {
       return parser.parseSignedClaims(rawToken).getPayload();
     } catch (final JwtException | IllegalArgumentException e) {
-      throw new InvalidTokenException("invalid token", e);
+      throw JwtFailures.toInvalidToken(e, properties.tenantClaim());
     }
   }
 
   private AuthenticatedPrincipal toPrincipal(final Claims claims) {
-    final String subject = claims.get(properties.subjectClaim(), String.class);
-    final String tenant = claims.get(properties.tenantClaim(), String.class);
-    if (!hasText(subject) || !hasText(tenant)) {
-      throw new InvalidTokenException("missing required claims");
+    final String tenantHint = JwtFailures.tenantOf(claims, properties.tenantClaim());
+    if (claims.getExpiration() == null) {
+      throw new InvalidTokenException(
+          "missing expiration", InvalidTokenException.Reason.MISSING_EXPIRATION, tenantHint, null);
     }
-    return new AuthenticatedPrincipal(subject, TenantId.of(tenant), resolveRole(claims));
+    final Object subject = claims.get(properties.subjectClaim());
+    if (!(subject instanceof String subjectText) || !hasText(subjectText) || tenantHint == null) {
+      throw new InvalidTokenException(
+          "missing required claims", InvalidTokenException.Reason.MISSING_CLAIMS, tenantHint, null);
+    }
+    return new AuthenticatedPrincipal(
+        subjectText, TenantId.of(tenantHint), resolveRole(claims, tenantHint));
   }
 
   /**
    * El claim de rol puede ser un texto o una lista. Cada valor se traduce con la tabla de roles y,
    * si hay varios validos, gana el de mayor privilegio.
    */
-  private Role resolveRole(final Claims claims) {
+  private Role resolveRole(final Claims claims, final String tenantHint) {
     final Object claim = claims.get(properties.roleClaim());
     final Stream<?> values =
         claim instanceof Collection<?> collection ? collection.stream() : Stream.ofNullable(claim);
@@ -121,7 +128,10 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
         .map(this::translate)
         .flatMap(Optional::stream)
         .min(Comparator.comparingInt(Role::ordinal))
-        .orElseThrow(() -> new InvalidTokenException("unknown role"));
+        .orElseThrow(
+            () ->
+                new InvalidTokenException(
+                    "unknown role", InvalidTokenException.Reason.UNKNOWN_ROLE, tenantHint, null));
   }
 
   private Optional<Role> translate(final String external) {

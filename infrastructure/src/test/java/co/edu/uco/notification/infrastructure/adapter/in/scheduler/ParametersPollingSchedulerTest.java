@@ -12,6 +12,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationChange;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationChangeOutcome;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationSource;
@@ -26,6 +29,7 @@ import co.edu.uco.notification.core.usecase.ConfigurationHolder;
 import co.edu.uco.notification.core.usecase.SynchronizeConfigurationService;
 import co.edu.uco.notification.infrastructure.adapter.out.parameters.NoParametersSource;
 import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersProperties;
+import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.ParametersConfig;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.time.Clock;
@@ -34,6 +38,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -55,7 +60,8 @@ class ParametersPollingSchedulerTest {
                   seen.add(context.get(CorrelationId.CONTEXT_KEY));
                   return Mono.just(applied());
                 }));
-    final ParametersPollingScheduler scheduler = new ParametersPollingScheduler(useCase);
+    final ParametersPollingScheduler scheduler =
+        new ParametersPollingScheduler(useCase, new ConfigurationEventLogger());
 
     scheduler.poll();
     scheduler.poll();
@@ -103,7 +109,8 @@ class ParametersPollingSchedulerTest {
                 holder, new ConfigurationValidator(registry), fixed(), Clock.systemUTC()),
             lastKnown,
             holder);
-    final ParametersPollingScheduler scheduler = new ParametersPollingScheduler(service);
+    final ParametersPollingScheduler scheduler =
+        new ParametersPollingScheduler(service, new ConfigurationEventLogger());
 
     assertDoesNotThrow(scheduler::poll);
     assertEquals(1, calls.get());
@@ -123,7 +130,8 @@ class ParametersPollingSchedulerTest {
     final SynchronizeConfigurationUseCase useCase = mock(SynchronizeConfigurationUseCase.class);
     when(useCase.synchronize()).thenReturn(Mono.error(new IllegalStateException("bug")));
 
-    assertDoesNotThrow(() -> new ParametersPollingScheduler(useCase).poll());
+    assertDoesNotThrow(
+        () -> new ParametersPollingScheduler(useCase, new ConfigurationEventLogger()).poll());
   }
 
   @Test
@@ -180,7 +188,53 @@ class ParametersPollingSchedulerTest {
   }
 
   @Test
+  void unavailabilityIsLoggedOnlyOnTheTransitionAndRecoveryOnceOnTheNextSuccess() {
+    final Logger eventsLogger = (Logger) LoggerFactory.getLogger(ConfigurationEventLogger.class);
+    final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    logs.start();
+    eventsLogger.addAppender(logs);
+    try {
+      final AtomicReference<Mono<ConfigurationChangeOutcome>> cycle =
+          new AtomicReference<>(Mono.error(new ParametersUnavailableException("down")));
+      final SynchronizeConfigurationUseCase useCase = mock(SynchronizeConfigurationUseCase.class);
+      when(useCase.synchronize()).thenAnswer(invocation -> cycle.get());
+      final ParametersPollingScheduler scheduler =
+          new ParametersPollingScheduler(useCase, new ConfigurationEventLogger());
+
+      assertDoesNotThrow(scheduler::poll);
+      assertDoesNotThrow(scheduler::poll);
+      assertDoesNotThrow(scheduler::poll);
+      assertEquals(1, countOf(logs, ConfigurationEventLogger.PARAMETERS_UNAVAILABLE));
+      assertEquals(0, countOf(logs, ConfigurationEventLogger.PARAMETERS_RECOVERED));
+
+      cycle.set(Mono.just(applied()));
+      scheduler.poll();
+      scheduler.poll();
+
+      assertEquals(1, countOf(logs, ConfigurationEventLogger.PARAMETERS_UNAVAILABLE));
+      assertEquals(1, countOf(logs, ConfigurationEventLogger.PARAMETERS_RECOVERED));
+    } finally {
+      eventsLogger.detachAppender(logs);
+    }
+  }
+
+  private static long countOf(final ListAppender<ILoggingEvent> logs, final String event) {
+    return logs.list.stream()
+        .map(LogLines::render)
+        .filter(line -> line.contains("event=" + event))
+        .count();
+  }
+
+  @Test
   void constructorRejectsNullUseCase() {
-    assertThrows(NullPointerException.class, () -> new ParametersPollingScheduler(null));
+    assertThrows(
+        NullPointerException.class,
+        () -> new ParametersPollingScheduler(null, new ConfigurationEventLogger()));
+  }
+
+  @Test
+  void constructorRejectsNullEventLogger() {
+    final SynchronizeConfigurationUseCase useCase = mock(SynchronizeConfigurationUseCase.class);
+    assertThrows(NullPointerException.class, () -> new ParametersPollingScheduler(useCase, null));
   }
 }

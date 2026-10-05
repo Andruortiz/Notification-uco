@@ -6,18 +6,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-import co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot;
-import co.edu.uco.notification.core.domain.configuration.ConfigurationSource;
 import co.edu.uco.notification.core.domain.configuration.ParameterRegistry;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
+import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
-import co.edu.uco.notification.core.usecase.ConfigurationHolder;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
+import co.edu.uco.notification.infrastructure.support.FakeParametersSource;
+import co.edu.uco.notification.infrastructure.support.FakeParametersSourceConfig;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,6 +29,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -38,11 +38,18 @@ import reactor.core.publisher.Mono;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.NONE,
-    properties = {"MONGO_USERNAME=test", "MONGO_PASSWORD=test"})
+    properties = {
+      "MONGO_USERNAME=test",
+      "MONGO_PASSWORD=test",
+      "notification.parameters.poll-interval-ms=1000"
+    })
 @Testcontainers
+@Import(FakeParametersSourceConfig.class)
 class ConfigurationDispatchAttemptsE2ETest {
 
-  private static final Duration ADOPTION_BUDGET = Duration.ofSeconds(15);
+  private static final Duration POLL_INTERVAL = Duration.ofSeconds(1);
+  private static final Duration ADOPTION_MARGIN = Duration.ofSeconds(2);
+  private static final Duration ADOPTION_LIMIT = Duration.ofSeconds(15);
 
   @Container @ServiceConnection
   static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7.0");
@@ -54,13 +61,15 @@ class ConfigurationDispatchAttemptsE2ETest {
 
   @Autowired private RabbitTemplate rabbitTemplate;
   @Autowired private RabbitTopologyProperties topology;
-  @Autowired private ConfigurationHolder holder;
+  @Autowired private ConfigurationView view;
+  @Autowired private FakeParametersSource fakeSource;
 
   private final Map<String, AtomicInteger> dispatches = new ConcurrentHashMap<>();
 
   @BeforeEach
   void failEveryDispatchAndCountIt() {
-    holder.replace(withMaxAttempts(3));
+    fakeSource.publishNextAndAwaitAdoption(view, maxAttempts(3), ADOPTION_LIMIT);
+    assertEquals(3, view.snapshot().dispatchMaxAttempts());
     when(dispatchNotificationUseCase.dispatch(any()))
         .thenAnswer(
             invocation -> {
@@ -73,16 +82,8 @@ class ConfigurationDispatchAttemptsE2ETest {
     }
   }
 
-  private ConfigurationSnapshot withMaxAttempts(final long maxAttempts) {
-    final ConfigurationSnapshot current = holder.snapshot();
-    final Map<String, Long> values = new HashMap<>(current.values());
-    values.put(ParameterRegistry.DISPATCH_MAX_ATTEMPTS, maxAttempts);
-    return new ConfigurationSnapshot(
-        current.version() + 1,
-        ConfigurationSource.DEFAULTS,
-        values,
-        Instant.now(),
-        current.pendingRestart());
+  private static Map<String, Object> maxAttempts(final long value) {
+    return Map.of(ParameterRegistry.DISPATCH_MAX_ATTEMPTS, value);
   }
 
   private NotificationId publishFailingMessage() {
@@ -130,16 +131,14 @@ class ConfigurationDispatchAttemptsE2ETest {
     assertNotNull(awaitDeadLetter(before));
     assertEquals(3, dispatchesOf(before));
 
-    final Instant started = Instant.now();
-    holder.replace(withMaxAttempts(5));
-    final NotificationId after = publishFailingMessage();
-    final Message deadLettered = awaitDeadLetter(after);
-    final Duration elapsed = Duration.between(started, Instant.now());
-
-    assertNotNull(deadLettered);
-    assertEquals(5, dispatchesOf(after));
+    final Duration adoption =
+        fakeSource.publishNextAndAwaitAdoption(view, maxAttempts(5), ADOPTION_LIMIT);
+    assertEquals(5, view.snapshot().dispatchMaxAttempts());
     assertTrue(
-        elapsed.compareTo(ADOPTION_BUDGET) < 0,
-        "el cambio debe regir en el siguiente mensaje, sin esperar ni reiniciar");
+        adoption.compareTo(POLL_INTERVAL.plus(ADOPTION_MARGIN)) < 0, "adoption took " + adoption);
+
+    final NotificationId after = publishFailingMessage();
+    assertNotNull(awaitDeadLetter(after));
+    assertEquals(5, dispatchesOf(after));
   }
 }

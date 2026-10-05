@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot;
 import co.edu.uco.notification.core.domain.configuration.ParameterRegistry;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
@@ -16,10 +15,11 @@ import co.edu.uco.notification.core.domain.valueobject.Priority;
 import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
-import co.edu.uco.notification.core.usecase.ConfigurationHolder;
+import co.edu.uco.notification.core.port.in.ConfigurationView;
+import co.edu.uco.notification.infrastructure.support.FakeParametersSource;
+import co.edu.uco.notification.infrastructure.support.FakeParametersSourceConfig;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
@@ -28,6 +28,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.MongoDBContainer;
@@ -41,17 +42,23 @@ import org.testcontainers.junit.jupiter.Testcontainers;
       "MONGO_USERNAME=test",
       "MONGO_PASSWORD=test",
       "notification.scheduler.requeue-interval-ms=600000",
+      "notification.parameters.poll-interval-ms=1000",
       "notification.provider.brevo.api-key=e2e-test-secret-key",
       "notification.provider.brevo.sender-email=sender@example.com",
       "notification.provider.brevo.timeout-ms=5000",
       "notification.provider.brevo.connect-timeout-ms=5000"
     })
 @Testcontainers
+@Import(FakeParametersSourceConfig.class)
 class ConfigurationProviderTimeoutsE2ETest {
 
-  private static final long SLOW_RESPONSE_MS = 2_500;
+  private static final long SLOW_RESPONSE_MS = 4_000;
   private static final long NEW_TIMEOUT_MS = 1_000;
   private static final Duration MARGIN = Duration.ofMillis(700);
+  private static final Duration POLL_INTERVAL = Duration.ofSeconds(1);
+  private static final Duration ADOPTION_MARGIN = Duration.ofSeconds(2);
+  private static final Duration ADOPTION_LIMIT = Duration.ofSeconds(15);
+  private static final long STARTUP_TIMEOUT_MS = 5_000;
 
   @Container @ServiceConnection
   static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7.0");
@@ -72,19 +79,18 @@ class ConfigurationProviderTimeoutsE2ETest {
     FAKE_BREVO.stop();
   }
 
-  @Autowired private ConfigurationHolder configurationHolder;
+  @Autowired private ConfigurationView configurationView;
+
+  @Autowired private FakeParametersSource fakeSource;
 
   @Autowired private BrevoNotificationProvider brevoProvider;
-
-  private ConfigurationSnapshot initial;
 
   @BeforeEach
   void restoreInitialConfiguration() {
     FAKE_BREVO.reset();
-    if (initial == null) {
-      initial = configurationHolder.snapshot();
-    }
-    configurationHolder.replace(initial);
+    fakeSource.publishNextAndAwaitAdoption(
+        configurationView, brevoTimeout(STARTUP_TIMEOUT_MS), ADOPTION_LIMIT);
+    assertEquals(STARTUP_TIMEOUT_MS, configurationView.snapshot().providerTimeoutMs("brevo"));
   }
 
   private static Notification notification() {
@@ -98,17 +104,8 @@ class ConfigurationProviderTimeoutsE2ETest {
         new NotificationDetails(NotificationContent.of("Subject", "Body"), Priority.NORMAL));
   }
 
-  private void publishBrevoTimeout(final long timeoutMs) {
-    final ConfigurationSnapshot current = configurationHolder.snapshot();
-    final Map<String, Long> values = new HashMap<>(current.values());
-    values.put(ParameterRegistry.timeoutKey("brevo"), timeoutMs);
-    configurationHolder.replace(
-        new ConfigurationSnapshot(
-            current.version() + 1,
-            current.source(),
-            values,
-            Instant.now(),
-            current.pendingRestart()));
+  private static Map<String, Object> brevoTimeout(final long timeoutMs) {
+    return Map.of(ParameterRegistry.timeoutKey("brevo"), timeoutMs);
   }
 
   @Test
@@ -130,7 +127,12 @@ class ConfigurationProviderTimeoutsE2ETest {
       Thread.sleep(20);
     }
 
-    publishBrevoTimeout(NEW_TIMEOUT_MS);
+    final Duration adoption =
+        fakeSource.publishNextAndAwaitAdoption(
+            configurationView, brevoTimeout(NEW_TIMEOUT_MS), ADOPTION_LIMIT);
+    assertEquals(NEW_TIMEOUT_MS, configurationView.snapshot().providerTimeoutMs("brevo"));
+    assertTrue(
+        adoption.compareTo(POLL_INTERVAL.plus(ADOPTION_MARGIN)) < 0, "adoption took " + adoption);
 
     assertEquals(AttemptResult.ACCEPTED, inFlight.get());
     assertTrue(

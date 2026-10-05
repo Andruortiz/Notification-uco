@@ -8,14 +8,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import co.edu.uco.notification.core.domain.configuration.ConfigurationChange;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationSource;
-import co.edu.uco.notification.core.exception.ParametersUnavailableException;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
-import co.edu.uco.notification.core.port.out.ParametersSourcePort;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.LastKnownConfigurationDocument;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.FakeParametersSource;
+import co.edu.uco.notification.infrastructure.support.FakeParametersSourceConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
 import java.time.Instant;
@@ -23,9 +22,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
 import org.bson.Document;
 import org.junit.jupiter.api.AfterEach;
@@ -39,12 +35,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Primary;
+import org.springframework.context.annotation.Import;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.http.MediaType;
@@ -53,7 +47,6 @@ import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
-import reactor.core.publisher.Mono;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -63,6 +56,7 @@ import reactor.core.publisher.Mono;
       "notification.parameters.poll-interval-ms=1000"
     })
 @Testcontainers
+@Import(FakeParametersSourceConfig.class)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class ConfigurationSyncE2ETest {
 
@@ -74,42 +68,9 @@ class ConfigurationSyncE2ETest {
 
   private static final Duration SYNC_WAIT = Duration.ofSeconds(15);
   private static final String BREVO_TIMEOUT = "provider.brevo.timeout-ms";
-
-  static final class FakeParametersSource implements ParametersSourcePort {
-
-    private final AtomicReference<ConfigurationChange> published = new AtomicReference<>();
-    private final AtomicBoolean failing = new AtomicBoolean(true);
-    private final AtomicInteger calls = new AtomicInteger();
-
-    @Override
-    public Mono<ConfigurationChange> fetchState() {
-      calls.incrementAndGet();
-      if (failing.get()) {
-        return Mono.error(new ParametersUnavailableException("fake source is down"));
-      }
-      final ConfigurationChange change = published.get();
-      return change == null ? Mono.empty() : Mono.just(change);
-    }
-
-    void publish(final long version, final Map<String, Object> values) {
-      published.set(new ConfigurationChange(version, values));
-      failing.set(false);
-    }
-
-    int calls() {
-      return calls.get();
-    }
-  }
-
-  @TestConfiguration
-  static class FakeSourceConfig {
-
-    @Bean
-    @Primary
-    FakeParametersSource fakeParametersSource() {
-      return new FakeParametersSource();
-    }
-  }
+  private static final String REQUEUE_INTERVAL = "requeue.interval-ms";
+  private static final Duration POLL_INTERVAL = Duration.ofSeconds(1);
+  private static final Duration ADOPTION_MARGIN = Duration.ofSeconds(2);
 
   @LocalServerPort private int port;
 
@@ -382,9 +343,24 @@ class ConfigurationSyncE2ETest {
     assertEquals(8000, snapshot.providerTimeoutMs("brevo"));
   }
 
+  @Test
+  @Order(8)
+  void aRequeueIntervalChangeGovernsWithinOnePollingIntervalPlusMargin() {
+    assertEquals(30_000, configurationView.snapshot().requeueIntervalMs());
+
+    final Duration elapsed =
+        fakeSource.publishNextAndAwaitAdoption(
+            configurationView, values(REQUEUE_INTERVAL, 20_000), SYNC_WAIT);
+
+    assertEquals(20_000, configurationView.snapshot().requeueIntervalMs());
+    assertEquals(ConfigurationSource.PARAMETERS, configurationView.snapshot().source());
+    assertTrue(
+        elapsed.compareTo(POLL_INTERVAL.plus(ADOPTION_MARGIN)) < 0, "adoption took " + elapsed);
+  }
+
   private ConfigurableApplicationContext startSecondInstance() {
     return new SpringApplicationBuilder(
-            NotificationServiceApplication.class, FakeSourceConfig.class)
+            NotificationServiceApplication.class, FakeParametersSourceConfig.class)
         .web(WebApplicationType.REACTIVE)
         .properties(
             "server.port=0",

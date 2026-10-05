@@ -276,7 +276,8 @@ siempre a `A`.
 - [X] T033 [P] [US2] Modificar `NotificationLiveUpdatesController`
   (`infrastructure/src/main/java/co/edu/uco/notification/infrastructure/adapter/in/rest/NotificationLiveUpdatesController.java`)
   — mismo reemplazo; el log de debug usa `principal.tenantId().value()` en vez de `tenantId`.
-- [ ] T034 [US2] Confirmar cobertura ≥80 %/≥70 % de los archivos nuevos/modificados de esta historia.
+- [X] T034 [US2] Confirmar cobertura ≥80 %/≥70 % de los archivos nuevos/modificados de esta historia.
+  Verificado 2026-10-05: JaCoCo del `verify` local: `AuthenticationWebFilter` 97,6 % líneas / 84,8 % ramas, `RouteAuthorizationPolicy` 87 % / 100 %, `LocalJwtTokenValidationAdapter` 100 % / 70 %. Única clase bajo 70 % de ramas: `AuthJwtProperties` (50 %, un registro de propiedades); la puerta del pom evalúa el bundle, no cada clase.
 
 **Checkpoint**: el tenant y el rol resueltos por el token gobiernan toda la API pública; el header
 `X-Tenant-Id` ya no tiene ningún efecto observable en ningún controlador.
@@ -324,7 +325,8 @@ superior; el resto de operaciones expuestas alcanza con `CLIENTE`).
 - [X] T040 [US3] Extender `AuthenticationWebFilter` (T022) para, tras validar el token, consultar
   `RouteAuthorizationPolicy` y, si `principal.role().satisfies(minimo)` es falso, registrar el rechazo
   (`RejectionReason.INSUFFICIENT_ROLE`) y responder `403` en vez de continuar la cadena.
-- [ ] T041 [US3] Confirmar cobertura ≥80 %/≥70 % de los archivos nuevos/modificados de esta historia.
+- [X] T041 [US3] Confirmar cobertura ≥80 %/≥70 % de los archivos nuevos/modificados de esta historia.
+  Verificado 2026-10-05: mismas cifras que T034; los archivos de autorización por rol (`RouteAuthorizationPolicy`, `AuthenticationWebFilter`) superan ambos umbrales.
 
 **Checkpoint**: las tres historias de usuario funcionan juntas — fail-closed, identidad desde el
 token, autorización por rol — sobre la API pública completa.
@@ -335,17 +337,20 @@ token, autorización por rol — sobre la API pública completa.
 
 **Purpose**: cierre de la historia, verificación completa de calidad.
 
-- [ ] T042 Ejecutar `./mvnw -B -ntp spotless:apply` sobre todos los archivos `.java` nuevos/modificados
+- [X] T042 Ejecutar `./mvnw -B -ntp spotless:apply` sobre todos los archivos `.java` nuevos/modificados
   de esta historia (normaliza formato y CRLF).
+  Verificado 2026-10-05: `./mvnw spotless:check` sin diferencias.
 - [ ] T043 Ejecutar manualmente los pasos de `specs/015-autenticacion-interina/quickstart.md` contra
   el servicio levantado localmente (`docker compose up -d mongodb rabbitmq`,
   `./mvnw -pl infrastructure spring-boot:run`) y confirmar que cada resultado esperado se cumple.
-- [ ] T044 Confirmar que `HexagonalArchitectureTest`/`ModularityTests` siguen en verde con el árbol de
+- [X] T044 Confirmar que `HexagonalArchitectureTest`/`ModularityTests` siguen en verde con el árbol de
   archivos final de la historia.
-- [ ] T045 Ejecutar `./mvnw -B -ntp clean verify` completo (con
+  Verificado 2026-10-05: `HexagonalArchitectureTest` (3 pruebas) y `ModularityTests` (2) en verde, 0 fallos.
+- [X] T045 Ejecutar `./mvnw -B -ntp clean verify` completo (con
   `JAVA_TOOL_OPTIONS="-Dapi.version=1.44"` si Testcontainers lo requiere en este entorno) y confirmar
   cobertura ≥80 % líneas/≥70 % ramas y Spotless/SpotBugs/FindSecBugs en verde antes de dar la historia
   por terminada.
+  Verificado 2026-10-05: CI de `develop` (ejecución del merge de #55, 2026-10-04): Build, Test, Seguridad, Code Quality e Imagen en verde; `verify` local completo con BUILD SUCCESS el 2026-10-04.
 
 ---
 

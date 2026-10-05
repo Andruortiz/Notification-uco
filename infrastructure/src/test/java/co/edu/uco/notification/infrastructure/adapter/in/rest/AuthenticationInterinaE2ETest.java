@@ -196,15 +196,32 @@ class AuthenticationInterinaE2ETest {
   }
 
   @Test
-  void subscribeAcceptsTheTokenAsAQueryParamBecauseEventSourceCannotSendHeaders() {
-    final String token = TestTokens.bearer("tenant-sse").substring("Bearer ".length());
+  void subscribeAcceptsAOneTimeTicketBecauseEventSourceCannotSendHeaders() {
+    final Map<?, ?> issued =
+        webTestClient
+            .post()
+            .uri("/notifications:subscribeTicket")
+            .header("Authorization", TestTokens.bearer("tenant-sse"))
+            .exchange()
+            .expectStatus()
+            .isOk()
+            .expectBody(Map.class)
+            .returnResult()
+            .getResponseBody();
 
     webTestClient
         .get()
-        .uri("/notifications:subscribe?access_token=" + token)
+        .uri("/notifications:subscribe?ticket=" + issued.get("ticket"))
         .exchange()
         .expectStatus()
         .isOk();
+
+    webTestClient
+        .get()
+        .uri("/notifications:subscribe?ticket=" + issued.get("ticket"))
+        .exchange()
+        .expectStatus()
+        .isUnauthorized();
   }
 
   @Test

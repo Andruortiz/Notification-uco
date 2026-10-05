@@ -63,6 +63,11 @@ class RouteAuthorizationPolicyTest {
   }
 
   @Test
+  void configurationReadRequiresAdministrador() {
+    assertEquals(Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.GET, "/configuration"));
+  }
+
+  @Test
   void unknownRouteDefaultsToTheMostRestrictiveRoleNeverToOpenAccess() {
     assertEquals(
         Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.DELETE, "/notifications/abc-123"));

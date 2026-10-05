@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.config;
 
 import co.edu.uco.notification.core.domain.configuration.ConfigurationValidator;
 import co.edu.uco.notification.core.domain.configuration.FixedConfiguration;
+import co.edu.uco.notification.core.domain.configuration.ParameterRegistry;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.port.in.*;
 import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
@@ -86,6 +87,12 @@ public class UseCaseConfig {
         applyConfigurationChangeUseCase,
         lastKnownConfigurationPort,
         configurationHolder);
+  }
+
+  @Bean
+  QueryConfigurationUseCase queryConfigurationUseCase(
+      final ConfigurationHolder configurationHolder, final ParameterRegistry parameterRegistry) {
+    return new QueryConfigurationService(configurationHolder, parameterRegistry);
   }
 
   @Bean

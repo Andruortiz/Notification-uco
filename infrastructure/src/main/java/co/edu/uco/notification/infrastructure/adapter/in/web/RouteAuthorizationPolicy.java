@@ -33,6 +33,7 @@ public class RouteAuthorizationPolicy {
               HttpMethod.GET, path -> path.matches("^/attachment-uploads/[^/:]+$"), Role.CLIENTE),
           new Rule(HttpMethod.GET, path -> path.equals("/channels"), Role.CLIENTE),
           new Rule(HttpMethod.GET, path -> path.equals("/providers"), Role.CLIENTE),
+          new Rule(HttpMethod.GET, path -> path.equals("/configuration"), Role.ADMINISTRADOR),
           new Rule(HttpMethod.POST, path -> path.equals("/channels:register"), Role.ADMINISTRADOR),
           new Rule(HttpMethod.POST, path -> path.equals("/providers:register"), Role.ADMINISTRADOR),
           new Rule(

@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import co.edu.uco.notification.core.domain.BatchLimits;
 import co.edu.uco.notification.core.domain.valueobject.BatchId;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
@@ -29,6 +30,7 @@ import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJw
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import co.edu.uco.notification.utils.CorrelationId;
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
@@ -230,6 +232,57 @@ class NotificationBatchControllerTest {
     post(body).expectStatus().isBadRequest();
 
     verify(sendNotificationBatchUseCase, never()).sendBatch(any());
+  }
+
+  private static String batchOf(final int size) {
+    return "{\"batchId\": \"batch-big\", \"items\": ["
+        + String.join(",", Collections.nCopies(size, VALID_ITEM))
+        + "]}";
+  }
+
+  @Test
+  void sendBatchRejectsMoreThanTheMaximumItemsWithoutCallingTheUseCase() {
+    post(batchOf(BatchLimits.MAX_ITEMS + 1)).expectStatus().isBadRequest();
+
+    verify(sendNotificationBatchUseCase, never()).sendBatch(any());
+  }
+
+  @Test
+  void sendBatchAcceptsExactlyTheMaximumItems() {
+    when(sendNotificationBatchUseCase.sendBatch(any()))
+        .thenReturn(
+            Mono.just(
+                new BatchAcceptedResult(
+                    BatchId.of("batch-big"),
+                    List.of(
+                        BatchItemResult.accepted(
+                            ExternalId.of("order-1"), NotificationId.newId())))));
+
+    post(batchOf(BatchLimits.MAX_ITEMS)).expectStatus().isEqualTo(HttpStatus.ACCEPTED);
+
+    final ArgumentCaptor<SendNotificationBatchCommand> captor =
+        ArgumentCaptor.forClass(SendNotificationBatchCommand.class);
+    verify(sendNotificationBatchUseCase).sendBatch(captor.capture());
+    assertEquals(BatchLimits.MAX_ITEMS, captor.getValue().items().size());
+  }
+
+  @Test
+  void sendBatchExposesTheTrackingFlagInTheResponse() {
+    when(sendNotificationBatchUseCase.sendBatch(any()))
+        .thenReturn(
+            Mono.just(
+                new BatchAcceptedResult(
+                    BatchId.of("batch-1"),
+                    List.of(
+                        BatchItemResult.accepted(ExternalId.of("order-1"), NotificationId.newId())),
+                    false)));
+
+    post("{\"batchId\": \"batch-1\", \"items\": [" + VALID_ITEM + "]}")
+        .expectStatus()
+        .isEqualTo(HttpStatus.ACCEPTED)
+        .expectBody()
+        .jsonPath("$.trackingSaved")
+        .isEqualTo(false);
   }
 
   @Test

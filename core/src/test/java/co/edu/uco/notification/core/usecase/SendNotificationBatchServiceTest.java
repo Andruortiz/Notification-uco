@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -51,6 +52,8 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
+import java.util.logging.Level;
+import java.util.logging.LogRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -70,7 +73,9 @@ class SendNotificationBatchServiceTest {
 
   @BeforeEach
   void setUp() {
-    when(notificationBatchRepository.save(any(), any())).thenReturn(Mono.empty());
+    when(notificationBatchRepository.save(any(), any()))
+        .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+    when(notificationBatchRepository.findByTenantAndBatchId(any(), any())).thenReturn(Mono.empty());
     service =
         new SendNotificationBatchService(sendNotificationUseCase, notificationBatchRepository);
   }
@@ -210,7 +215,27 @@ class SendNotificationBatchServiceTest {
   }
 
   @Test
-  void sendBatchStillReturnsTheResultWhenPersistingTheBatchRecordFails() {
+  void sendBatchReportsTrackingSavedWhenTheRecordIsPersisted() {
+    final BatchNotificationItem accepted = item("order-1");
+    when(sendNotificationUseCase.send(toCommand(accepted)))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    NotificationId.newId(), NotificationStatus.PENDING, false)));
+
+    final BatchAcceptedResult result =
+        service
+            .sendBatch(
+                new SendNotificationBatchCommand(
+                    TENANT_ID, BatchId.of("batch-1"), List.of(accepted)))
+            .block();
+
+    assertNotNull(result);
+    assertTrue(result.trackingSaved());
+  }
+
+  @Test
+  void sendBatchReturnsTrackingSavedFalseAndLogsAnErrorWhenPersistingTheBatchRecordFails() {
     when(notificationBatchRepository.save(any(), any()))
         .thenReturn(Mono.error(new IllegalStateException("mongo is unreachable")));
     final BatchNotificationItem accepted = item("order-1");
@@ -222,12 +247,129 @@ class SendNotificationBatchServiceTest {
     final SendNotificationBatchCommand command =
         new SendNotificationBatchCommand(TENANT_ID, BatchId.of("batch-1"), List.of(accepted));
 
-    final BatchAcceptedResult result = service.sendBatch(command).block();
+    try (LogCapture logs = new LogCapture(SendNotificationBatchService.class)) {
+      final BatchAcceptedResult result = service.sendBatch(command).block();
+
+      assertNotNull(result);
+      assertFalse(result.trackingSaved());
+      assertEquals(BatchId.of("batch-1"), result.batchId());
+      assertEquals(BatchItemOutcome.ACCEPTED, result.results().get(0).outcome());
+      assertEquals(acceptedId, result.results().get(0).notificationId());
+      final List<LogRecord> errors = logs.records(Level.SEVERE, "BATCH_RECORD_NOT_PERSISTED");
+      assertEquals(1, errors.size());
+      assertEquals("mongo is unreachable", errors.get(0).getThrown().getMessage());
+    }
+  }
+
+  @Test
+  void sendBatchWithAnExistingBatchIdReturnsTheOriginalResultWithoutProcessingAnyItem() {
+    final BatchAcceptedResult original =
+        new BatchAcceptedResult(
+            BatchId.of("batch-1"),
+            List.of(BatchItemResult.accepted(ExternalId.of("order-1"), NotificationId.newId())));
+    when(notificationBatchRepository.findByTenantAndBatchId(TENANT_ID, BatchId.of("batch-1")))
+        .thenReturn(Mono.just(original));
+
+    final BatchAcceptedResult result =
+        service
+            .sendBatch(
+                new SendNotificationBatchCommand(
+                    TENANT_ID, BatchId.of("batch-1"), List.of(item("order-1"), item("order-2"))))
+            .block();
+
+    assertEquals(original, result);
+    verify(sendNotificationUseCase, never()).send(any());
+    verify(notificationBatchRepository, never()).save(any(), any());
+  }
+
+  @Test
+  void sendBatchLooksTheBatchUpWithTheTenantOfTheCommand() {
+    final BatchNotificationItem accepted = item("order-1");
+    when(sendNotificationUseCase.send(toCommand(accepted)))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    NotificationId.newId(), NotificationStatus.PENDING, false)));
+
+    service
+        .sendBatch(
+            new SendNotificationBatchCommand(TENANT_ID, BatchId.of("batch-1"), List.of(accepted)))
+        .block();
+
+    verify(notificationBatchRepository).findByTenantAndBatchId(TENANT_ID, BatchId.of("batch-1"));
+  }
+
+  @Test
+  void sendBatchWithoutABatchIdProcessesTheItemsWithoutLookingAnythingUp() {
+    final BatchNotificationItem accepted = item("order-1");
+    when(sendNotificationUseCase.send(toCommand(accepted)))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    NotificationId.newId(), NotificationStatus.PENDING, false)));
+
+    final BatchAcceptedResult result =
+        service
+            .sendBatch(new SendNotificationBatchCommand(TENANT_ID, null, List.of(accepted)))
+            .block();
 
     assertNotNull(result);
-    assertEquals(BatchId.of("batch-1"), result.batchId());
-    assertEquals(BatchItemOutcome.ACCEPTED, result.results().get(0).outcome());
-    assertEquals(acceptedId, result.results().get(0).notificationId());
+    verify(notificationBatchRepository, never()).findByTenantAndBatchId(any(), any());
+    verify(sendNotificationUseCase).send(any());
+  }
+
+  @Test
+  void sendBatchReturnsTheWinningRecordWhenAConcurrentRequestSavedTheSameBatchFirst() {
+    final BatchAcceptedResult winner =
+        new BatchAcceptedResult(
+            BatchId.of("batch-1"),
+            List.of(BatchItemResult.accepted(ExternalId.of("order-1"), NotificationId.newId())));
+    when(notificationBatchRepository.save(any(), any())).thenReturn(Mono.just(winner));
+    final BatchNotificationItem accepted = item("order-1");
+    when(sendNotificationUseCase.send(toCommand(accepted)))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    NotificationId.newId(), NotificationStatus.PENDING, true)));
+
+    final BatchAcceptedResult result =
+        service
+            .sendBatch(
+                new SendNotificationBatchCommand(
+                    TENANT_ID, BatchId.of("batch-1"), List.of(accepted)))
+            .block();
+
+    assertEquals(winner, result);
+    assertTrue(result.trackingSaved());
+  }
+
+  @Test
+  void anInternalFailureReturnsTheFixedReasonAndTheCauseOnlyInTheLog() {
+    final BatchNotificationItem failing = item("order-1");
+    final BatchNotificationItem rejected = item("order-2");
+    when(sendNotificationUseCase.send(toCommand(failing)))
+        .thenReturn(Mono.error(new IllegalStateException("db password is hunter2")));
+    when(sendNotificationUseCase.send(toCommand(rejected)))
+        .thenReturn(Mono.error(new ChannelNotAvailableException(rejected.channelType())));
+
+    try (LogCapture logs = new LogCapture(SendNotificationBatchService.class)) {
+      final BatchAcceptedResult result =
+          service
+              .sendBatch(
+                  new SendNotificationBatchCommand(
+                      TENANT_ID, BatchId.of("batch-1"), List.of(failing, rejected)))
+              .block();
+
+      assertNotNull(result);
+      assertEquals(BatchItemOutcome.FAILED, result.results().get(0).outcome());
+      assertEquals("Internal error", result.results().get(0).rejectionReason());
+      assertEquals(BatchItemOutcome.REJECTED, result.results().get(1).outcome());
+      assertEquals("Channel not available: EMAIL", result.results().get(1).rejectionReason());
+      final List<LogRecord> errors = logs.records(Level.SEVERE, "BATCH_ITEM_FAILED");
+      assertEquals(1, errors.size());
+      assertEquals("db password is hunter2", errors.get(0).getThrown().getMessage());
+      assertTrue(errors.get(0).getMessage().contains("order-1"));
+    }
   }
 
   private static final String ATTACHMENTS_SCHEMA =
@@ -373,7 +515,10 @@ class SendNotificationBatchServiceTest {
         Mockito.mock(NotificationBatchRepository.class);
 
     RealPipeline() {
-      when(notificationBatchRepository.save(any(), any())).thenReturn(Mono.empty());
+      when(notificationBatchRepository.save(any(), any()))
+          .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+      when(notificationBatchRepository.findByTenantAndBatchId(any(), any()))
+          .thenReturn(Mono.empty());
       when(channelCatalogPort.findActiveRoute(ChannelType.of("EMAIL"), TENANT_ID))
           .thenReturn(
               Mono.just(

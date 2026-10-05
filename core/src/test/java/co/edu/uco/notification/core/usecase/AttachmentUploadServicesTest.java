@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -651,6 +652,93 @@ class AttachmentUploadServicesTest {
           .thenReturn(Mono.just(pending()), Mono.just(pending().markClean(sha, NOW)));
 
       StepVerifier.create(service().scan(TENANT, UPLOAD_ID)).verifyComplete();
+
+      verify(storage, never()).delete(anyString());
+    }
+
+    @Test
+    void aLostTransitionAndTheDiscardOfTheOrphanCopyAreLoggedAtInfo() {
+      givenStoredObject();
+      when(inspector.inspect(any(), any(), any(), any()))
+          .thenReturn(Mono.just(AttachmentInspection.clean(sha)));
+      when(repository.transition(any(), any())).thenReturn(Mono.just(false));
+      when(repository.findByTenantAndId(TENANT, UPLOAD_ID))
+          .thenReturn(
+              Mono.just(pending()),
+              Mono.just(pending().markFailed(AttachmentRejectionReason.EXPIRED, NOW)));
+
+      try (LogCapture logs = new LogCapture(ScanAttachmentUploadService.class)) {
+        StepVerifier.create(service().scan(TENANT, UPLOAD_ID)).verifyComplete();
+
+        assertEquals(1, logs.records(Level.INFO, "ATTACHMENT_SCAN_TRANSITION_LOST").size());
+        assertEquals(1, logs.records(Level.INFO, "ATTACHMENT_ORPHAN_COPY_DISCARDED").size());
+      }
+    }
+
+    @Test
+    void aLostTransitionAgainstAReplicaThatMarkedItCleanLogsOnlyTheLostTransition() {
+      givenStoredObject();
+      when(inspector.inspect(any(), any(), any(), any()))
+          .thenReturn(Mono.just(AttachmentInspection.clean(sha)));
+      when(repository.transition(any(), any())).thenReturn(Mono.just(false));
+      when(repository.findByTenantAndId(TENANT, UPLOAD_ID))
+          .thenReturn(Mono.just(pending()), Mono.just(pending().markClean(sha, NOW)));
+
+      try (LogCapture logs = new LogCapture(ScanAttachmentUploadService.class)) {
+        StepVerifier.create(service().scan(TENANT, UPLOAD_ID)).verifyComplete();
+
+        assertEquals(1, logs.records(Level.INFO, "ATTACHMENT_SCAN_TRANSITION_LOST").size());
+        assertEquals(0, logs.records(Level.INFO, "ATTACHMENT_ORPHAN_COPY_DISCARDED").size());
+      }
+    }
+
+    @Test
+    void theHappyPathLogsNeitherTheLostTransitionNorTheDiscard() {
+      givenStoredObject();
+      when(inspector.inspect(any(), any(), any(), any()))
+          .thenReturn(Mono.just(AttachmentInspection.clean(sha)));
+
+      try (LogCapture logs = new LogCapture(ScanAttachmentUploadService.class)) {
+        assertEquals(ScanState.CLEAN, service().scan(TENANT, UPLOAD_ID).block().state());
+
+        assertEquals(0, logs.records().size());
+      }
+    }
+
+    @Test
+    void failExhaustedMarksAPendingUploadFailedWithScanExhaustedAndDeletesTheObject() {
+      when(repository.findByTenantAndId(TENANT, UPLOAD_ID)).thenReturn(Mono.just(pending()));
+
+      final AttachmentUpload result = service().failExhausted(TENANT, UPLOAD_ID).block();
+
+      assertEquals(ScanState.FAILED, result.state());
+      assertEquals(AttachmentRejectionReason.SCAN_EXHAUSTED, result.rejectionReason());
+      verify(repository)
+          .transition(
+              pending(), pending().markFailed(AttachmentRejectionReason.SCAN_EXHAUSTED, NOW));
+      verify(storage).delete(pending().uploadKey());
+    }
+
+    @Test
+    void failExhaustedIgnoresAnUploadThatIsAlreadyResolvedOrUnknown() {
+      when(repository.findByTenantAndId(TENANT, UPLOAD_ID))
+          .thenReturn(Mono.just(pending().markClean(sha, NOW)));
+
+      StepVerifier.create(service().failExhausted(TENANT, UPLOAD_ID)).verifyComplete();
+
+      when(repository.findByTenantAndId(OTHER_TENANT, UPLOAD_ID)).thenReturn(Mono.empty());
+      StepVerifier.create(service().failExhausted(OTHER_TENANT, UPLOAD_ID)).verifyComplete();
+
+      verify(repository, never()).transition(any(), any());
+      verify(storage, never()).delete(anyString());
+    }
+
+    @Test
+    void failExhaustedDoesNotReportAWinnerWhenTheTransitionIsLost() {
+      when(repository.findByTenantAndId(TENANT, UPLOAD_ID)).thenReturn(Mono.just(pending()));
+      when(repository.transition(any(), any())).thenReturn(Mono.just(false));
+
+      StepVerifier.create(service().failExhausted(TENANT, UPLOAD_ID)).verifyComplete();
 
       verify(storage, never()).delete(anyString());
     }

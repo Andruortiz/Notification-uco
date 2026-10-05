@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
 
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
@@ -18,6 +20,7 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
+import co.edu.uco.notification.core.exception.AttachmentObjectChangedException;
 import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
@@ -59,6 +62,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
@@ -129,7 +133,7 @@ class AttachmentUploadE2ETest {
 
   @Autowired private RecordingAttachmentSender uploadsRecorder;
 
-  @Autowired private AttachmentStoragePort storage;
+  @SpyBean private AttachmentStoragePort storage;
 
   @Autowired private AttachmentScanRequestPort scanRequestPort;
 
@@ -545,6 +549,34 @@ class AttachmentUploadE2ETest {
                 TENANT_A,
                 notificationWith(
                     "us8-failed", "swapped.pdf", PDF, 2_000_000L, issued.get("attachmentUrl"))),
+            400);
+    assertTrue(rejected.contains("failed"), rejected);
+  }
+
+  @Test
+  void anObjectChangedAfterCompletingFailsTheUploadWithScanExhaustedWithoutWaitingForTheSweeper()
+      throws Exception {
+    doReturn(Mono.error(new AttachmentObjectChangedException()))
+        .when(storage)
+        .copyIfMatch(anyString(), anyString(), anyString());
+    final Map<String, Object> issued =
+        uploadedAndScanned(TENANT_A, "changed.pdf", PDF, SampleFiles.pdfOfSize(1_200_000, 61));
+    final Instant completedAt = Instant.now();
+
+    final Map<String, Object> failed =
+        awaitState(TENANT_A, issued.get("uploadId"), "FAILED", Duration.ofSeconds(30));
+
+    final Duration elapsed = Duration.between(completedAt, Instant.now());
+    assertEquals("FAILED", failed.get("state"));
+    assertEquals("SCAN_EXHAUSTED", failed.get("rejectionReason"));
+    assertTrue(elapsed.compareTo(Duration.ofSeconds(30)) < 0, "failed after " + elapsed);
+    assertObjectGone(uploadKeyOf(issued));
+    final String rejected =
+        bodyOf(
+            send(
+                TENANT_A,
+                notificationWith(
+                    "us10-changed", "changed.pdf", PDF, 1_200_000L, issued.get("attachmentUrl"))),
             400);
     assertTrue(rejected.contains("failed"), rejected);
   }

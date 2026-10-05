@@ -3,10 +3,15 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doReturn;
 
+import co.edu.uco.notification.core.domain.BatchLimits;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
+import co.edu.uco.notification.core.repository.NotificationBatchRepository;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,6 +23,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.core.ParameterizedTypeReference;
@@ -51,6 +57,8 @@ class NotificationBatchE2ETest {
   @Autowired private ReactiveMongoTemplate mongoTemplate;
 
   @Autowired private ChannelCatalogPort channelCatalogPort;
+
+  @SpyBean private NotificationBatchRepository notificationBatchRepository;
 
   private WebTestClient webTestClient;
 
@@ -139,6 +147,17 @@ class NotificationBatchE2ETest {
         .getCollection("notifications")
         .flatMap(
             collection -> Mono.from(collection.countDocuments(new Document("tenantId", tenant))))
+        .block();
+  }
+
+  private long storedBatchRecords(final String tenant, final String batchId) {
+    return mongoTemplate
+        .getCollection("notification_batches")
+        .flatMap(
+            collection ->
+                Mono.from(
+                    collection.countDocuments(
+                        new Document("tenantId", tenant).append("batchId", batchId))))
         .block();
   }
 
@@ -236,6 +255,113 @@ class NotificationBatchE2ETest {
         .exchange()
         .expectStatus()
         .isNotFound();
+  }
+
+  @Test
+  void aBatchWithMoreThanTheMaximumItemsIsRejectedWithoutCreatingAnyNotification() {
+    final String tenant = "tenant-batch-too-big";
+
+    final Map<String, Object> control =
+        postBatch(tenant, Map.of("items", List.of(item("control-positive", "EMAIL", "Body"))));
+    assertEquals("ACCEPTED", resultsOf(control).get(0).get("outcome"));
+    assertEquals(1L, storedNotificationsForTenant(tenant));
+
+    final List<Map<String, Object>> oversized =
+        java.util.stream.IntStream.rangeClosed(1, BatchLimits.MAX_ITEMS + 1)
+            .mapToObj(index -> item("big-" + index, "EMAIL", "Body"))
+            .toList();
+
+    final Instant start = Instant.now();
+    webTestClient
+        .post()
+        .uri("/notifications:sendBatch")
+        .header("Authorization", TestTokens.bearer(tenant))
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(Map.of("batchId", "batch-too-big", "items", oversized))
+        .exchange()
+        .expectStatus()
+        .isBadRequest();
+
+    assertTrue(Duration.between(start, Instant.now()).compareTo(Duration.ofSeconds(1)) < 0);
+    assertEquals(1L, storedNotificationsForTenant(tenant));
+    assertEquals(0L, storedBatchRecords(tenant, "batch-too-big"));
+  }
+
+  @Test
+  void resendingTheSameBatchIdReturnsTheOriginalResponseWithoutCreatingNotifications() {
+    final String tenant = "tenant-batch-resend";
+    final Map<String, Object> first =
+        postBatch(
+            tenant,
+            Map.of(
+                "batchId",
+                "batch-resend",
+                "items",
+                List.of(item("resend-1", "EMAIL", "Body"), item("resend-2", "EMAIL", "Body"))));
+    assertEquals(Boolean.TRUE, first.get("trackingSaved"));
+    assertEquals(2L, storedNotificationsForTenant(tenant));
+
+    final Map<String, Object> second =
+        postBatch(
+            tenant,
+            Map.of(
+                "batchId",
+                "batch-resend",
+                "items",
+                List.of(
+                    item("resend-3", "EMAIL", "Body"),
+                    item("resend-4", "EMAIL", "Body"),
+                    item("resend-5", "EMAIL", "Body"))));
+
+    assertEquals(first, second);
+    assertEquals(2L, storedNotificationsForTenant(tenant));
+    assertEquals(1L, storedBatchRecords(tenant, "batch-resend"));
+  }
+
+  @Test
+  void theSameBatchIdInTwoTenantsIsTwoIndependentBatches() {
+    final String tenantA = "tenant-batch-id-a";
+    final String tenantB = "tenant-batch-id-b";
+
+    final Map<String, Object> responseA =
+        postBatch(
+            tenantA,
+            Map.of("batchId", "batch-shared", "items", List.of(item("shared-a", "EMAIL", "Body"))));
+    final Map<String, Object> responseB =
+        postBatch(
+            tenantB,
+            Map.of(
+                "batchId",
+                "batch-shared",
+                "items",
+                List.of(item("shared-b1", "EMAIL", "Body"), item("shared-b2", "EMAIL", "Body"))));
+
+    assertEquals(1, resultsOf(responseA).size());
+    assertEquals(2, resultsOf(responseB).size());
+    assertEquals(1L, storedNotificationsForTenant(tenantA));
+    assertEquals(2L, storedNotificationsForTenant(tenantB));
+    assertEquals(1L, storedBatchRecords(tenantA, "batch-shared"));
+    assertEquals(1L, storedBatchRecords(tenantB, "batch-shared"));
+    assertNotEquals(responseA, responseB);
+  }
+
+  @Test
+  void aFailedBatchRecordSaveStillAcceptsTheBatchAndReportsTrackingSavedFalse() {
+    final String tenant = "tenant-batch-save-fails";
+    doReturn(Mono.error(new IllegalStateException("mongo write failed")))
+        .when(notificationBatchRepository)
+        .save(any(), any());
+
+    final Map<String, Object> response =
+        postBatch(
+            tenant,
+            Map.of(
+                "batchId", "batch-save-fails", "items", List.of(item("save-1", "EMAIL", "Body"))));
+
+    assertEquals(Boolean.FALSE, response.get("trackingSaved"));
+    assertEquals("ACCEPTED", resultsOf(response).get(0).get("outcome"));
+    assertEquals(1L, storedNotificationsForTenant(tenant));
+    assertEquals(0L, storedBatchRecords(tenant, "batch-save-fails"));
   }
 
   @Test

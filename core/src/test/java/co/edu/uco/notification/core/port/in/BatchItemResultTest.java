@@ -46,11 +46,21 @@ class BatchItemResultTest {
 
   @Test
   void failedFactorySetsReasonAndNoNotificationId() {
-    final BatchItemResult result = BatchItemResult.failed(EXTERNAL_ID, "clamav down");
+    final BatchItemResult result = BatchItemResult.failed(EXTERNAL_ID);
 
     assertEquals(BatchItemOutcome.FAILED, result.outcome());
     assertNull(result.notificationId());
-    assertEquals("clamav down", result.rejectionReason());
+    assertEquals("Internal error", result.rejectionReason());
+  }
+
+  @Test
+  void failedFactoryAlwaysUsesTheFixedReasonWhileRejectedKeepsItsOwn() {
+    assertEquals(
+        BatchItemResult.INTERNAL_ERROR_REASON,
+        BatchItemResult.failed(EXTERNAL_ID).rejectionReason());
+    assertEquals(
+        "Channel not available",
+        BatchItemResult.rejected(EXTERNAL_ID, "Channel not available").rejectionReason());
   }
 
   @Test

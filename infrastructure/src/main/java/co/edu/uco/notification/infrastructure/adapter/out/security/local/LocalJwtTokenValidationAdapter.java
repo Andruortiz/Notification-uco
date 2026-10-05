@@ -5,6 +5,7 @@ import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.InvalidTokenException;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
+import co.edu.uco.notification.infrastructure.adapter.out.security.JwtFailures;
 import co.edu.uco.notification.infrastructure.config.AuthJwtProperties;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -14,15 +15,20 @@ import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKey;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.DependsOn;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 @Component
+@DependsOn("authJwtSecretGuard")
 @ConditionalOnProperty(
     name = "notification.auth.mode",
     havingValue = "local",
     matchIfMissing = true)
 public final class LocalJwtTokenValidationAdapter implements TokenValidationPort {
+
+  private static final String TENANT_CLAIM = "tenantId";
+  private static final String ROLE_CLAIM = "role";
 
   private final SecretKey key;
 
@@ -42,28 +48,44 @@ public final class LocalJwtTokenValidationAdapter implements TokenValidationPort
 
   private AuthenticatedPrincipal parse(final String rawToken) {
     final Claims claims = parseClaims(rawToken);
-    final String subject = claims.getSubject();
-    final String tenantIdValue = claims.get("tenantId", String.class);
-    final String roleValue = claims.get("role", String.class);
-    if (isBlank(subject) || isBlank(tenantIdValue) || isBlank(roleValue)) {
-      throw new InvalidTokenException("missing required claims", new IllegalStateException());
+    final String tenantHint = JwtFailures.verifiedTenantOf(claims, TENANT_CLAIM);
+    if (claims.getExpiration() == null) {
+      throw new InvalidTokenException(
+          "missing expiration", InvalidTokenException.Reason.MISSING_EXPIRATION, tenantHint, null);
     }
-    return new AuthenticatedPrincipal(subject, TenantId.of(tenantIdValue), parseRole(roleValue));
+    final String subject = claims.getSubject();
+    if (isBlank(subject) || tenantHint == null) {
+      throw new InvalidTokenException(
+          "missing required claims", InvalidTokenException.Reason.MISSING_CLAIMS, tenantHint, null);
+    }
+    final String roleValue = roleOf(claims, tenantHint);
+    return new AuthenticatedPrincipal(
+        subject, TenantId.of(tenantHint), parseRole(roleValue, tenantHint));
   }
 
   private Claims parseClaims(final String rawToken) {
     try {
       return Jwts.parser().verifyWith(key).build().parseSignedClaims(rawToken).getPayload();
     } catch (final JwtException | IllegalArgumentException e) {
-      throw new InvalidTokenException("invalid token", e);
+      throw JwtFailures.toInvalidToken(e, TENANT_CLAIM);
     }
   }
 
-  private Role parseRole(final String roleValue) {
+  private static String roleOf(final Claims claims, final String tenantHint) {
+    final Object value = claims.get(ROLE_CLAIM);
+    if (value instanceof String text && !text.isBlank()) {
+      return text;
+    }
+    throw new InvalidTokenException(
+        "missing required claims", InvalidTokenException.Reason.MISSING_CLAIMS, tenantHint, null);
+  }
+
+  private static Role parseRole(final String roleValue, final String tenantHint) {
     try {
       return Role.of(roleValue);
     } catch (final IllegalArgumentException e) {
-      throw new InvalidTokenException("unknown role", e);
+      throw new InvalidTokenException(
+          "unknown role", InvalidTokenException.Reason.UNKNOWN_ROLE, tenantHint, e);
     }
   }
 

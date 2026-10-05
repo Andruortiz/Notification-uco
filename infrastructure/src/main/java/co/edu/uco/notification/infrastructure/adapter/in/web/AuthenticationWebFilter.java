@@ -2,16 +2,15 @@ package co.edu.uco.notification.infrastructure.adapter.in.web;
 
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.Role;
+import co.edu.uco.notification.core.exception.InvalidTokenException;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
-import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.MalformedJwtException;
-import io.jsonwebtoken.security.SignatureException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
@@ -37,6 +36,8 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String SUBSCRIBE_PATH = "/notifications:subscribe";
   private static final String ACCESS_TOKEN_PARAM = "access_token";
+  private static final List<String> EXEMPT_PATHS =
+      List.of("/actuator", "/v3/api-docs", "/swagger-ui", "/swagger-ui.html", "/openapi");
 
   private final TokenValidationPort tokenValidationPort;
   private final RouteAuthorizationPolicy routeAuthorizationPolicy;
@@ -67,8 +68,46 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     }
     return tokenValidationPort
         .validate(rawToken)
-        .flatMap(principal -> continueWithPrincipal(exchange, chain, principal))
-        .onErrorResume(error -> reject(exchange, extractTenantId(error), classify(error)));
+        .map(Authentication::accepted)
+        .onErrorResume(error -> Mono.just(Authentication.rejected(error)))
+        .switchIfEmpty(
+            Mono.fromSupplier(() -> Authentication.rejectedFor(RejectionReason.MALFORMED_TOKEN)))
+        .flatMap(
+            authentication ->
+                authentication.principal() == null
+                    ? reject(exchange, authentication.tenantId(), authentication.reason())
+                    : continueWithPrincipal(exchange, chain, authentication.principal()));
+  }
+
+  private record Authentication(
+      AuthenticatedPrincipal principal, String tenantId, RejectionReason reason) {
+
+    static Authentication accepted(final AuthenticatedPrincipal principal) {
+      return new Authentication(principal, null, null);
+    }
+
+    static Authentication rejected(final Throwable error) {
+      if (error instanceof InvalidTokenException invalid) {
+        return new Authentication(null, invalid.tenantId(), reasonOf(invalid.reason()));
+      }
+      return rejectedFor(RejectionReason.MALFORMED_TOKEN);
+    }
+
+    static Authentication rejectedFor(final RejectionReason reason) {
+      return new Authentication(null, null, reason);
+    }
+  }
+
+  private static RejectionReason reasonOf(final InvalidTokenException.Reason reason) {
+    return switch (reason) {
+      case EXPIRED -> RejectionReason.EXPIRED;
+      case NOT_YET_VALID -> RejectionReason.NOT_YET_VALID;
+      case INVALID_SIGNATURE -> RejectionReason.INVALID_SIGNATURE;
+      case MISSING_EXPIRATION -> RejectionReason.MISSING_EXPIRATION;
+      case MISSING_CLAIMS -> RejectionReason.MISSING_CLAIMS;
+      case UNKNOWN_ROLE -> RejectionReason.UNKNOWN_ROLE;
+      case MALFORMED -> RejectionReason.MALFORMED_TOKEN;
+    };
   }
 
   private Mono<Void> continueWithPrincipal(
@@ -92,10 +131,8 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       return true;
     }
     final String path = exchange.getRequest().getPath().value();
-    return path.startsWith("/actuator")
-        || path.startsWith("/v3/api-docs")
-        || path.startsWith("/swagger-ui")
-        || path.startsWith("/openapi");
+    return EXEMPT_PATHS.stream()
+        .anyMatch(exempt -> path.equals(exempt) || path.startsWith(exempt + "/"));
   }
 
   private String extractToken(final ServerWebExchange exchange) {
@@ -106,34 +143,6 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     if (SUBSCRIBE_PATH.equals(exchange.getRequest().getPath().value())) {
       final String queryToken = exchange.getRequest().getQueryParams().getFirst(ACCESS_TOKEN_PARAM);
       return queryToken == null || queryToken.isBlank() ? null : queryToken;
-    }
-    return null;
-  }
-
-  private static RejectionReason classify(final Throwable error) {
-    final Throwable cause = error.getCause();
-    if (cause instanceof ExpiredJwtException) {
-      return RejectionReason.EXPIRED;
-    }
-    if (cause instanceof SignatureException) {
-      return RejectionReason.INVALID_SIGNATURE;
-    }
-    if (cause instanceof IllegalStateException) {
-      return RejectionReason.MISSING_CLAIMS;
-    }
-    if (cause instanceof IllegalArgumentException) {
-      return RejectionReason.UNKNOWN_ROLE;
-    }
-    if (cause instanceof MalformedJwtException) {
-      return RejectionReason.MALFORMED_TOKEN;
-    }
-    return RejectionReason.MALFORMED_TOKEN;
-  }
-
-  private static String extractTenantId(final Throwable error) {
-    if (error.getCause() instanceof ExpiredJwtException expired) {
-      final Object tenantId = expired.getClaims().get("tenantId");
-      return tenantId == null ? null : tenantId.toString();
     }
     return null;
   }

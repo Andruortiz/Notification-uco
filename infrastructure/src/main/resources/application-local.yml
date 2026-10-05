@@ -1,0 +1,4 @@
+notification:
+  auth:
+    jwt:
+      hs256-secret: ${AUTH_JWT_HS256_SECRET:notification-uco-dev-only-secret-change-me-0123456789abcdef}

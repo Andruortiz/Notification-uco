@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.in.web;
 
 public enum RejectionReason {
   MISSING_TOKEN,
+  INVALID_TICKET,
   MALFORMED_TOKEN,
   INVALID_SIGNATURE,
   EXPIRED,

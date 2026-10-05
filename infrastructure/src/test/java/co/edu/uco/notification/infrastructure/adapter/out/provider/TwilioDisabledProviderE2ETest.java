@@ -3,6 +3,7 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.Notification;
@@ -217,6 +218,7 @@ class TwilioDisabledProviderE2ETest {
         notificationRepository.findById(NotificationId.of(notificationId)).block();
     assertNotNull(stored);
     assertTrue(stored.deliveryAttempts().isEmpty());
+    assertNull(stored.dispatchReservedAt());
     assertEquals("PENDING", status(notificationId).get("status"));
     assertTrue(fakeTwilio.requests().isEmpty());
   }

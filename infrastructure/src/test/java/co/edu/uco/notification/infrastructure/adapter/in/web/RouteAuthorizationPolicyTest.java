@@ -44,6 +44,19 @@ class RouteAuthorizationPolicyTest {
   }
 
   @Test
+  void subscribeTicketRequiresOnlyCliente() {
+    assertEquals(
+        Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications:subscribeTicket"));
+  }
+
+  @Test
+  void subscribeTicketIsNotOpenToOtherMethods() {
+    assertEquals(
+        Role.ADMINISTRADOR,
+        policy.minimumRoleFor(HttpMethod.GET, "/notifications:subscribeTicket"));
+  }
+
+  @Test
   void catalogReadRequiresOnlyCliente() {
     assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/channels"));
     assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/providers"));

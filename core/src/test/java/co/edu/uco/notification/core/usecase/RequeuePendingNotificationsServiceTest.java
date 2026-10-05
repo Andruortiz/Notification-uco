@@ -1,8 +1,12 @@
 package co.edu.uco.notification.core.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,6 +35,7 @@ import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -48,15 +53,23 @@ class RequeuePendingNotificationsServiceTest {
       Mockito.mock(NotificationEventPublisherPort.class);
   private final RetryPolicy retryPolicy = new RetryPolicy();
 
+  private static final int BATCH_SIZE = 100;
+
   private final RequeuePendingNotificationsService service =
       new RequeuePendingNotificationsService(
-          notificationRepository, eventPublisherPort, retryPolicy, Duration.ofSeconds(60));
+          notificationRepository,
+          eventPublisherPort,
+          retryPolicy,
+          Duration.ofSeconds(60),
+          Duration.ofMinutes(10),
+          BATCH_SIZE);
 
   @BeforeEach
   void stubEmptyByDefault() {
     when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
         .thenReturn(Flux.empty());
-    when(notificationRepository.findByStatus(NotificationStatus.PENDING)).thenReturn(Flux.empty());
+    when(notificationRepository.claimForRequeue(any(), anyInt())).thenReturn(Flux.empty());
+    when(notificationRepository.claimStuckInProcess(any(), anyInt())).thenReturn(Flux.empty());
   }
 
   @Test
@@ -97,6 +110,195 @@ class RequeuePendingNotificationsServiceTest {
   }
 
   @Test
+  void anUnexpectedErrorOnOneRecoverableNotificationDoesNotStopTheRestOfThePass() {
+    final Notification broken =
+        recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
+    final Notification healthy =
+        recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.just(broken, healthy));
+    when(notificationRepository.save(broken))
+        .thenReturn(Mono.error(new IllegalStateException("mongo down")));
+    when(notificationRepository.save(healthy)).thenReturn(Mono.just(healthy));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(healthy)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(eventPublisherPort).enqueueForDispatch(healthy);
+  }
+
+  @Test
+  void aFailureReadingRecoverableNotificationsDoesNotPreventTheOrphanClaim() {
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.error(new IllegalStateException("mongo down")));
+    final Notification orphaned = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
+    when(notificationRepository.claimForRequeue(any(), anyInt())).thenReturn(Flux.just(orphaned));
+    when(eventPublisherPort.enqueueForDispatch(orphaned)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(eventPublisherPort).enqueueForDispatch(orphaned);
+  }
+
+  @Test
+  void aPendingNotificationWithPreviousAttemptsIsAnOrphanByPendingSince() {
+    final Notification orphaned = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
+    when(notificationRepository.claimForRequeue(any(), anyInt())).thenReturn(Flux.just(orphaned));
+    when(eventPublisherPort.enqueueForDispatch(orphaned)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    assertEquals(NotificationStatus.PENDING, orphaned.status());
+    verify(eventPublisherPort).enqueueForDispatch(orphaned);
+    verify(notificationRepository, never()).save(any());
+  }
+
+  @Test
+  void theOrphanClaimUsesTheThresholdAndTheBatchSize() {
+    final Instant before = Instant.now();
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    final ArgumentCaptor<Instant> threshold = ArgumentCaptor.forClass(Instant.class);
+    verify(notificationRepository).claimForRequeue(threshold.capture(), eq(BATCH_SIZE));
+    assertFalse(threshold.getValue().isBefore(before.minusSeconds(60)));
+    assertFalse(threshold.getValue().isAfter(Instant.now().minusSeconds(59)));
+  }
+
+  @Test
+  void anEnqueueFailureIsIsolatedAndTheNotificationIsEnqueuedAgainInTheNextPass() {
+    final Notification failing = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
+    final Notification healthy = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
+    when(notificationRepository.claimForRequeue(any(), anyInt()))
+        .thenReturn(Flux.just(failing, healthy))
+        .thenReturn(Flux.just(failing));
+    when(eventPublisherPort.enqueueForDispatch(failing))
+        .thenReturn(Mono.error(new IllegalStateException("broker down")))
+        .thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(healthy)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+    verify(eventPublisherPort).enqueueForDispatch(healthy);
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+    verify(eventPublisherPort, times(2)).enqueueForDispatch(failing);
+  }
+
+  @Test
+  void aFailingClaimDoesNotFailThePass() {
+    when(notificationRepository.claimForRequeue(any(), anyInt()))
+        .thenReturn(Flux.error(new IllegalStateException("mongo down")));
+    when(notificationRepository.claimStuckInProcess(any(), anyInt()))
+        .thenReturn(Flux.just(stuckInProcessNotification()));
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(notificationRepository).claimStuckInProcess(any(), eq(BATCH_SIZE));
+  }
+
+  @Test
+  void stuckInProcessNotificationsAreClaimedWithTheTimeoutAndTheBatchSize() {
+    final Instant before = Instant.now();
+    when(notificationRepository.claimStuckInProcess(any(), anyInt()))
+        .thenReturn(Flux.just(stuckInProcessNotification()));
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    final ArgumentCaptor<Instant> threshold = ArgumentCaptor.forClass(Instant.class);
+    verify(notificationRepository).claimStuckInProcess(threshold.capture(), eq(BATCH_SIZE));
+    assertFalse(threshold.getValue().isBefore(before.minus(Duration.ofMinutes(10))));
+    assertFalse(threshold.getValue().isAfter(Instant.now().minus(Duration.ofMinutes(9))));
+  }
+
+  @Test
+  void nothingIsEnqueuedNorSavedWhenThereIsNothingToRecover() {
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(eventPublisherPort, never()).enqueueForDispatch(any());
+    verify(notificationRepository, never()).save(any());
+  }
+
+  @Test
+  void theRecoverablePassRespectsTheBatchSize() {
+    final RequeuePendingNotificationsService smallBatch =
+        new RequeuePendingNotificationsService(
+            notificationRepository,
+            eventPublisherPort,
+            retryPolicy,
+            Duration.ofSeconds(60),
+            Duration.ofMinutes(10),
+            2);
+    final List<Notification> due = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      final Notification notification =
+          recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
+      due.add(notification);
+      when(notificationRepository.save(notification)).thenReturn(Mono.just(notification));
+      when(eventPublisherPort.enqueueForDispatch(notification)).thenReturn(Mono.empty());
+    }
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.fromIterable(due));
+
+    StepVerifier.create(smallBatch.requeuePending()).verifyComplete();
+
+    verify(eventPublisherPort, times(2)).enqueueForDispatch(any());
+    verify(notificationRepository).claimForRequeue(any(), eq(2));
+    verify(notificationRepository).claimStuckInProcess(any(), eq(2));
+  }
+
+  @Test
+  void theBackoffIsCalculatedOnTheCurrentCycleOnly() {
+    final Instant now = Instant.now();
+    final List<DeliveryAttempt> attempts = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      attempts.add(
+          DeliveryAttempt.of(
+              now.minusSeconds(3600),
+              AttemptResult.RECOVERABLE_FAILURE,
+              AttemptOrigin.AUTOMATIC,
+              ProviderId.of("brevo"),
+              1));
+    }
+    attempts.add(
+        DeliveryAttempt.of(
+            now.minusSeconds(60),
+            AttemptResult.RECOVERABLE_FAILURE,
+            AttemptOrigin.AUTOMATIC,
+            ProviderId.of("brevo"),
+            2));
+    final Notification afterManualRetry =
+        reconstituteRecoverable(
+            new NotificationMetadata(now.minusSeconds(7200), 1L, null, null, 2), attempts);
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.just(afterManualRetry));
+    when(notificationRepository.save(afterManualRetry)).thenReturn(Mono.just(afterManualRetry));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(afterManualRetry)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(eventPublisherPort).enqueueForDispatch(afterManualRetry);
+  }
+
+  @Test
+  void aRecoverableNotificationWithoutAttemptsIsDueImmediately() {
+    final Notification released =
+        reconstituteRecoverable(
+            new NotificationMetadata(Instant.now().minusSeconds(900), 1L), List.of());
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.just(released));
+    when(notificationRepository.save(released)).thenReturn(Mono.just(released));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(released)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(eventPublisherPort).enqueueForDispatch(released);
+  }
+
+  @Test
   void aVersionConflictOnOneNotificationDoesNotStopTheRestOfTheBatch() {
     final Notification conflicting =
         recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
@@ -115,45 +317,6 @@ class RequeuePendingNotificationsServiceTest {
 
     verify(notificationRepository).save(healthy);
     verify(eventPublisherPort).enqueueForDispatch(healthy);
-  }
-
-  @Test
-  void reenqueuesPendingNotificationsOrphanedBeforeTheThresholdWithoutChangingState() {
-    final Notification orphaned =
-        pendingNotificationWithoutAttempts(Instant.now().minusSeconds(120));
-    when(notificationRepository.findByStatus(NotificationStatus.PENDING))
-        .thenReturn(Flux.just(orphaned));
-    when(eventPublisherPort.enqueueForDispatch(orphaned)).thenReturn(Mono.empty());
-
-    StepVerifier.create(service.requeuePending()).verifyComplete();
-
-    assertEquals(NotificationStatus.PENDING, orphaned.status());
-    verify(notificationRepository, never()).save(any());
-    verify(eventPublisherPort).enqueueForDispatch(orphaned);
-  }
-
-  @Test
-  void doesNotTouchPendingNotificationsAcceptedMoreRecentlyThanTheThreshold() {
-    final Notification recentlyAccepted = pendingNotificationWithoutAttempts(Instant.now());
-    when(notificationRepository.findByStatus(NotificationStatus.PENDING))
-        .thenReturn(Flux.just(recentlyAccepted));
-
-    StepVerifier.create(service.requeuePending()).verifyComplete();
-
-    verify(eventPublisherPort, never()).enqueueForDispatch(any());
-  }
-
-  @Test
-  void doesNotTouchPendingNotificationsThatAlreadyHaveADeliveryAttempt() {
-    final Notification requeuedFromRecoverable =
-        recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
-    requeuedFromRecoverable.requeue();
-    when(notificationRepository.findByStatus(NotificationStatus.PENDING))
-        .thenReturn(Flux.just(requeuedFromRecoverable));
-
-    StepVerifier.create(service.requeuePending()).verifyComplete();
-
-    verify(eventPublisherPort, never()).enqueueForDispatch(any());
   }
 
   @Test
@@ -217,7 +380,23 @@ class RequeuePendingNotificationsServiceTest {
         attempts);
   }
 
-  private static Notification pendingNotificationWithoutAttempts(final Instant acceptedAt) {
+  private static Notification reconstituteRecoverable(
+      final NotificationMetadata metadata, final List<DeliveryAttempt> attempts) {
+    return Notification.reconstitute(
+        NotificationId.newId(),
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-1"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+        NotificationStatus.RECOVERABLE,
+        metadata,
+        attempts);
+  }
+
+  private static Notification pendingNotificationWithAttempts(final Instant pendingSince) {
     return Notification.reconstitute(
         NotificationId.newId(),
         new NotificationRouting(
@@ -228,7 +407,28 @@ class RequeuePendingNotificationsServiceTest {
             Recipient.of("alice@example.com")),
         new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
         NotificationStatus.PENDING,
-        new NotificationMetadata(acceptedAt, null),
+        new NotificationMetadata(pendingSince.minusSeconds(300), 2L, pendingSince, null, 1),
+        List.of(
+            DeliveryAttempt.of(
+                pendingSince.minusSeconds(200),
+                AttemptResult.RECOVERABLE_FAILURE,
+                AttemptOrigin.AUTOMATIC,
+                ProviderId.of("brevo"))));
+  }
+
+  private static Notification stuckInProcessNotification() {
+    return Notification.reconstitute(
+        NotificationId.newId(),
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-3"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+        NotificationStatus.RECOVERABLE,
+        new NotificationMetadata(
+            Instant.now().minusSeconds(1800), 3L, Instant.now().minusSeconds(1700), null, 1),
         List.of());
   }
 }

@@ -1,6 +1,7 @@
 package co.edu.uco.notification.core.domain;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
@@ -57,6 +58,59 @@ class DeliveryAttemptTest {
         NullPointerException.class,
         () ->
             DeliveryAttempt.of(Instant.now(), AttemptResult.ACCEPTED, AttemptOrigin.MANUAL, null));
+  }
+
+  @Test
+  void theCycleDefaultsToOneForAnAttemptCreatedWithoutIt() {
+    final DeliveryAttempt attempt =
+        DeliveryAttempt.of(
+            Instant.now(), AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+
+    assertEquals(1, attempt.cycle());
+  }
+
+  @Test
+  void anExplicitCycleIsPreserved() {
+    final DeliveryAttempt attempt =
+        DeliveryAttempt.of(
+            Instant.now(),
+            AttemptResult.RECOVERABLE_FAILURE,
+            AttemptOrigin.MANUAL,
+            ProviderId.of("brevo"),
+            3);
+
+    assertEquals(3, attempt.cycle());
+  }
+
+  @Test
+  void aCycleBelowOneIsNormalizedToOneWhenReadingAnOldAttempt() {
+    final DeliveryAttempt attempt =
+        DeliveryAttempt.of(
+            Instant.now(),
+            AttemptResult.RECOVERABLE_FAILURE,
+            AttemptOrigin.AUTOMATIC,
+            ProviderId.of("brevo"),
+            0);
+
+    assertEquals(1, attempt.cycle());
+  }
+
+  @Test
+  void attemptsOfDifferentCyclesAreNotEqual() {
+    final Instant now = Instant.now();
+    assertNotEquals(
+        DeliveryAttempt.of(
+            now,
+            AttemptResult.RECOVERABLE_FAILURE,
+            AttemptOrigin.AUTOMATIC,
+            ProviderId.of("brevo"),
+            1),
+        DeliveryAttempt.of(
+            now,
+            AttemptResult.RECOVERABLE_FAILURE,
+            AttemptOrigin.AUTOMATIC,
+            ProviderId.of("brevo"),
+            2));
   }
 
   @Test

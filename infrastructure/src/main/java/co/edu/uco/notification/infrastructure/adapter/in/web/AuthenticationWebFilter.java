@@ -2,7 +2,9 @@ package co.edu.uco.notification.infrastructure.adapter.in.web;
 
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.Role;
+import co.edu.uco.notification.core.domain.valueobject.SubscriptionTicketFingerprint;
 import co.edu.uco.notification.core.exception.InvalidTokenException;
+import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
@@ -35,18 +37,23 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
   private static final Logger LOGGER = LoggerFactory.getLogger(AuthenticationWebFilter.class);
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String SUBSCRIBE_PATH = "/notifications:subscribe";
-  private static final String ACCESS_TOKEN_PARAM = "access_token";
+  private static final String TICKET_PARAM = "ticket";
   private static final List<String> EXEMPT_PATHS =
       List.of("/actuator", "/v3/api-docs", "/swagger-ui", "/swagger-ui.html", "/openapi");
 
   private final TokenValidationPort tokenValidationPort;
+  private final SubscriptionTicketPort subscriptionTicketPort;
   private final RouteAuthorizationPolicy routeAuthorizationPolicy;
 
   public AuthenticationWebFilter(
       final TokenValidationPort tokenValidationPort,
+      final SubscriptionTicketPort subscriptionTicketPort,
       final RouteAuthorizationPolicy routeAuthorizationPolicy) {
     this.tokenValidationPort =
         Preconditions.requireNonNull(tokenValidationPort, "tokenValidationPort must not be null");
+    this.subscriptionTicketPort =
+        Preconditions.requireNonNull(
+            subscriptionTicketPort, "subscriptionTicketPort must not be null");
     this.routeAuthorizationPolicy =
         Preconditions.requireNonNull(
             routeAuthorizationPolicy, "routeAuthorizationPolicy must not be null");
@@ -62,14 +69,47 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     if (isExempt(exchange)) {
       return chain.filter(exchange);
     }
-    final String rawToken = extractToken(exchange);
+    final String header = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+    if (header == null && isSubscribe(exchange)) {
+      return authenticateWithTicket(exchange, chain);
+    }
+    final String rawToken = bearerToken(header);
     if (rawToken == null) {
       return reject(exchange, null, RejectionReason.MISSING_TOKEN);
     }
-    return tokenValidationPort
-        .validate(rawToken)
-        .map(Authentication::accepted)
-        .onErrorResume(error -> Mono.just(Authentication.rejected(error)))
+    return finishAuthentication(
+        exchange,
+        chain,
+        tokenValidationPort
+            .validate(rawToken)
+            .map(Authentication::accepted)
+            .onErrorResume(error -> Mono.just(Authentication.rejected(error))));
+  }
+
+  private Mono<Void> authenticateWithTicket(
+      final ServerWebExchange exchange, final WebFilterChain chain) {
+    final String ticket = exchange.getRequest().getQueryParams().getFirst(TICKET_PARAM);
+    if (ticket == null || ticket.isBlank()) {
+      return reject(exchange, null, RejectionReason.MISSING_TOKEN);
+    }
+    return finishAuthentication(
+        exchange,
+        chain,
+        subscriptionTicketPort
+            .consume(SubscriptionTicketFingerprint.of(ticket))
+            .map(Authentication::accepted)
+            .onErrorResume(
+                error -> Mono.just(Authentication.rejectedFor(RejectionReason.INVALID_TICKET)))
+            .switchIfEmpty(
+                Mono.fromSupplier(
+                    () -> Authentication.rejectedFor(RejectionReason.INVALID_TICKET))));
+  }
+
+  private Mono<Void> finishAuthentication(
+      final ServerWebExchange exchange,
+      final WebFilterChain chain,
+      final Mono<Authentication> outcome) {
+    return outcome
         .switchIfEmpty(
             Mono.fromSupplier(() -> Authentication.rejectedFor(RejectionReason.MALFORMED_TOKEN)))
         .flatMap(
@@ -135,16 +175,15 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
         .anyMatch(exempt -> path.equals(exempt) || path.startsWith(exempt + "/"));
   }
 
-  private String extractToken(final ServerWebExchange exchange) {
-    final String header = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-    if (header != null) {
-      return header.startsWith(BEARER_PREFIX) ? header.substring(BEARER_PREFIX.length()) : null;
-    }
-    if (SUBSCRIBE_PATH.equals(exchange.getRequest().getPath().value())) {
-      final String queryToken = exchange.getRequest().getQueryParams().getFirst(ACCESS_TOKEN_PARAM);
-      return queryToken == null || queryToken.isBlank() ? null : queryToken;
-    }
-    return null;
+  private static boolean isSubscribe(final ServerWebExchange exchange) {
+    return exchange.getRequest().getMethod() == HttpMethod.GET
+        && SUBSCRIBE_PATH.equals(exchange.getRequest().getPath().value());
+  }
+
+  private static String bearerToken(final String header) {
+    return header != null && header.startsWith(BEARER_PREFIX)
+        ? header.substring(BEARER_PREFIX.length())
+        : null;
   }
 
   private Mono<Void> reject(

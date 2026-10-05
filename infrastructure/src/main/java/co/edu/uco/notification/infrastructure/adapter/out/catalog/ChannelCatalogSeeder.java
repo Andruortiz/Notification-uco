@@ -14,10 +14,6 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-/**
- * Siembra en Mongo los canales de {@code application.yml} que todavía no existen en el catálogo.
- * Nunca modifica un canal ya guardado: lo guardado en Mongo es la fuente de verdad.
- */
 @Component
 @EnableConfigurationProperties(ChannelCatalogProperties.class)
 public class ChannelCatalogSeeder implements ApplicationRunner {

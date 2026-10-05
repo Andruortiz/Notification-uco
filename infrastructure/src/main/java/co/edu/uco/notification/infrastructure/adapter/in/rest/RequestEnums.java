@@ -3,10 +3,6 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 import java.util.Arrays;
 import java.util.stream.Collectors;
 
-/**
- * Convierte los valores de enumeración que llegan en una solicitud, y siempre falla con un mensaje
- * que nombra el campo y los valores admitidos, sin exponer nombres de clases internas.
- */
 final class RequestEnums {
 
   private RequestEnums() {}

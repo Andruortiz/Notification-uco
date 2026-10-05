@@ -11,6 +11,7 @@ import co.edu.uco.notification.core.port.in.ProviderChannelView;
 import co.edu.uco.notification.core.port.in.ProviderStatus;
 import co.edu.uco.notification.core.port.in.ProviderView;
 import co.edu.uco.notification.core.port.in.QueryChannelCatalogUseCase;
+import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
@@ -42,6 +43,8 @@ class ChannelCatalogControllerTest {
       "missing notification.provider.brevo.api-key (BREVO_API_KEY)";
 
   @Autowired private WebTestClient webTestClient;
+
+  @MockBean private SubscriptionTicketPort subscriptionTicketPort;
 
   @MockBean private QueryChannelCatalogUseCase queryChannelCatalogUseCase;
 

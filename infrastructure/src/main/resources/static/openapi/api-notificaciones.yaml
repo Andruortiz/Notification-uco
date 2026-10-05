@@ -97,6 +97,8 @@ paths:
           description: >
             Un adjunto referencia una subida todavía en PENDING_SCAN. Reintentar cuando
             GET /attachment-uploads/{uploadId} devuelva CLEAN. Una subida en FAILED se rechaza con 400.
+            También responde 409 ante una modificación concurrente, una clave externalId ya aceptada o una
+            transición de estado no permitida, con mensaje fijo.
           content:
             application/json:
               schema:
@@ -122,6 +124,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
     get:
       tags: [Notificaciones]
       summary: Consultar histórico y trazabilidad
@@ -212,20 +216,20 @@ paths:
         cambio relevante mientras la conexión permanezca abierta. Una reconexión (ej. tras una caída
         de red) es, para el servidor, una solicitud nueva -- siempre reproduce la foto vigente antes
         de retomar el flujo en vivo, sin necesitar ningún encabezado ni parámetro de reanudación.
-        Excepción de autenticación: el `EventSource` nativo del navegador no permite enviar headers
-        custom, así que esta operación acepta también el token como parámetro de consulta
-        `access_token` -- la única operación del contrato con esta excepción. Si el header
-        `Authorization` está presente, tiene prioridad sobre `access_token`. Un token en la URL puede
-        quedar registrado en logs de acceso de intermediarios fuera del control de este servicio; el
-        servicio mismo no registra esta query string en sus propios logs.
+        Autenticación: con cabecera `Authorization` o, para clientes que no pueden enviar cabeceras
+        (`EventSource` nativo), con un ticket de un solo uso obtenido en
+        `POST /notifications:subscribeTicket` y presentado en el parámetro `ticket`. La credencial
+        principal nunca viaja en la dirección de la conexión. Si llega la cabecera `Authorization`,
+        tiene prioridad sobre `ticket`.
       operationId: subscribeToNotificationUpdates
       parameters:
-        - name: access_token
+        - name: ticket
           in: query
           required: false
           description: >
-            Token JWT, equivalente a `Authorization: Bearer <token>`. Solo para esta operación
-            (limitación de EventSource). Ignorado si el header Authorization está presente.
+            Ticket de un solo uso emitido por `POST /notifications:subscribeTicket`, vigente 30
+            segundos. Se consume al usarse: un segundo uso da 401. Ignorado si la cabecera
+            `Authorization` está presente.
           schema:
             type: string
         - name: recipientId
@@ -268,7 +272,48 @@ paths:
               schema:
                 $ref: '#/components/schemas/NotificationLiveUpdate'
         '401':
+          description: >
+            Ticket ausente, caducado, ya usado o desconocido; también cabecera `Authorization`
+            inválida.
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /notifications:subscribeTicket:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Notificaciones]
+      summary: Obtener un ticket de un solo uso para abrir el panel en vivo
+      description: >
+        Devuelve un ticket opaco con vigencia corta (30 segundos) que se presenta una sola vez en
+        GET /notifications:subscribe?ticket=... para clientes que no pueden enviar cabeceras
+        (EventSource nativo). La credencial principal no viaja en la dirección de la conexión. Rol
+        mínimo: CLIENTE.
+      operationId: issueSubscriptionTicket
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            traceparent:
+              $ref: '#/components/headers/TraceParent'
+          description: Ticket emitido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SubscriptionTicketResponse'
+        '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
 
   /notifications:sendBatch:
     parameters:
@@ -325,6 +370,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /notifications/{id}:
     parameters:
@@ -418,6 +467,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /attachment-uploads:
     parameters:
@@ -483,6 +536,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /attachment-uploads/{uploadId}:complete:
     parameters:
@@ -561,6 +618,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /attachment-uploads/{uploadId}:
     parameters:
@@ -883,6 +942,33 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+        traceparent:
+          $ref: '#/components/headers/TraceParent'
+      description: >
+        Conflicto con el estado actual del recurso: modificación concurrente de la notificación,
+        clave externalId ya aceptada para el tenant o transición de estado no permitida. El mensaje es
+        fijo y no incluye datos de otros recursos.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+        traceparent:
+          $ref: '#/components/headers/TraceParent'
+      description: >
+        Error inesperado. El cuerpo lleva un mensaje genérico y el correlationId para localizar la causa
+        en los logs; nunca el mensaje interno de la excepción.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
 
   parameters:
     CorrelationId:
@@ -1142,6 +1228,18 @@ components:
         duplicate:
           type: boolean
           description: true si ya existía una notificación con el mismo (tenantId, externalId).
+
+    SubscriptionTicketResponse:
+      type: object
+      required: [ticket, expiresInSeconds]
+      properties:
+        ticket:
+          type: string
+          description: Ticket opaco de un solo uso (43 caracteres base64url).
+        expiresInSeconds:
+          type: integer
+          example: 30
+          description: Segundos de vigencia del ticket desde su emisión.
 
     SendNotificationBatchRequest:
       type: object

@@ -24,10 +24,6 @@ public final class ContentSchemaValidator {
       JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
   private static final String ATTACHMENTS = "attachments";
 
-  /**
-   * Suma del tamano de todos los adjuntos. Se agrega al contenido que se valida para que el esquema
-   * de un canal pueda acotar el total, algo que un esquema JSON no puede calcular por si solo.
-   */
   private static final String ATTACHMENTS_TOTAL_BYTES = "attachmentsTotalBytes";
 
   private ContentSchemaValidator() {}

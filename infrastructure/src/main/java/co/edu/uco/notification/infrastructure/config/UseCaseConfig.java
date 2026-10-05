@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
 import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
+import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
 import co.edu.uco.notification.core.repository.NotificationBatchRepository;
 import co.edu.uco.notification.core.repository.NotificationRepository;
@@ -170,16 +171,30 @@ public class UseCaseConfig {
   }
 
   @Bean
+  IssueSubscriptionTicketUseCase issueSubscriptionTicketUseCase(
+      final SubscriptionTicketPort subscriptionTicketPort,
+      final Clock clock,
+      @Value("${notification.auth.subscription-ticket.ttl-seconds:30}") final long ttlSeconds) {
+    return new IssueSubscriptionTicketService(
+        subscriptionTicketPort, clock, Duration.ofSeconds(ttlSeconds));
+  }
+
+  @Bean
   RequeuePendingNotificationsUseCase requeuePendingNotificationsUseCase(
       final NotificationRepository notificationRepository,
       final NotificationEventPublisherPort eventPublisherPort,
       final RetryPolicy retryPolicy,
       @Value("${notification.scheduler.pending-orphan-threshold-ms:60000}")
-          final long pendingOrphanThresholdMs) {
+          final long pendingOrphanThresholdMs,
+      @Value("${notification.scheduler.in-process-timeout-ms:600000}")
+          final long inProcessTimeoutMs,
+      @Value("${notification.scheduler.batch-size:100}") final int batchSize) {
     return new RequeuePendingNotificationsService(
         notificationRepository,
         eventPublisherPort,
         retryPolicy,
-        Duration.ofMillis(pendingOrphanThresholdMs));
+        Duration.ofMillis(pendingOrphanThresholdMs),
+        Duration.ofMillis(inProcessTimeoutMs),
+        batchSize);
   }
 }

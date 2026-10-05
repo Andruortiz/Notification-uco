@@ -8,20 +8,6 @@ import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
 import org.springframework.core.env.StandardEnvironment;
 
-/**
- * Permite consumir las variables de entorno del servicio tambien desde Azure Key Vault.
- *
- * <p>Se activa solo si esta definida {@value #ENDPOINT_PROPERTY}; sin ella no hace nada y el
- * servicio sigue leyendo el {@code .env} como siempre. Los secretos se agregan justo despues de las
- * variables de entorno reales, de modo que una variable de entorno siempre prevalece sobre el vault
- * y {@code application.yml} sigue usando sus placeholders {@code ${MONGO_PASSWORD}}.
- *
- * <p>Con {@value #PREFIX_PROPERTY} solo se leen los secretos cuyo nombre empieza con ese prefijo,
- * que se descarta al exponerlos; sin ella se leen todos los del vault.
- *
- * <p>Si el vault esta configurado pero no se puede leer, el arranque falla: seguir sin secretos
- * dejaria el servicio medio configurado.
- */
 public class KeyVaultEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
   static final String ENDPOINT_PROPERTY = "AZURE_KEYVAULT_ENDPOINT";

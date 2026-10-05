@@ -26,6 +26,7 @@ import co.edu.uco.notification.core.port.in.CompleteAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.GetAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.IssueAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.in.IssuedUpload;
+import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
@@ -72,6 +73,8 @@ class AttachmentUploadControllerTest {
       """;
 
   @Autowired private WebTestClient webTestClient;
+
+  @MockBean private SubscriptionTicketPort subscriptionTicketPort;
 
   @MockBean private IssueAttachmentUploadUseCase issueUseCase;
 

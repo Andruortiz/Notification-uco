@@ -25,14 +25,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
-/**
- * Valida tokens emitidos por la plataforma central de seguridad: la firma se comprueba con la clave
- * publica del emisor (nunca con un secreto compartido), y el emisor y la audiencia, si se
- * configuran, tienen que coincidir. Los datos del token se traducen a {@link
- * AuthenticatedPrincipal} segun los nombres de claims y la tabla de roles configurados.
- *
- * <p>Se activa con {@code notification.auth.mode=platform}.
- */
 @Component
 @ConditionalOnProperty(name = "notification.auth.mode", havingValue = "platform")
 public final class PlatformJwtTokenValidationAdapter implements TokenValidationPort {
@@ -84,7 +76,6 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
       try {
         return KeyFactory.getInstance(algorithm).generatePublic(new X509EncodedKeySpec(der));
       } catch (final GeneralSecurityException e) {
-        // se prueba con el siguiente algoritmo
       }
     }
     throw new IllegalStateException(
@@ -114,10 +105,6 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
         subjectText, TenantId.of(tenantHint), resolveRole(claims, tenantHint));
   }
 
-  /**
-   * El claim de rol puede ser un texto o una lista. Cada valor se traduce con la tabla de roles y,
-   * si hay varios validos, gana el de mayor privilegio.
-   */
   private Role resolveRole(final Claims claims, final String tenantHint) {
     final Object claim = claims.get(properties.roleClaim());
     final Stream<?> values =

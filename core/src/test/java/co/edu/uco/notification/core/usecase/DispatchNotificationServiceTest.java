@@ -1,10 +1,13 @@
 package co.edu.uco.notification.core.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -31,7 +34,10 @@ import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.DispatchResultNotPersistedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
+import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.exception.ProviderNotAvailableException;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
@@ -45,7 +51,12 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mockito;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
@@ -79,14 +90,39 @@ class DispatchNotificationServiceTest {
   }
 
   private static Notification pendingNotification() {
-    return Notification.accept(
+    final Notification notification =
+        Notification.accept(
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
+    notification.markQueued();
+    return notification;
+  }
+
+  private static Notification notificationInStatus(final NotificationStatus status) {
+    return Notification.reconstitute(
+        NotificationId.newId(),
         new NotificationRouting(
             TenantId.of("tenant-1"),
             ExternalId.of("order-42"),
             ChannelType.of("EMAIL"),
             RecipientId.of("recipient-1"),
             Recipient.of("alice@example.com")),
-        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+        status,
+        new NotificationMetadata(Instant.now(), 3L),
+        List.of());
+  }
+
+  private void stubNotReserved(final Notification notification) {
+    when(notificationRepository.reserveForDispatch(notification.notificationId()))
+        .thenReturn(Mono.empty());
+    when(notificationRepository.findById(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
   }
 
   private static Notification pendingNotificationWithRecoverableAttempts(final int count) {
@@ -114,7 +150,7 @@ class DispatchNotificationServiceTest {
             RecipientId.of("recipient-1"),
             Recipient.of("alice@example.com")),
         new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
-        NotificationStatus.PENDING,
+        NotificationStatus.IN_PROCESS,
         new NotificationMetadata(now, 1L),
         attempts);
   }
@@ -124,7 +160,7 @@ class DispatchNotificationServiceTest {
   }
 
   private void stubHappyPathUpTo(final Notification notification) {
-    when(notificationRepository.findById(notification.notificationId()))
+    when(notificationRepository.reserveForDispatch(notification.notificationId()))
         .thenReturn(Mono.just(notification));
     when(channelCatalogPort.findActiveRoute(notification.channelType(), notification.tenantId()))
         .thenReturn(Mono.just(activeRoute()));
@@ -208,27 +244,32 @@ class DispatchNotificationServiceTest {
   @Test
   void dispatchFailsWithNotificationNotFoundWhenMissing() {
     final NotificationId id = NotificationId.newId();
+    when(notificationRepository.reserveForDispatch(id)).thenReturn(Mono.empty());
     when(notificationRepository.findById(id)).thenReturn(Mono.empty());
 
     StepVerifier.create(service.dispatch(id))
         .expectError(NotificationNotFoundException.class)
         .verify();
+
+    verify(notificationSenderPort, never()).send(any(Notification.class));
   }
 
   @Test
   void dispatchFailsWithChannelNotAvailableAndNeverQueuesWhenNoRoute() {
     final Notification notification = pendingNotification();
     notification.pullEvents();
-    when(notificationRepository.findById(notification.notificationId()))
+    when(notificationRepository.reserveForDispatch(notification.notificationId()))
         .thenReturn(Mono.just(notification));
     when(channelCatalogPort.findActiveRoute(notification.channelType(), notification.tenantId()))
         .thenReturn(Mono.empty());
+    when(notificationRepository.releaseReservation(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
 
     StepVerifier.create(service.dispatch(notification.notificationId()))
         .expectError(ChannelNotAvailableException.class)
         .verify();
 
-    assertEquals(NotificationStatus.PENDING, notification.status());
+    verify(notificationRepository).releaseReservation(notification.notificationId());
     verify(notificationSenderPort, never()).send(any(Notification.class));
     verify(notificationRepository, never()).save(any(Notification.class));
   }
@@ -271,16 +312,18 @@ class DispatchNotificationServiceTest {
             retryPolicy);
     final Notification notification = pendingNotification();
     notification.pullEvents();
-    when(notificationRepository.findById(notification.notificationId()))
+    when(notificationRepository.reserveForDispatch(notification.notificationId()))
         .thenReturn(Mono.just(notification));
     when(channelCatalogPort.findActiveRoute(notification.channelType(), notification.tenantId()))
         .thenReturn(Mono.just(activeRoute()));
+    when(notificationRepository.releaseReservation(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
 
     StepVerifier.create(serviceWithoutThePreferredProvider.dispatch(notification.notificationId()))
         .expectError(ProviderNotAvailableException.class)
         .verify();
 
-    assertEquals(NotificationStatus.PENDING, notification.status());
+    verify(notificationRepository).releaseReservation(notification.notificationId());
     assertTrue(notification.deliveryAttempts().isEmpty());
     verify(otherSender, never()).send(any(Notification.class));
     verify(notificationRepository, never()).save(any(Notification.class));
@@ -343,6 +386,12 @@ class DispatchNotificationServiceTest {
 
   private static Notification pendingNotificationWithAttachment() {
     final byte[] bytes = "%PDF-1.4".getBytes(StandardCharsets.UTF_8);
+    final Notification notification = withAttachment(bytes);
+    notification.markQueued();
+    return notification;
+  }
+
+  private static Notification withAttachment(final byte[] bytes) {
     return Notification.accept(
         new NotificationRouting(
             TenantId.of("tenant-1"),
@@ -398,6 +447,215 @@ class DispatchNotificationServiceTest {
 
     verify(notificationSenderPort).send(notification);
     assertEquals(NotificationStatus.DELIVERED, notification.status());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = NotificationStatus.class,
+      names = {"IN_PROCESS", "RECOVERABLE", "DELIVERED", "FAILED", "DISCARDED"})
+  void aRedeliveryOnAnyStatusOtherThanPendingIsIgnoredWithoutCallingTheProvider(
+      final NotificationStatus status) {
+    final Notification notification = notificationInStatus(status);
+    stubNotReserved(notification);
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(notificationSenderPort, never()).send(any(Notification.class));
+    verify(notificationRepository, never()).save(any(Notification.class));
+    verify(notificationRepository, never()).releaseReservation(any());
+    verify(eventPublisherPort, never()).publish(any());
+    assertEquals(status, notification.status());
+  }
+
+  @Test
+  void whenTheReservationIsWonTheProviderIsCalledExactlyOnce() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(notificationSenderPort, times(1)).send(notification);
+    verify(notificationRepository, never()).findById(any());
+  }
+
+  @Test
+  void aHundredRedeliveriesOfTheSameMessageProduceASingleSend() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    when(notificationRepository.reserveForDispatch(notification.notificationId()))
+        .thenReturn(Mono.just(notification), Mono.empty());
+    when(notificationRepository.findById(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
+    when(channelCatalogPort.findActiveRoute(notification.channelType(), notification.tenantId()))
+        .thenReturn(Mono.just(activeRoute()));
+    when(notificationRepository.save(notification)).thenReturn(Mono.just(notification));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(
+            Flux.range(0, 100).concatMap(i -> service.dispatch(notification.notificationId())))
+        .verifyComplete();
+
+    verify(notificationSenderPort, times(1)).send(notification);
+    verify(notificationRepository, times(1)).save(notification);
+  }
+
+  @Test
+  void theResultIsSavedWithTheInstanceReturnedByTheReservation() {
+    final Notification reserved = pendingNotification();
+    reserved.pullEvents();
+    stubHappyPathUpTo(reserved);
+    when(notificationSenderPort.send(reserved)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(reserved.notificationId())).verifyComplete();
+
+    final ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+    verify(notificationRepository).save(saved.capture());
+    assertSame(reserved, saved.getValue());
+  }
+
+  @Test
+  void eventsArePublishedOnlyAfterTheResultIsPersisted() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    final InOrder inOrder = Mockito.inOrder(notificationRepository, eventPublisherPort);
+    inOrder.verify(notificationRepository).save(notification);
+    inOrder.verify(eventPublisherPort).publish(any());
+  }
+
+  @Test
+  void aFailedSaveAfterAnAcceptedSendIsRetriedWithoutSendingAgain() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationRepository.save(notification))
+        .thenReturn(Mono.error(new IllegalStateException("mongo down")))
+        .thenReturn(Mono.just(notification));
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(notificationSenderPort, times(1)).send(notification);
+    verify(notificationRepository, times(2)).save(notification);
+    verify(notificationRepository, never()).releaseReservation(any());
+    assertEquals(NotificationStatus.DELIVERED, notification.status());
+  }
+
+  @Test
+  void aSaveThatKeepsFailingIsBoundedAndNeverSendsASecondTimeNorReleasesTheReservation() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationRepository.save(notification))
+        .thenReturn(Mono.error(new IllegalStateException("mongo down")));
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(notification.notificationId()))
+        .expectErrorSatisfies(
+            error -> {
+              assertInstanceOf(DispatchResultNotPersistedException.class, error);
+              assertInstanceOf(IllegalStateException.class, error.getCause());
+            })
+        .verify();
+
+    verify(notificationSenderPort, times(1)).send(notification);
+    verify(notificationRepository, times(3)).save(notification);
+    verify(notificationRepository, never()).releaseReservation(any());
+    verify(eventPublisherPort, never()).publish(any());
+  }
+
+  @Test
+  void aVersionConflictOnSaveIsNotRetried() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationRepository.save(notification))
+        .thenReturn(
+            Mono.error(new NotificationVersionConflictException(notification.notificationId())));
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(notification.notificationId()))
+        .expectError(NotificationVersionConflictException.class)
+        .verify();
+
+    verify(notificationRepository, times(1)).save(notification);
+  }
+
+  @Test
+  void aProviderThatThrowsBeforeProducingAResultReleasesTheReservationAndPropagatesTheError() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationRepository.releaseReservation(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.error(new ProviderDisabledException(ProviderId.of("brevo"), "disabled")));
+
+    StepVerifier.create(service.dispatch(notification.notificationId()))
+        .expectError(ProviderDisabledException.class)
+        .verify();
+
+    verify(notificationRepository).releaseReservation(notification.notificationId());
+    verify(notificationRepository, never()).save(any(Notification.class));
+    verify(eventPublisherPort, never()).publish(any());
+  }
+
+  @Test
+  void aFailureReleasingTheReservationDoesNotHideTheOriginalError() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationRepository.releaseReservation(notification.notificationId()))
+        .thenReturn(Mono.error(new IllegalStateException("mongo down")));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.error(new ProviderDisabledException(ProviderId.of("brevo"), "disabled")));
+
+    StepVerifier.create(service.dispatch(notification.notificationId()))
+        .expectError(ProviderDisabledException.class)
+        .verify();
+  }
+
+  @Test
+  void aRecoverableFailureIsCountedOnlyWithinTheCurrentCycle() {
+    final Instant now = Instant.now();
+    final List<DeliveryAttempt> previousCycle = new ArrayList<>();
+    for (int i = 0; i < 4; i++) {
+      previousCycle.add(
+          DeliveryAttempt.of(
+              now,
+              AttemptResult.RECOVERABLE_FAILURE,
+              AttemptOrigin.AUTOMATIC,
+              ProviderId.of("brevo"),
+              1));
+    }
+    final Notification notification =
+        Notification.reconstitute(
+            NotificationId.newId(),
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+            NotificationStatus.IN_PROCESS,
+            new NotificationMetadata(now, 1L, now, now, 2),
+            previousCycle);
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    assertEquals(NotificationStatus.RECOVERABLE, notification.status());
+    assertEquals(2, notification.deliveryAttempts().getLast().cycle());
   }
 
   @Test

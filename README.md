@@ -47,6 +47,25 @@ db.channel_catalog.updateOne(
 - **Fuera de alcance:** SMS (Twilio) y push (FCM) no envian adjuntos; una notificacion con adjuntos
   despachada por ellos falla sin reintentos.
 
+## Configuracion sincronizada desde Parametros
+
+El servicio adopta sin reiniciar el tope de intentos de despacho (`dispatch.max-attempts`), los tiempos de
+espera y de conexion de Brevo, Twilio y FCM, y el intervalo del reencolador (`requeue.interval-ms`). Un cambio
+invalido se rechaza completo y conserva la version vigente; las operaciones en curso terminan con el valor con
+que empezaron.
+
+- **Fuente inactiva por defecto:** sin `NOTIFICATION_PARAMETERS_BASE_URL` el servicio opera con los valores
+  de arranque o con la ultima configuracion valida guardada en Mongo (coleccion `configuration_last_known`).
+  Con la variable definida activa el sondeo HTTP contra `{base-url}/notification-service/configuration`.
+- **Propiedades `notification.parameters.*`:** `base-url` (vacia), `poll-interval-ms` (30000), `timeout-ms`
+  (5000), `connect-timeout-ms` (2000) y `last-known-load-timeout-ms` (5000).
+- **Consulta:** `GET /configuration` (rol `ADMINISTRADOR`) devuelve los parametros gestionables con su valor
+  vigente, la version y el origen (`PARAMETERS`, `LAST_KNOWN` o `DEFAULTS`); nunca incluye credenciales ni
+  direcciones base.
+- **Observabilidad:** eventos `CONFIG_APPLIED`, `CONFIG_REJECTED`, `CONFIG_IGNORED`, `PARAMETERS_UNAVAILABLE`
+  y `PARAMETERS_RECOVERED` con identificador de correlacion `param-...`, y la metrica
+  `notification.configuration.version` con la etiqueta `source`.
+
 ## Autenticacion
 
 El servicio exige un JWT en `Authorization: Bearer`. El modo se elige con `NOTIFICATION_AUTH_MODE`:

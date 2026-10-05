@@ -6,7 +6,7 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente
+**Estado**: Aceptado
 
 **Versión del plan**: 1
 
@@ -110,7 +110,9 @@ ack manual.
 
 ## Decisiones que requieren confirmación del usuario
 
-Ninguna se da por tomada hasta que se apruebe este plan (Principio VI).
+Confirmadas por el usuario el 2026-10-05 al aprobar el plan, sin cambios respecto de las propuestas, en
+instrucción directa en el chat. Las cinco quedan vigentes, incluida la de la regla del contador del reintento
+manual, que reemplaza la que dice el contrato de 018.
 
 | # | Decisión | Propuesta | Alternativa principal |
 |---|---|---|---|

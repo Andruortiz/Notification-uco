@@ -101,7 +101,7 @@ No se usan abreviaturas de rutas (hallazgo B-14).
 
 ### Contract first (Principio II)
 
-- [ ] T029 [US2] Editar `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`: `maxItems: 500` en `SendNotificationBatchRequest.items`, 400 por exceso, campo obligatorio `trackingSaved` en `BatchAcceptedResponse`, descripción del reenvío con el mismo `batchId` y `rejectionReason` fijo `Internal error` para `FAILED`, como indica `specs/017-Fix-specs-012-016/contracts/api-notificaciones-cambios.md` § 1.
+- [x] T029 [US2] Editar `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`: `maxItems: 500` en `SendNotificationBatchRequest.items`, 400 por exceso, campo obligatorio `trackingSaved` en `BatchAcceptedResponse`, descripción del reenvío con el mismo `batchId` y `rejectionReason` fijo `Internal error` para `FAILED`, como indica `specs/017-Fix-specs-012-016/contracts/api-notificaciones-cambios.md` § 1.
 ### Tests for E3 (escribir primero y verlos fallar)
 
 - [ ] T030 [P] [US2] Ampliar `infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/in/rest/NotificationBatchControllerTest.java`: 501 ítems -> 400 sin invocar el caso de uso; exactamente 500 -> 202; el rechazo ocurre antes de procesar ningún ítem.

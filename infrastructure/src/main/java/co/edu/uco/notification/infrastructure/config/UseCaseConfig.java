@@ -1,5 +1,7 @@
 package co.edu.uco.notification.infrastructure.config;
 
+import co.edu.uco.notification.core.domain.configuration.ConfigurationValidator;
+import co.edu.uco.notification.core.domain.configuration.FixedConfiguration;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.port.in.*;
 import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
@@ -41,6 +43,16 @@ public class UseCaseConfig {
       @Value("${notification.attachments.sweeper.batch-size:100}") final int batchSize) {
     return new ExpireAbandonedUploadsService(
         attachmentUploadRepository, attachmentStoragePort, scanDeadline, batchSize, clock);
+  }
+
+  @Bean
+  ApplyConfigurationChangeUseCase applyConfigurationChangeUseCase(
+      final ConfigurationHolder configurationHolder,
+      final ConfigurationValidator configurationValidator,
+      final FixedConfiguration fixedConfiguration,
+      final Clock clock) {
+    return new ApplyConfigurationChangeService(
+        configurationHolder, configurationValidator, fixedConfiguration, clock);
   }
 
   @Bean

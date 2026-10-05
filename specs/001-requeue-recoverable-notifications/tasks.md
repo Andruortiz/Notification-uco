@@ -79,7 +79,8 @@ description: "Task list for HU2-030 — Reencolar notificaciones recuperables ve
 
 ## Phase Final: Polish & Cross-Cutting Concerns
 
-- [ ] T014 [P] Ejecutar la validación manual de `quickstart.md` contra la app real — pendiente, requiere Docker corriendo localmente (mismo bloqueo que T008)
+- [X] T014 [P] Ejecutar la validación manual de `quickstart.md` contra la app real — pendiente, requiere Docker corriendo localmente (mismo bloqueo que T008)
+  Verificado 2026-10-05 a mano, con el servicio local aislado (base `qs_manual` y vhost `qs` nuevos, proveedor simulado y token JWT en lugar de `X-Tenant-Id`): con `SIMULATED_PROVIDER_RESULT=RECOVERABLE_FAILURE` y `NOTIFICATION_REQUEUE_INTERVAL_MS=5000`, la notificación quedó `RECOVERABLE` con un primer intento automático y, 33 s después, con un segundo intento automático de timestamp posterior, sin intervención manual.
 - [x] T015 Confirmar que ningún archivo nuevo de esta historia tiene comentarios explicativos (Principio III) — verificado
 - [x] T016 Spotless + SpotBugs + FindSecBugs limpios en los archivos nuevos/modificados — `./mvnw -pl core,infrastructure -am clean install -DskipTests` en verde
 

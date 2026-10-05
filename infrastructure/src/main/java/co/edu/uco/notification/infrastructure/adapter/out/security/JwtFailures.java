@@ -45,6 +45,10 @@ public final class JwtFailures {
     if (claims == null) {
       return null;
     }
+    return verifiedTenantOf(claims, tenantClaim);
+  }
+
+  public static String verifiedTenantOf(final Claims claims, final String tenantClaim) {
     final Object value = claims.get(tenantClaim);
     return value instanceof String text && !text.isBlank() ? text : null;
   }

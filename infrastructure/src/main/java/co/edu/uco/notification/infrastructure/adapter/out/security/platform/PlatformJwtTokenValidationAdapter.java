@@ -100,7 +100,7 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
   }
 
   private AuthenticatedPrincipal toPrincipal(final Claims claims) {
-    final String tenantHint = JwtFailures.tenantOf(claims, properties.tenantClaim());
+    final String tenantHint = JwtFailures.verifiedTenantOf(claims, properties.tenantClaim());
     if (claims.getExpiration() == null) {
       throw new InvalidTokenException(
           "missing expiration", InvalidTokenException.Reason.MISSING_EXPIRATION, tenantHint, null);

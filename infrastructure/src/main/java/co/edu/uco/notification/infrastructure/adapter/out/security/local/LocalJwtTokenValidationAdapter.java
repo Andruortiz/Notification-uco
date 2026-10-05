@@ -48,7 +48,7 @@ public final class LocalJwtTokenValidationAdapter implements TokenValidationPort
 
   private AuthenticatedPrincipal parse(final String rawToken) {
     final Claims claims = parseClaims(rawToken);
-    final String tenantHint = JwtFailures.tenantOf(claims, TENANT_CLAIM);
+    final String tenantHint = JwtFailures.verifiedTenantOf(claims, TENANT_CLAIM);
     if (claims.getExpiration() == null) {
       throw new InvalidTokenException(
           "missing expiration", InvalidTokenException.Reason.MISSING_EXPIRATION, tenantHint, null);

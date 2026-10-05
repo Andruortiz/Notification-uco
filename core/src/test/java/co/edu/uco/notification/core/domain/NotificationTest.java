@@ -423,4 +423,211 @@ class NotificationTest {
   void versionIsNullForANewlyAcceptedNotification() {
     assertNull(accepted().version());
   }
+
+  private static Notification reconstituted(
+      final NotificationStatus status,
+      final NotificationMetadata metadata,
+      final List<DeliveryAttempt> attempts) {
+    return Notification.reconstitute(
+        NotificationId.newId(),
+        new NotificationRouting(
+            TenantId.of("tenant-1"),
+            ExternalId.of("order-42"),
+            ChannelType.of("EMAIL"),
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Subject", "Body"), Priority.NORMAL),
+        status,
+        metadata,
+        attempts);
+  }
+
+  private static DeliveryAttempt recoverableAttempt(final int cycle) {
+    return DeliveryAttempt.of(
+        Instant.now(),
+        AttemptResult.RECOVERABLE_FAILURE,
+        AttemptOrigin.AUTOMATIC,
+        ProviderId.of("brevo"),
+        cycle);
+  }
+
+  @Test
+  void aNewlyAcceptedNotificationStartsInCycleOneWithPendingSinceEqualToAcceptedAt() {
+    final Notification notification = accepted();
+
+    assertEquals(1, notification.currentCycle());
+    assertEquals(notification.acceptedAt(), notification.pendingSince());
+    assertNull(notification.dispatchReservedAt());
+  }
+
+  @Test
+  void aDocumentWithoutTheNewFieldsIsReadWithPendingSinceAcceptedAtAndCycleOne() {
+    final Instant acceptedAt = Instant.now().minusSeconds(600);
+
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.PENDING,
+            new NotificationMetadata(acceptedAt, 2L, null, null, 0),
+            List.of());
+
+    assertEquals(acceptedAt, notification.pendingSince());
+    assertEquals(1, notification.currentCycle());
+    assertNull(notification.dispatchReservedAt());
+  }
+
+  @Test
+  void reconstitutionKeepsThePersistedReservationPendingSinceAndCycle() {
+    final Instant acceptedAt = Instant.now().minusSeconds(600);
+    final Instant pendingSince = acceptedAt.plusSeconds(100);
+    final Instant reservedAt = acceptedAt.plusSeconds(200);
+
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.IN_PROCESS,
+            new NotificationMetadata(acceptedAt, 2L, pendingSince, reservedAt, 3),
+            List.of());
+
+    assertEquals(pendingSince, notification.pendingSince());
+    assertEquals(reservedAt, notification.dispatchReservedAt());
+    assertEquals(3, notification.currentCycle());
+  }
+
+  @Test
+  void requeueSetsPendingSinceToNowEachTime() {
+    final Instant acceptedAt = Instant.now().minusSeconds(600);
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.RECOVERABLE,
+            new NotificationMetadata(acceptedAt, 1L),
+            List.of(recoverableAttempt(1)));
+    final Instant before = Instant.now();
+
+    notification.requeue();
+
+    assertEquals(NotificationStatus.PENDING, notification.status());
+    assertFalse(notification.pendingSince().isBefore(before));
+  }
+
+  @Test
+  void aResultClearsTheDispatchReservation() {
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.IN_PROCESS,
+            new NotificationMetadata(
+                Instant.now().minusSeconds(60), 1L, null, Instant.now().minusSeconds(5), 1),
+            List.of());
+
+    notification.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+
+    assertNull(notification.dispatchReservedAt());
+  }
+
+  @Test
+  void announceQueuedRegistersTheQueuedEventWithoutChangingTheState() {
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.IN_PROCESS,
+            new NotificationMetadata(Instant.now(), 1L, null, Instant.now(), 1),
+            List.of());
+
+    notification.announceQueued();
+
+    assertEquals(NotificationStatus.IN_PROCESS, notification.status());
+    assertInstanceOf(NotificationQueued.class, notification.pullEvents().getFirst());
+  }
+
+  @Test
+  void newAttemptsAreStampedWithTheCurrentCycle() {
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.IN_PROCESS,
+            new NotificationMetadata(Instant.now(), 1L, null, Instant.now(), 2),
+            List.of(recoverableAttempt(1)));
+
+    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+
+    assertEquals(2, notification.deliveryAttempts().getLast().cycle());
+  }
+
+  @Test
+  void theRecoverableCountOnlyCoversTheCurrentCycle() {
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.PENDING,
+            new NotificationMetadata(Instant.now(), 1L, null, null, 2),
+            List.of(
+                recoverableAttempt(1),
+                recoverableAttempt(1),
+                recoverableAttempt(1),
+                recoverableAttempt(2)));
+
+    assertEquals(1, notification.recoverableAttemptsInCurrentCycle());
+    assertEquals(4, notification.deliveryAttempts().size());
+  }
+
+  @Test
+  void theRecoverableCountIgnoresPermanentFailuresOfTheSameCycle() {
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.PENDING,
+            new NotificationMetadata(Instant.now(), 1L),
+            List.of(
+                DeliveryAttempt.of(
+                    Instant.now(),
+                    AttemptResult.PERMANENT_FAILURE,
+                    AttemptOrigin.AUTOMATIC,
+                    ProviderId.of("brevo")),
+                recoverableAttempt(1)));
+
+    assertEquals(1, notification.recoverableAttemptsInCurrentCycle());
+  }
+
+  @Test
+  void aManualRetryOfAFailedNotificationStartsANewCycleAndKeepsTheHistory() {
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.FAILED,
+            new NotificationMetadata(Instant.now().minusSeconds(900), 4L),
+            List.of(
+                recoverableAttempt(1),
+                recoverableAttempt(1),
+                recoverableAttempt(1),
+                recoverableAttempt(1),
+                recoverableAttempt(1)));
+    final Instant before = Instant.now();
+
+    notification.retryManually();
+
+    assertEquals(NotificationStatus.PENDING, notification.status());
+    assertEquals(2, notification.currentCycle());
+    assertEquals(0, notification.recoverableAttemptsInCurrentCycle());
+    assertEquals(5, notification.deliveryAttempts().size());
+    assertFalse(notification.pendingSince().isBefore(before));
+    assertInstanceOf(NotificationRequeued.class, notification.pullEvents().getFirst());
+  }
+
+  @Test
+  void afterAManualRetryTheFirstRecoverableFailureCountsAsOneInTheNewCycle() {
+    final Notification notification =
+        reconstituted(
+            NotificationStatus.FAILED,
+            new NotificationMetadata(Instant.now().minusSeconds(900), 4L),
+            List.of(recoverableAttempt(1), recoverableAttempt(1), recoverableAttempt(1)));
+    notification.retryManually();
+    notification.markQueued();
+    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+
+    assertEquals(1, notification.recoverableAttemptsInCurrentCycle());
+    assertEquals(NotificationStatus.RECOVERABLE, notification.status());
+  }
+
+  @Test
+  void aManualRetryIsRejectedFromAStateOtherThanFailed() {
+    final Notification delivered =
+        reconstituted(
+            NotificationStatus.DELIVERED, new NotificationMetadata(Instant.now(), 1L), List.of());
+
+    assertThrows(InvalidStatusTransitionException.class, delivered::retryManually);
+    assertEquals(1, delivered.currentCycle());
+  }
 }

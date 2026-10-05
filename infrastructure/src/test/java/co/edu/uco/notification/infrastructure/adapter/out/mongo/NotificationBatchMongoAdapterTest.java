@@ -9,6 +9,9 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.in.BatchAcceptedResult;
 import co.edu.uco.notification.core.port.in.BatchItemResult;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +24,7 @@ import org.springframework.data.mongodb.core.index.CompoundIndexDefinition;
 import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import reactor.test.StepVerifier;
 
 @DataMongoTest(properties = {"MONGO_USERNAME=test", "MONGO_PASSWORD=test"})
 @Testcontainers
@@ -31,6 +35,7 @@ class NotificationBatchMongoAdapterTest {
 
   private static final TenantId TENANT_A = TenantId.of("tenant-a");
   private static final TenantId TENANT_B = TenantId.of("tenant-b");
+  private static final Instant NOW = Instant.parse("2026-10-05T12:00:00Z");
 
   @Autowired private ReactiveMongoTemplate mongoTemplate;
 
@@ -38,7 +43,7 @@ class NotificationBatchMongoAdapterTest {
 
   @BeforeEach
   void setUp() {
-    adapter = new NotificationBatchMongoAdapter(mongoTemplate);
+    adapter = new NotificationBatchMongoAdapter(mongoTemplate, Clock.fixed(NOW, ZoneOffset.UTC));
     mongoTemplate.dropCollection(NotificationBatchDocument.class).block();
     mongoTemplate
         .indexOps(NotificationBatchDocument.class)
@@ -94,5 +99,74 @@ class NotificationBatchMongoAdapterTest {
         mongoTemplate.findAll(NotificationBatchDocument.class).collectList().block();
     assertTrue(stored.stream().anyMatch(document -> "tenant-a".equals(document.tenantId())));
     assertTrue(stored.stream().anyMatch(document -> "tenant-b".equals(document.tenantId())));
+  }
+
+  @Test
+  void savePersistsWithTheInjectedClock() {
+    adapter.save(aResult("batch-clock"), TENANT_A).block();
+
+    final NotificationBatchDocument stored =
+        mongoTemplate.findAll(NotificationBatchDocument.class).blockFirst();
+
+    assertEquals(NOW, stored.submittedAt());
+  }
+
+  @Test
+  void findByTenantAndBatchIdReturnsTheOriginalResult() {
+    final BatchAcceptedResult original = aResult("batch-1");
+    adapter.save(original, TENANT_A).block();
+
+    final BatchAcceptedResult found =
+        adapter.findByTenantAndBatchId(TENANT_A, BatchId.of("batch-1")).block();
+
+    assertEquals(original, found);
+    assertTrue(found.trackingSaved());
+  }
+
+  @Test
+  void findByTenantAndBatchIdIsEmptyWhenTheBatchWasNeverSaved() {
+    StepVerifier.create(adapter.findByTenantAndBatchId(TENANT_A, BatchId.of("unknown")))
+        .verifyComplete();
+  }
+
+  @Test
+  void findByTenantAndBatchIdNeverCrossesTenants() {
+    final BatchAcceptedResult ofTenantA = aResult("batch-shared");
+    final BatchAcceptedResult ofTenantB =
+        new BatchAcceptedResult(
+            BatchId.of("batch-shared"),
+            List.of(BatchItemResult.rejected(ExternalId.of("order-9"), "Other tenant")));
+    adapter.save(ofTenantA, TENANT_A).block();
+
+    StepVerifier.create(adapter.findByTenantAndBatchId(TENANT_B, BatchId.of("batch-shared")))
+        .verifyComplete();
+
+    adapter.save(ofTenantB, TENANT_B).block();
+
+    assertEquals(
+        ofTenantA, adapter.findByTenantAndBatchId(TENANT_A, BatchId.of("batch-shared")).block());
+    assertEquals(
+        ofTenantB, adapter.findByTenantAndBatchId(TENANT_B, BatchId.of("batch-shared")).block());
+  }
+
+  @Test
+  void aDuplicateSaveOfTheSameTenantAndBatchReturnsTheWinningRecord() {
+    final BatchAcceptedResult winner = aResult("batch-race");
+    final BatchAcceptedResult loser =
+        new BatchAcceptedResult(
+            BatchId.of("batch-race"),
+            List.of(BatchItemResult.rejected(ExternalId.of("order-9"), "Late request")));
+    adapter.save(winner, TENANT_A).block();
+
+    final BatchAcceptedResult returned = adapter.save(loser, TENANT_A).block();
+
+    assertEquals(winner, returned);
+    assertEquals(
+        1L,
+        mongoTemplate
+            .count(
+                new org.springframework.data.mongodb.core.query.Query(),
+                NotificationBatchDocument.class)
+            .block());
   }
 }

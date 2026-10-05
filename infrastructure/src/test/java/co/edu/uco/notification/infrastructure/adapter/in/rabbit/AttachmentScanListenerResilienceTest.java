@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
@@ -13,6 +14,7 @@ import static org.mockito.Mockito.when;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
 import co.edu.uco.notification.core.exception.AttachmentInspectionUnavailableException;
+import co.edu.uco.notification.core.exception.AttachmentObjectChangedException;
 import co.edu.uco.notification.core.port.in.ScanAttachmentUploadUseCase;
 import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyProperties;
@@ -108,6 +110,49 @@ class AttachmentScanListenerResilienceTest {
     awaitEmpty(topology.queue());
     assertEquals(0, messagesIn(topology.queue()));
     assertEquals(0, messagesIn(topology.dlqQueue()));
+  }
+
+  @Test
+  void aChangedObjectThatExhaustsTheAttemptsFailsTheUploadWithScanExhausted() {
+    final UploadId uploadId = UploadId.newId();
+    when(scanUseCase.scan(any(), any()))
+        .thenReturn(Mono.error(new AttachmentObjectChangedException()));
+    when(scanUseCase.failExhausted(any(), any())).thenReturn(Mono.empty());
+
+    scanRequestPort.requestScan(TENANT, uploadId).block();
+
+    verify(scanUseCase, timeout(20_000)).failExhausted(TENANT, uploadId);
+    verify(scanUseCase, times(2)).scan(TENANT, uploadId);
+    verify(deadLetterRecoverer, timeout(20_000).times(1)).recover(any(), any());
+  }
+
+  @Test
+  void aTransientChangedObjectThatRecoversDoesNotFailTheUpload() {
+    final UploadId uploadId = UploadId.newId();
+    when(scanUseCase.scan(any(), any()))
+        .thenReturn(Mono.error(new AttachmentObjectChangedException()), Mono.empty());
+    when(scanUseCase.failExhausted(any(), any())).thenReturn(Mono.empty());
+
+    scanRequestPort.requestScan(TENANT, uploadId).block();
+
+    verify(scanUseCase, timeout(20_000).times(2)).scan(TENANT, uploadId);
+    awaitEmpty(topology.queue());
+    Mono.delay(Duration.ofSeconds(1)).block();
+    verify(scanUseCase, never()).failExhausted(any(), any());
+    verify(deadLetterRecoverer, never()).recover(any(), any());
+  }
+
+  @Test
+  void anUnavailableScannerThatExhaustsTheAttemptsDoesNotFailTheUploadByItself() {
+    final UploadId uploadId = UploadId.newId();
+    when(scanUseCase.scan(any(), any()))
+        .thenReturn(Mono.error(new AttachmentInspectionUnavailableException("clamav down")));
+    when(scanUseCase.failExhausted(any(), any())).thenReturn(Mono.empty());
+
+    scanRequestPort.requestScan(TENANT, uploadId).block();
+
+    verify(deadLetterRecoverer, timeout(20_000).times(1)).recover(any(), any());
+    verify(scanUseCase, never()).failExhausted(any(), any());
   }
 
   @Test

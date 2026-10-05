@@ -3,6 +3,7 @@ package co.edu.uco.notification.infrastructure.adapter.in.rabbit;
 import co.edu.uco.notification.core.domain.AttachmentUpload;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
+import co.edu.uco.notification.core.exception.AttachmentObjectChangedException;
 import co.edu.uco.notification.core.port.in.ScanAttachmentUploadUseCase;
 import co.edu.uco.notification.infrastructure.adapter.out.rabbit.AttachmentScanRequest;
 import co.edu.uco.notification.infrastructure.config.AttachmentProperties;
@@ -127,15 +128,22 @@ public class AttachmentScanListener {
     if (failure == null) {
       channel.basicAck(deliveryTag, false);
     } else {
-      handleFailure(message, channel, deliveryTag, failure);
+      handleFailure(message, channel, deliveryTag, request, failure);
     }
   }
 
   private void handleFailure(
-      final Message message, final Channel channel, final long deliveryTag, final Exception cause)
+      final Message message,
+      final Channel channel,
+      final long deliveryTag,
+      final AttachmentScanRequest request,
+      final Exception cause)
       throws IOException {
     final int attempt = attemptCount(message) + 1;
     if (attempt >= maxAttempts) {
+      if (isObjectChanged(cause)) {
+        failExhaustedUpload(request);
+      }
       LOGGER.warn(
           LogFields.fields(
               "attempt",
@@ -164,6 +172,30 @@ public class AttachmentScanListener {
               rabbitTemplate.send(
                   topology.exchange(), topology.routingKey(), withAttempt(message, attempt)));
     }
+  }
+
+  private void failExhaustedUpload(final AttachmentScanRequest request) {
+    try {
+      scanAttachmentUploadUseCase
+          .failExhausted(TenantId.of(request.tenantId()), UploadId.of(request.uploadId()))
+          .block();
+    } catch (final RuntimeException failure) {
+      LOGGER.error(
+          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          "Attachment upload could not be failed after exhausting the scan attempts",
+          failure);
+    }
+  }
+
+  private static boolean isObjectChanged(final Throwable cause) {
+    Throwable current = cause;
+    while (current != null) {
+      if (current instanceof AttachmentObjectChangedException) {
+        return true;
+      }
+      current = current.getCause() == current ? null : current.getCause();
+    }
+    return false;
   }
 
   private void settle(

@@ -8,4 +8,6 @@ import reactor.core.publisher.Mono;
 public interface ScanAttachmentUploadUseCase {
 
   Mono<AttachmentUpload> scan(TenantId tenantId, UploadId uploadId);
+
+  Mono<AttachmentUpload> failExhausted(TenantId tenantId, UploadId uploadId);
 }

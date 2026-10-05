@@ -19,6 +19,8 @@ import reactor.core.publisher.Mono;
 
 public final class SendNotificationBatchService implements SendNotificationBatchUseCase {
 
+  private static final System.Logger LOGGER =
+      System.getLogger(SendNotificationBatchService.class.getName());
   private static final int MAX_CONCURRENT_ITEMS = 16;
 
   private final SendNotificationUseCase sendNotificationUseCase;
@@ -39,12 +41,20 @@ public final class SendNotificationBatchService implements SendNotificationBatch
   public Mono<BatchAcceptedResult> sendBatch(final SendNotificationBatchCommand command) {
     Preconditions.requireNonNull(command, "command must not be null");
 
-    final BatchId batchId = command.batchId() != null ? command.batchId() : BatchId.newId();
+    if (command.batchId() == null) {
+      return process(command, BatchId.newId());
+    }
+    return notificationBatchRepository
+        .findByTenantAndBatchId(command.tenantId(), command.batchId())
+        .switchIfEmpty(Mono.defer(() -> process(command, command.batchId())));
+  }
 
+  private Mono<BatchAcceptedResult> process(
+      final SendNotificationBatchCommand command, final BatchId batchId) {
     return Flux.fromIterable(command.items())
         .flatMapSequential(item -> processItem(command, item), MAX_CONCURRENT_ITEMS)
         .collectList()
-        .map(results -> new BatchAcceptedResult(batchId, results))
+        .map(results -> new BatchAcceptedResult(batchId, results, true))
         .flatMap(result -> persistBatchRecord(command, result));
   }
 
@@ -52,8 +62,18 @@ public final class SendNotificationBatchService implements SendNotificationBatch
       final SendNotificationBatchCommand command, final BatchAcceptedResult result) {
     return notificationBatchRepository
         .save(result, command.tenantId())
-        .onErrorResume(ex -> Mono.empty())
-        .thenReturn(result);
+        .defaultIfEmpty(result)
+        .onErrorResume(
+            ex -> {
+              LOGGER.log(
+                  System.Logger.Level.ERROR,
+                  "BATCH_RECORD_NOT_PERSISTED batchId="
+                      + result.batchId().value()
+                      + " tenantId="
+                      + command.tenantId().value(),
+                  ex);
+              return Mono.just(result.withTrackingSaved(false));
+            });
   }
 
   private Mono<BatchItemResult> processItem(
@@ -82,7 +102,16 @@ public final class SendNotificationBatchService implements SendNotificationBatch
             ex -> Mono.just(BatchItemResult.rejected(item.externalId(), ex.getMessage())))
         .onErrorResume(
             Throwable.class,
-            ex -> Mono.just(BatchItemResult.failed(item.externalId(), ex.getMessage())));
+            ex -> {
+              LOGGER.log(
+                  System.Logger.Level.ERROR,
+                  "BATCH_ITEM_FAILED externalId="
+                      + item.externalId().value()
+                      + " tenantId="
+                      + command.tenantId().value(),
+                  ex);
+              return Mono.just(BatchItemResult.failed(item.externalId()));
+            });
   }
 
   private static boolean isItemRejection(final Throwable error) {

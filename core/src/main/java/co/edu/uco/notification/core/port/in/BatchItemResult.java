@@ -10,6 +10,8 @@ public record BatchItemResult(
     NotificationId notificationId,
     String rejectionReason) {
 
+  public static final String INTERNAL_ERROR_REASON = "Internal error";
+
   public BatchItemResult {
     Preconditions.requireNonNull(externalId, "externalId must not be null");
     Preconditions.requireNonNull(outcome, "outcome must not be null");
@@ -41,7 +43,7 @@ public record BatchItemResult(
     return new BatchItemResult(externalId, BatchItemOutcome.REJECTED, null, reason);
   }
 
-  public static BatchItemResult failed(final ExternalId externalId, final String reason) {
-    return new BatchItemResult(externalId, BatchItemOutcome.FAILED, null, reason);
+  public static BatchItemResult failed(final ExternalId externalId) {
+    return new BatchItemResult(externalId, BatchItemOutcome.FAILED, null, INTERNAL_ERROR_REASON);
   }
 }

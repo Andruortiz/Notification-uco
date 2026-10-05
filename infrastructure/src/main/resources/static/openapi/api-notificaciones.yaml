@@ -285,7 +285,11 @@ paths:
         deshabilitado, contenido que no cumple la forma del canal), se rechaza solo, con su motivo;
         los demás siguen. Un elemento que falla por un problema transitorio de infraestructura (por
         ejemplo el escaner de adjuntos no responde) queda como FAILED en vez de tumbar el lote
-        completo. Los resultados vienen en el mismo orden de los elementos de la solicitud.
+        completo; su motivo es siempre "Internal error". Los resultados vienen en el mismo orden de
+        los elementos de la solicitud. Un lote admite hasta 500 elementos. Un reenvío con el mismo
+        batchId del mismo tenant devuelve el resultado original solo si el registro del lote quedó
+        guardado; si el guardado falló (trackingSaved=false) no hay registro y el reenvío vuelve a
+        procesar los elementos (la deduplicación por externalId evita duplicar notificaciones).
       operationId: sendNotificationBatch
       requestBody:
         required: true
@@ -314,9 +318,9 @@ paths:
             traceparent:
               $ref: '#/components/headers/TraceParent'
           description: >
-            La solicitud no cumple el esquema (lista de elementos vacía o ausente, campo obligatorio
-            ausente o vacío en algún elemento, prioridad desconocida, batchId en blanco). Se rechaza
-            completa y no se acepta ningún elemento.
+            La solicitud no cumple el esquema (lista de elementos vacía, ausente o con más de 500
+            elementos, campo obligatorio ausente o vacío en algún elemento, prioridad desconocida,
+            batchId en blanco). Se rechaza completa sin procesar ningún elemento.
           content:
             application/json:
               schema:
@@ -1151,14 +1155,24 @@ components:
         items:
           type: array
           minItems: 1
+          maxItems: 500
           items:
             $ref: '#/components/schemas/SendNotificationRequest'
 
     BatchAcceptedResponse:
       type: object
+      required:
+        - batchId
+        - results
+        - trackingSaved
       properties:
         batchId:
           type: string
+        trackingSaved:
+          type: boolean
+          description: >
+            true si el registro del lote quedó guardado o ya existía; false si el guardado falló y
+            el seguimiento del lote no está disponible.
         results:
           type: array
           items:
@@ -1184,7 +1198,9 @@ components:
         rejectionReason:
           type: string
           nullable: true
-          description: Solo presente cuando outcome es REJECTED o FAILED.
+          description: >
+            Solo presente cuando outcome es REJECTED o FAILED. Para FAILED el valor es siempre
+            "Internal error"; los rechazos de negocio conservan su texto.
 
     NotificationStatusResponse:
       type: object

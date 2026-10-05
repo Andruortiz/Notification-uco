@@ -1,5 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
+import co.edu.uco.notification.core.domain.BatchLimits;
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.BatchId;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
@@ -51,6 +52,9 @@ public class NotificationBatchController {
       final CorrelationId correlationId) {
     if (request.items() == null || request.items().isEmpty()) {
       throw new IllegalArgumentException("items must not be empty");
+    }
+    if (request.items().size() > BatchLimits.MAX_ITEMS) {
+      throw new IllegalArgumentException("items must not exceed " + BatchLimits.MAX_ITEMS);
     }
     return new SendNotificationBatchCommand(
         principal.tenantId(),

@@ -17,6 +17,9 @@ import reactor.core.publisher.Mono;
 
 public final class ScanAttachmentUploadService implements ScanAttachmentUploadUseCase {
 
+  private static final System.Logger LOGGER =
+      System.getLogger(ScanAttachmentUploadService.class.getName());
+
   private final AttachmentUploadRepository repository;
   private final AttachmentStoragePort storage;
   private final AttachmentInspector inspector;
@@ -47,6 +50,16 @@ public final class ScanAttachmentUploadService implements ScanAttachmentUploadUs
                     .map(Optional::of)
                     .defaultIfEmpty(Optional.empty())
                     .flatMap(info -> scanIfPresent(upload, info)));
+  }
+
+  @Override
+  public Mono<AttachmentUpload> failExhausted(final TenantId tenantId, final UploadId uploadId) {
+    Preconditions.requireNonNull(tenantId, "tenantId must not be null");
+    Preconditions.requireNonNull(uploadId, "uploadId must not be null");
+    return repository
+        .findByTenantAndId(tenantId, uploadId)
+        .filter(AttachmentUpload::isPendingScan)
+        .flatMap(upload -> fail(upload, AttachmentRejectionReason.SCAN_EXHAUSTED));
   }
 
   private Mono<AttachmentUpload> scanIfPresent(
@@ -98,7 +111,18 @@ public final class ScanAttachmentUploadService implements ScanAttachmentUploadUs
                 won
                     ? StorageCleanup.bestEffort(storage.delete(upload.uploadKey()))
                         .thenReturn(clean)
-                    : discardOrphanCopy(upload, clean));
+                    : lostTransition(upload, clean));
+  }
+
+  private Mono<AttachmentUpload> lostTransition(
+      final AttachmentUpload upload, final AttachmentUpload clean) {
+    LOGGER.log(
+        System.Logger.Level.INFO,
+        "ATTACHMENT_SCAN_TRANSITION_LOST uploadId="
+            + upload.uploadId().value()
+            + " tenantId="
+            + upload.tenantId().value());
+    return discardOrphanCopy(upload, clean);
   }
 
   private Mono<AttachmentUpload> discardOrphanCopy(
@@ -106,7 +130,16 @@ public final class ScanAttachmentUploadService implements ScanAttachmentUploadUs
     return repository
         .findByTenantAndId(upload.tenantId(), upload.uploadId())
         .filter(current -> current.state() != ScanState.CLEAN)
-        .flatMap(current -> storage.delete(clean.cleanKey()))
+        .flatMap(
+            current -> {
+              LOGGER.log(
+                  System.Logger.Level.INFO,
+                  "ATTACHMENT_ORPHAN_COPY_DISCARDED uploadId="
+                      + upload.uploadId().value()
+                      + " tenantId="
+                      + upload.tenantId().value());
+              return storage.delete(clean.cleanKey());
+            })
         .then(Mono.empty());
   }
 

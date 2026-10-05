@@ -7,13 +7,18 @@ import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
 
 public record DeliveryAttempt(
-    Instant occurredOn, AttemptResult result, AttemptOrigin origin, ProviderId providerId) {
+    Instant occurredOn,
+    AttemptResult result,
+    AttemptOrigin origin,
+    ProviderId providerId,
+    int cycle) {
 
   public DeliveryAttempt {
     Preconditions.requireNonNull(occurredOn, "occurredOn must not be null");
     Preconditions.requireNonNull(result, "result must not be null");
     Preconditions.requireNonNull(origin, "origin must not be null");
     Preconditions.requireNonNull(providerId, "providerId must not be null");
+    cycle = Math.max(cycle, 1);
   }
 
   public static DeliveryAttempt of(
@@ -21,6 +26,15 @@ public record DeliveryAttempt(
       final AttemptResult result,
       final AttemptOrigin origin,
       final ProviderId providerId) {
-    return new DeliveryAttempt(occurredOn, result, origin, providerId);
+    return new DeliveryAttempt(occurredOn, result, origin, providerId, 1);
+  }
+
+  public static DeliveryAttempt of(
+      final Instant occurredOn,
+      final AttemptResult result,
+      final AttemptOrigin origin,
+      final ProviderId providerId,
+      final int cycle) {
+    return new DeliveryAttempt(occurredOn, result, origin, providerId, cycle);
   }
 }

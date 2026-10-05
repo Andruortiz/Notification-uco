@@ -25,6 +25,9 @@ public final class Notification {
   private final List<DeliveryAttempt> deliveryAttempts = new ArrayList<>();
 
   private NotificationStatus status;
+  private Instant pendingSince;
+  private Instant dispatchReservedAt;
+  private int currentCycle;
   private CorrelationId correlationId;
   private final Long version;
 
@@ -44,6 +47,9 @@ public final class Notification {
     this.acceptedAt = metadata.acceptedAt();
     this.status = NotificationStatus.PENDING;
     this.version = metadata.version();
+    this.pendingSince = metadata.pendingSince();
+    this.dispatchReservedAt = metadata.dispatchReservedAt();
+    this.currentCycle = metadata.currentCycle();
   }
 
   public static Notification accept(
@@ -111,6 +117,10 @@ public final class Notification {
 
   public void markQueued() {
     transitionTo(NotificationStatus.IN_PROCESS);
+    announceQueued();
+  }
+
+  public void announceQueued() {
     eventRecorder.registerEvent(
         new NotificationQueued(notificationId, tenantId, correlationId, Instant.now()));
   }
@@ -118,7 +128,8 @@ public final class Notification {
   public void markDelivered(final AttemptOrigin origin, final ProviderId providerId) {
     transitionTo(NotificationStatus.DELIVERED);
     final Instant now = Instant.now();
-    deliveryAttempts.add(DeliveryAttempt.of(now, AttemptResult.ACCEPTED, origin, providerId));
+    deliveryAttempts.add(
+        DeliveryAttempt.of(now, AttemptResult.ACCEPTED, origin, providerId, currentCycle));
     eventRecorder.registerEvent(
         new NotificationDelivered(notificationId, tenantId, correlationId, now));
   }
@@ -127,7 +138,8 @@ public final class Notification {
     transitionTo(NotificationStatus.RECOVERABLE);
     final Instant now = Instant.now();
     deliveryAttempts.add(
-        DeliveryAttempt.of(now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
+        DeliveryAttempt.of(
+            now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId, currentCycle));
     eventRecorder.registerEvent(
         new NotificationRecoverable(notificationId, tenantId, correlationId, now));
   }
@@ -136,7 +148,8 @@ public final class Notification {
     transitionTo(NotificationStatus.FAILED);
     final Instant now = Instant.now();
     deliveryAttempts.add(
-        DeliveryAttempt.of(now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId));
+        DeliveryAttempt.of(
+            now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId, currentCycle));
     eventRecorder.registerEvent(
         new NotificationFailed(notificationId, tenantId, correlationId, now));
   }
@@ -145,7 +158,7 @@ public final class Notification {
     transitionTo(NotificationStatus.FAILED);
     final Instant now = Instant.now();
     deliveryAttempts.add(
-        DeliveryAttempt.of(now, AttemptResult.PERMANENT_FAILURE, origin, providerId));
+        DeliveryAttempt.of(now, AttemptResult.PERMANENT_FAILURE, origin, providerId, currentCycle));
     eventRecorder.registerEvent(
         new NotificationFailed(notificationId, tenantId, correlationId, now));
   }
@@ -154,6 +167,24 @@ public final class Notification {
     transitionTo(NotificationStatus.PENDING);
     eventRecorder.registerEvent(
         new NotificationRequeued(notificationId, tenantId, correlationId, Instant.now()));
+  }
+
+  public void retryManually() {
+    if (status != NotificationStatus.FAILED) {
+      throw new InvalidStatusTransitionException(status, NotificationStatus.PENDING);
+    }
+    transitionTo(NotificationStatus.PENDING);
+    currentCycle++;
+    eventRecorder.registerEvent(
+        new NotificationRequeued(notificationId, tenantId, correlationId, Instant.now()));
+  }
+
+  public int recoverableAttemptsInCurrentCycle() {
+    return (int)
+        deliveryAttempts.stream()
+            .filter(attempt -> attempt.cycle() == currentCycle)
+            .filter(attempt -> attempt.result() == AttemptResult.RECOVERABLE_FAILURE)
+            .count();
   }
 
   public void discard() {
@@ -167,6 +198,14 @@ public final class Notification {
       throw new InvalidStatusTransitionException(status, target);
     }
     status = target;
+    if (target == NotificationStatus.IN_PROCESS) {
+      dispatchReservedAt = Instant.now();
+    } else {
+      dispatchReservedAt = null;
+    }
+    if (target == NotificationStatus.PENDING) {
+      pendingSince = Instant.now();
+    }
   }
 
   public List<DomainEvent> pullEvents() {
@@ -219,6 +258,18 @@ public final class Notification {
 
   public Long version() {
     return version;
+  }
+
+  public Instant pendingSince() {
+    return pendingSince;
+  }
+
+  public Instant dispatchReservedAt() {
+    return dispatchReservedAt;
+  }
+
+  public int currentCycle() {
+    return currentCycle;
   }
 
   @Override

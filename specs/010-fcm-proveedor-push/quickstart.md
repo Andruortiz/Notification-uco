@@ -155,7 +155,8 @@ completos ni el `project_id` si se considera sensible):
 
 | Fecha | Quién | Commit | Medio de credencial | Push recibido | Estado final | `INVALID_ARGUMENT` con inventado | `UNREGISTERED` con desinstalada | Notas |
 |---|---|---|---|---|---|---|---|---|
-| *(pendiente)* | | | | | | | | |
+| 2026-10-05 | Claude, con autorización expresa del usuario | `aa3f562` | Archivo (`FCM_CREDENTIALS_FILE`) | No: no hay dispositivo real disponible | `FAILED`, `providerId` `fcm` | No: con `device-token-demo-1234` FCM devolvió `UNREGISTERED`, no `INVALID_ARGUMENT` | No probado | El canje de autorización con la credencial real funcionó (FCM respondió sobre el token). El log trae `providerErrorCode` y el identificador enmascarado, y no contiene `client_email`, clave privada, `project_id`, título, cuerpo ni el token completo. Cuerpo de 901 caracteres: `400` sin llamar a FCM. 1 llamada real. |
+| 2026-10-05 | Claude, con autorización expresa del usuario | `aa3f562` | Variable (`FCM_CREDENTIALS_JSON`) | No: no hay dispositivo real disponible | `FAILED`, `providerId` `fcm` | No: `UNREGISTERED` con otro identificador inventado | No probado | Mismo resultado que por archivo. Con ambas credenciales a la vez el arranque deshabilita FCM con el aviso de credencial ambigua. 1 llamada real. |
 
 ---
 

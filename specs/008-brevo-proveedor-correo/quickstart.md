@@ -137,7 +137,7 @@ Anotar aquí cada ejecución (este archivo está versionado; **nunca** pegar la 
 
 | Fecha | Quién | Commit | Correo recibido | Estado final | ¿Deduplica la clave? | Notas |
 |---|---|---|---|---|---|---|
-| *(pendiente)* | | | | | | |
+| 2026-10-05 | Claude, con autorización expresa del usuario | `aa3f562` | Aceptado por Brevo; la llegada al buzón no la pude comprobar | `DELIVERED`, `providerId` `brevo`, 1 intento | No medido: el componente no reenvía una notificación ya `DELIVERED` (al reencolar su id quedó 1 intento y 1 despacho), así que el riesgo de duplicado por reencolado no se materializa | El log del despacho no contiene la clave, la dirección, el asunto ni el cuerpo. La consulta al historial de la cuenta respondió 401 con esa clave (permisos), así que no verifiqué el envío del lado del proveedor. 1 envío real. |
 
 ---
 

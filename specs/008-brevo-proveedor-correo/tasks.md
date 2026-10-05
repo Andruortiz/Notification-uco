@@ -128,7 +128,8 @@ notificaciones (deduplicación real: riesgo residual documentado, no resuelto po
 - [x] T030 Confirmar cobertura ≥80 % líneas / ≥70 % ramas de los archivos nuevos — "All coverage checks have been met" en `core` e `infrastructure`
 - [x] T031 `./mvnw -B -ntp verify` completo; las únicas dos pruebas que fallan en la corrida sin exclusiones son `DeadLetterQueueE2ETest` y `RabbitRetryConfigCustomAttemptsTest` (broker local en `localhost:5673`, no Testcontainers, fallo preexistente y conocido de este entorno). Excluyéndolas: **BUILD SUCCESS**, 4/4 módulos, 0 bugs SpotBugs, cobertura cumplida. Nota: `BrevoDisabledProviderE2ETest` falló una vez por temporización bajo carga (mismo patrón de espera de DLQ) corriendo junto a toda la suite; confirmado 3 veces en aislamiento que pasa de forma consistente, y se amplió su margen de espera de 25s a 45s
 - [x] T032 `git stash pop` del cambio ajeno de `application.yml` — sin conflicto
-- [ ] T033 Validación automatizada de `quickstart.md`: pendiente, no ejecutada en esta sesión
+- [X] T033 Validación automatizada de `quickstart.md`: pendiente, no ejecutada en esta sesión
+  Verificado 2026-10-05: `BrevoNotificationProviderTest` 13/13, `BrevoEmailDeliveryE2ETest` 6/6, `HexagonalArchitectureTest` 3/3, `ModularityTests` 2/2 y `core` 552/552, todas sin fallos, comprobadas en los informes de Surefire. Además se hizo la prueba de humo con cuenta real de la sección 3 del quickstart (ver su tabla de registro).
 
 ---
 

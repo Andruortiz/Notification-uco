@@ -51,7 +51,7 @@ db.channel_catalog.updateOne(
 
 El servicio exige un JWT en `Authorization: Bearer`. El modo se elige con `NOTIFICATION_AUTH_MODE`:
 
-- **`local`** (por defecto): JWT firmado con un secreto compartido (`AUTH_JWT_HS256_SECRET`). Es la autenticacion interina para desarrollo y pruebas.
+- **`local`** (por defecto): JWT firmado con un secreto compartido (`AUTH_JWT_HS256_SECRET`), que es obligatorio, de al menos 32 bytes y no tiene valor por defecto. Para desarrollo, activa el perfil `local` (`SPRING_PROFILES_ACTIVE=local`), que trae un secreto de desarrollo; el servicio no arranca con ese valor fuera del perfil `local`. Todo token debe traer la claim `exp`. Es la autenticacion interina para desarrollo y pruebas.
 - **`platform`**: tokens de la plataforma central de seguridad, validados con **su clave publica** (RSA o EC). Hay un solo adaptador activo por modo; un valor desconocido impide que la aplicacion arranque.
 
 Cada modo es un adaptador del puerto `TokenValidationPort`; el dominio y el filtro de autenticacion no cambian. En modo `platform` el arranque falla si falta la clave publica.

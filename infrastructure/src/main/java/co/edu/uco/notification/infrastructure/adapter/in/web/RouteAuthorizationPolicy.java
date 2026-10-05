@@ -22,6 +22,8 @@ public class RouteAuthorizationPolicy {
               path -> path.matches("^/notifications/[^/:]+:retry$"),
               Role.OPERADOR),
           new Rule(HttpMethod.GET, path -> path.equals("/notifications:subscribe"), Role.CLIENTE),
+          new Rule(
+              HttpMethod.POST, path -> path.equals("/notifications:subscribeTicket"), Role.CLIENTE),
           new Rule(HttpMethod.POST, path -> path.equals("/attachment-uploads"), Role.CLIENTE),
           new Rule(
               HttpMethod.POST,

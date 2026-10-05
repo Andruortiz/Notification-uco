@@ -1,4 +1,4 @@
-package co.edu.uco.notification.infrastructure.adapter.out.parameters;
+package co.edu.uco.notification.infrastructure.config;
 
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;

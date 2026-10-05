@@ -22,7 +22,6 @@ import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
 import co.edu.uco.notification.core.repository.NotificationBatchRepository;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.usecase.*;
-import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersProperties;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;

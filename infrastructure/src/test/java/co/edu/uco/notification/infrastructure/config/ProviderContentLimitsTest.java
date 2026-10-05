@@ -1,4 +1,4 @@
-package co.edu.uco.notification.infrastructure.adapter.out.provider;
+package co.edu.uco.notification.infrastructure.config;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;

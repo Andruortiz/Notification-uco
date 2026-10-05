@@ -22,7 +22,7 @@ import co.edu.uco.notification.core.exception.ProviderNotAvailableException;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
-import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogProperties;
+import co.edu.uco.notification.infrastructure.config.ChannelCatalogProperties;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;

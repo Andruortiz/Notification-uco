@@ -1,5 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.out.catalog;
 
+import co.edu.uco.notification.infrastructure.config.ChannelCatalogProperties;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.Map;
 import java.util.Objects;

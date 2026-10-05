@@ -1,9 +1,7 @@
-package co.edu.uco.notification.infrastructure.config;
+package co.edu.uco.notification.infrastructure.adapter.out.parameters;
 
 import co.edu.uco.notification.core.port.out.ParametersSourcePort;
-import co.edu.uco.notification.infrastructure.adapter.out.parameters.HttpParametersSource;
-import co.edu.uco.notification.infrastructure.adapter.out.parameters.NoParametersSource;
-import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersProperties;
+import co.edu.uco.notification.infrastructure.config.ParametersProperties;
 import io.netty.channel.ChannelOption;
 import java.time.Duration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

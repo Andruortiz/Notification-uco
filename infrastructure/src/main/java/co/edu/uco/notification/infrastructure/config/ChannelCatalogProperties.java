@@ -1,4 +1,4 @@
-package co.edu.uco.notification.infrastructure.adapter.out.catalog;
+package co.edu.uco.notification.infrastructure.config;
 
 import java.util.List;
 import java.util.Map;

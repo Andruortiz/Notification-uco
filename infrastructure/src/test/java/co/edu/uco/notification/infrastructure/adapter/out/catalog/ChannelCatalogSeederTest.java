@@ -8,6 +8,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import co.edu.uco.notification.infrastructure.config.ChannelCatalogProperties;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;

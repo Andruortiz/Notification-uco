@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.infrastructure.config.ChannelCatalogProperties;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;

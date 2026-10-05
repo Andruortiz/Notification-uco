@@ -1,4 +1,4 @@
-package co.edu.uco.notification.infrastructure.adapter.out.provider;
+package co.edu.uco.notification.infrastructure.config;
 
 import java.time.LocalDate;
 import java.util.HashMap;

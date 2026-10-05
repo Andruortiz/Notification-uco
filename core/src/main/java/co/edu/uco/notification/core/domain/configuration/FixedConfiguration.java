@@ -22,6 +22,21 @@ public record FixedConfiguration(
     providerContentLimits = copyNested(providerContentLimits);
   }
 
+  @Override
+  public Map<String, Set<String>> enabledProvidersByChannel() {
+    return copySets(enabledProvidersByChannel);
+  }
+
+  @Override
+  public Map<String, Map<String, Long>> contentLimitsByChannel() {
+    return copyLimits(contentLimitsByChannel);
+  }
+
+  @Override
+  public Map<String, Map<String, Map<String, Long>>> providerContentLimits() {
+    return copyNested(providerContentLimits);
+  }
+
   private static Map<String, Set<String>> copySets(final Map<String, Set<String>> source) {
     Preconditions.requireNonNull(source, "enabledProvidersByChannel must not be null");
     final Map<String, Set<String>> copy = new HashMap<>();

@@ -22,7 +22,6 @@ import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
@@ -37,14 +36,10 @@ public class AttachmentScanListener {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AttachmentScanListener.class);
   private static final String ATTEMPT_HEADER = "x-scan-attempt";
-  private static final long CONFIRM_TIMEOUT_MILLIS = 5_000L;
 
   private final ScanAttachmentUploadUseCase scanAttachmentUploadUseCase;
   private final ObjectMapper objectMapper;
-  private final RabbitTemplate rabbitTemplate;
-  private final MessageRecoverer deadLetterRecoverer;
-  private final AttachmentScanTopologyProperties topology;
-  private final int maxAttempts;
+  private final ManualAckSettler settler;
 
   public AttachmentScanListener(
       final ScanAttachmentUploadUseCase scanAttachmentUploadUseCase,
@@ -57,13 +52,16 @@ public class AttachmentScanListener {
         Preconditions.requireNonNull(
             scanAttachmentUploadUseCase, "scanAttachmentUploadUseCase must not be null");
     this.objectMapper = Preconditions.requireNonNull(objectMapper, "objectMapper must not be null");
-    this.rabbitTemplate =
-        Preconditions.requireNonNull(rabbitTemplate, "rabbitTemplate must not be null");
-    this.deadLetterRecoverer =
-        Preconditions.requireNonNull(
-            attachmentScanDlqRecoverer, "attachmentScanDlqRecoverer must not be null");
-    this.topology = Preconditions.requireNonNull(topology, "topology must not be null");
-    this.maxAttempts = Math.max(1, attachmentProperties.scan().maxAttempts());
+    Preconditions.requireNonNull(topology, "topology must not be null");
+    this.settler =
+        new ManualAckSettler(
+            rabbitTemplate,
+            attachmentScanDlqRecoverer,
+            topology.exchange(),
+            topology.routingKey(),
+            ATTEMPT_HEADER,
+            attachmentProperties.scan().maxAttempts(),
+            "Attachment scan");
   }
 
   @RabbitListener(
@@ -105,7 +103,7 @@ public class AttachmentScanListener {
           LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.PERMANENT_BUSINESS),
           "Attachment scan message is unreadable, sending it to the dead-letter queue",
           cause);
-      settle(message, channel, deliveryTag, () -> deadLetterRecoverer.recover(message, cause));
+      settler.deadLetter(message, channel, deliveryTag, cause);
       return;
     }
     Exception failure = null;
@@ -126,7 +124,7 @@ public class AttachmentScanListener {
       failure = cause;
     }
     if (failure == null) {
-      channel.basicAck(deliveryTag, false);
+      settler.acknowledge(channel, deliveryTag);
     } else {
       handleFailure(message, channel, deliveryTag, request, failure);
     }
@@ -139,39 +137,10 @@ public class AttachmentScanListener {
       final AttachmentScanRequest request,
       final Exception cause)
       throws IOException {
-    final int attempt = attemptCount(message) + 1;
-    if (attempt >= maxAttempts) {
-      if (isObjectChanged(cause)) {
-        failExhaustedUpload(request);
-      }
-      LOGGER.warn(
-          LogFields.fields(
-              "attempt",
-              attempt,
-              LogFields.FAILURE_CATEGORY,
-              FailureCategory.RECOVERABLE_INFRASTRUCTURE),
-          "Attachment scan exhausted attempts, sending the message to the dead-letter queue",
-          cause);
-      settle(message, channel, deliveryTag, () -> deadLetterRecoverer.recover(message, cause));
-    } else {
-      LOGGER.warn(
-          LogFields.fields(
-              "attempt",
-              attempt,
-              "maxAttempts",
-              maxAttempts,
-              LogFields.FAILURE_CATEGORY,
-              FailureCategory.RECOVERABLE_INFRASTRUCTURE),
-          "Attachment scan attempt failed, requeueing",
-          cause);
-      settle(
-          message,
-          channel,
-          deliveryTag,
-          () ->
-              rabbitTemplate.send(
-                  topology.exchange(), topology.routingKey(), withAttempt(message, attempt)));
+    if (settler.isLastAttempt(message) && isObjectChanged(cause)) {
+      failExhaustedUpload(request);
     }
+    settler.handleFailure(message, channel, deliveryTag, cause);
   }
 
   private void failExhaustedUpload(final AttachmentScanRequest request) {
@@ -196,40 +165,6 @@ public class AttachmentScanListener {
       current = current.getCause() == current ? null : current.getCause();
     }
     return false;
-  }
-
-  private void settle(
-      final Message message,
-      final Channel channel,
-      final long deliveryTag,
-      final Runnable publication)
-      throws IOException {
-    try {
-      rabbitTemplate.invoke(
-          operations -> {
-            publication.run();
-            operations.waitForConfirmsOrDie(CONFIRM_TIMEOUT_MILLIS);
-            return Boolean.TRUE;
-          });
-    } catch (final RuntimeException publicationFailure) {
-      LOGGER.error(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.RECOVERABLE_INFRASTRUCTURE),
-          "Attachment scan message could not be republished, rejecting it so the broker"
-              + " dead-letters it",
-          publicationFailure);
-      channel.basicNack(deliveryTag, false, false);
-      return;
-    }
-    channel.basicAck(deliveryTag, false);
-  }
-
-  private static int attemptCount(final Message message) {
-    final Object value = message.getMessageProperties().getHeaders().get(ATTEMPT_HEADER);
-    return value instanceof Integer count ? count : 0;
-  }
-
-  private static Message withAttempt(final Message message, final int attempt) {
-    return MessageBuilder.fromMessage(message).setHeader(ATTEMPT_HEADER, attempt).build();
   }
 
   private static void logVerdict(final AttachmentUpload upload) {

@@ -90,7 +90,7 @@ No se usan abreviaturas de rutas (hallazgo B-14).
 
 ### Contract first (Principio II)
 
-- [ ] T017 [US1] Editar `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`: añadir `POST /notifications:subscribeTicket` (`issueSubscriptionTicket`, rol `CLIENTE`, 200 `SubscriptionTicketResponse` con `ticket` y `expiresInSeconds`, 401), retirar el parámetro `access_token` de `GET /notifications:subscribe`, añadir `ticket` y ajustar la descripción y el 401 como indica `specs/017-Fix-specs-012-016/contracts/api-notificaciones-cambios.md` § 2.
+- [x] T017 [US1] Editar `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml`: añadir `POST /notifications:subscribeTicket` (`issueSubscriptionTicket`, rol `CLIENTE`, 200 `SubscriptionTicketResponse` con `ticket` y `expiresInSeconds`, 401), retirar el parámetro `access_token` de `GET /notifications:subscribe`, añadir `ticket` y ajustar la descripción y el 401 como indica `specs/017-Fix-specs-012-016/contracts/api-notificaciones-cambios.md` § 2.
 ### Tests for E2 (escribir primero y verlos fallar)
 
 - [ ] T018 [P] [US1] Crear `core/src/test/java/co/edu/uco/notification/core/usecase/IssueSubscriptionTicketServiceTest.java`: emite un ticket opaco de 43 caracteres base64url con vigencia de 30 s según el `Clock`; guarda solo la huella SHA-256 y no el ticket en claro; dos emisiones dan tickets distintos; control positivo: el ticket en claro consumido coincide con el emitido.

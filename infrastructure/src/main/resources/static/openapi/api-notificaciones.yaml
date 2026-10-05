@@ -97,6 +97,8 @@ paths:
           description: >
             Un adjunto referencia una subida todavía en PENDING_SCAN. Reintentar cuando
             GET /attachment-uploads/{uploadId} devuelva CLEAN. Una subida en FAILED se rechaza con 400.
+            También responde 409 ante una modificación concurrente, una clave externalId ya aceptada o una
+            transición de estado no permitida, con mensaje fijo.
           content:
             application/json:
               schema:
@@ -122,6 +124,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
     get:
       tags: [Notificaciones]
       summary: Consultar histórico y trazabilidad
@@ -366,6 +370,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /notifications/{id}:
     parameters:
@@ -459,6 +467,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /attachment-uploads:
     parameters:
@@ -524,6 +536,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /attachment-uploads/{uploadId}:complete:
     parameters:
@@ -602,6 +618,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /attachment-uploads/{uploadId}:
     parameters:
@@ -920,6 +938,33 @@ components:
         traceparent:
           $ref: '#/components/headers/TraceParent'
       description: Token válido, pero el rol no alcanza el mínimo requerido por esta operación.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+        traceparent:
+          $ref: '#/components/headers/TraceParent'
+      description: >
+        Conflicto con el estado actual del recurso: modificación concurrente de la notificación,
+        clave externalId ya aceptada para el tenant o transición de estado no permitida. El mensaje es
+        fijo y no incluye datos de otros recursos.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+        traceparent:
+          $ref: '#/components/headers/TraceParent'
+      description: >
+        Error inesperado. El cuerpo lleva un mensaje genérico y el correlationId para localizar la causa
+        en los logs; nunca el mensaje interno de la excepción.
       content:
         application/json:
           schema:

@@ -3,11 +3,6 @@ package co.edu.uco.notification.infrastructure.config;
 import java.util.Map;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
-/**
- * Configuracion del modo {@code platform}: validacion de tokens emitidos por la plataforma central
- * de seguridad. Los nombres de los claims y la tabla de roles son configurables porque el contrato
- * con esa plataforma todavia no esta fijado.
- */
 @ConfigurationProperties(prefix = "notification.auth.platform")
 public record AuthPlatformProperties(
     String publicKey,

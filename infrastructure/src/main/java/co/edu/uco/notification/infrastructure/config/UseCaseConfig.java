@@ -8,17 +8,20 @@ import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ContentTypeDetectorPort;
+import co.edu.uco.notification.core.port.out.LastKnownConfigurationPort;
 import co.edu.uco.notification.core.port.out.MalwareScannerPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
+import co.edu.uco.notification.core.port.out.ParametersSourcePort;
 import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
 import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
 import co.edu.uco.notification.core.repository.NotificationBatchRepository;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.usecase.*;
+import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersProperties;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
@@ -53,6 +56,36 @@ public class UseCaseConfig {
       final Clock clock) {
     return new ApplyConfigurationChangeService(
         configurationHolder, configurationValidator, fixedConfiguration, clock);
+  }
+
+  @Bean
+  RestoreLastKnownConfigurationUseCase restoreLastKnownConfigurationUseCase(
+      final LastKnownConfigurationPort lastKnownConfigurationPort,
+      final ConfigurationHolder configurationHolder,
+      final ConfigurationValidator configurationValidator,
+      final FixedConfiguration fixedConfiguration,
+      final ParametersProperties parametersProperties,
+      final Clock clock) {
+    return new RestoreLastKnownConfigurationService(
+        lastKnownConfigurationPort,
+        configurationHolder,
+        configurationValidator,
+        fixedConfiguration,
+        clock,
+        parametersProperties.lastKnownLoadTimeout());
+  }
+
+  @Bean
+  SynchronizeConfigurationUseCase synchronizeConfigurationUseCase(
+      final ParametersSourcePort parametersSourcePort,
+      final ApplyConfigurationChangeUseCase applyConfigurationChangeUseCase,
+      final LastKnownConfigurationPort lastKnownConfigurationPort,
+      final ConfigurationHolder configurationHolder) {
+    return new SynchronizeConfigurationService(
+        parametersSourcePort,
+        applyConfigurationChangeUseCase,
+        lastKnownConfigurationPort,
+        configurationHolder);
   }
 
   @Bean

@@ -7,8 +7,10 @@ import co.edu.uco.notification.core.domain.configuration.FixedConfiguration;
 import co.edu.uco.notification.core.domain.configuration.ParameterDescriptor;
 import co.edu.uco.notification.core.domain.configuration.ParameterRegistry;
 import co.edu.uco.notification.core.domain.configuration.ValidationResult;
+import co.edu.uco.notification.core.port.in.RestoreLastKnownConfigurationUseCase;
 import co.edu.uco.notification.core.usecase.ConfigurationHolder;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogProperties;
+import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersProperties;
 import co.edu.uco.notification.infrastructure.adapter.out.provider.ProviderContentLimits;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,6 +23,10 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.convert.DurationStyle;
@@ -34,7 +40,8 @@ import org.springframework.core.env.Environment;
   AttachmentProperties.class,
   BrevoProviderProperties.class,
   TwilioProviderProperties.class,
-  FcmProviderProperties.class
+  FcmProviderProperties.class,
+  ParametersProperties.class
 })
 public class ConfigurationConfig {
 
@@ -45,6 +52,8 @@ public class ConfigurationConfig {
   private static final Duration DEFAULT_SCAN_TIMEOUT = Duration.ofSeconds(10);
   private static final int DEFAULT_SCAN_MAX_ATTEMPTS = 3;
   private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final Duration STARTUP_RESTORE_MARGIN = Duration.ofSeconds(1);
+  private static final Logger LOG = LoggerFactory.getLogger(ConfigurationConfig.class);
 
   @Bean
   ParameterRegistry parameterRegistry() {
@@ -148,6 +157,27 @@ public class ConfigurationConfig {
           "Default configuration violates the validation rules: " + validation.summary());
     }
     return new ConfigurationHolder(defaults);
+  }
+
+  @Bean
+  SmartInitializingSingleton lastKnownConfigurationRestorer(
+      final ObjectProvider<RestoreLastKnownConfigurationUseCase> restoreUseCase,
+      final ParametersProperties parametersProperties) {
+    return () -> {
+      final RestoreLastKnownConfigurationUseCase useCase = restoreUseCase.getIfAvailable();
+      if (useCase == null) {
+        return;
+      }
+      try {
+        useCase
+            .restore()
+            .block(parametersProperties.lastKnownLoadTimeout().plus(STARTUP_RESTORE_MARGIN));
+      } catch (final RuntimeException exception) {
+        LOG.warn(
+            "last known configuration could not be restored reason={}",
+            exception.getClass().getSimpleName());
+      }
+    };
   }
 
   private static Map<String, Long> contentLimits(final String contentSchema) {

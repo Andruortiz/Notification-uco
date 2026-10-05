@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.in.rabbit;
 
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.exception.DispatchResultNotPersistedException;
+import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
 import co.edu.uco.notification.infrastructure.config.CorrelationContext;
 import co.edu.uco.notification.infrastructure.config.LogContext;
@@ -22,7 +23,6 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import reactor.util.context.Context;
@@ -36,27 +36,36 @@ public class NotificationDispatchListener {
   private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDispatchListener.class);
 
   private final DispatchNotificationUseCase dispatchNotificationUseCase;
-  private final ManualAckSettler settler;
+  private final RabbitTemplate rabbitTemplate;
+  private final MessageRecoverer dlqRecoverer;
+  private final RabbitTopologyProperties properties;
+  private final ConfigurationView configurationView;
 
   public NotificationDispatchListener(
       final DispatchNotificationUseCase dispatchNotificationUseCase,
       final RabbitTemplate rabbitTemplate,
       @Qualifier("notificationDispatchDlqRecoverer") final MessageRecoverer dlqRecoverer,
       final RabbitTopologyProperties properties,
-      @Value("${notification.rabbit.dispatch.max-attempts:3}") final int maxAttempts) {
+      final ConfigurationView configurationView) {
     this.dispatchNotificationUseCase =
         Preconditions.requireNonNull(
             dispatchNotificationUseCase, "dispatchNotificationUseCase must not be null");
-    Preconditions.requireNonNull(properties, "properties must not be null");
-    this.settler =
-        new ManualAckSettler(
-            rabbitTemplate,
-            dlqRecoverer,
-            properties.dispatch().exchange(),
-            properties.dispatch().routingKey(),
-            ATTEMPT_HEADER,
-            maxAttempts,
-            "Notification dispatch");
+    this.rabbitTemplate = rabbitTemplate;
+    this.dlqRecoverer = dlqRecoverer;
+    this.properties = Preconditions.requireNonNull(properties, "properties must not be null");
+    this.configurationView =
+        Preconditions.requireNonNull(configurationView, "configurationView must not be null");
+  }
+
+  private ManualAckSettler settlerFor(final int maxAttempts) {
+    return new ManualAckSettler(
+        rabbitTemplate,
+        dlqRecoverer,
+        properties.dispatch().exchange(),
+        properties.dispatch().routingKey(),
+        ATTEMPT_HEADER,
+        maxAttempts,
+        "Notification dispatch");
   }
 
   @RabbitListener(
@@ -89,6 +98,8 @@ public class NotificationDispatchListener {
       final CorrelationId correlationId,
       final TraceParent traceParent)
       throws IOException {
+    final ManualAckSettler settler =
+        settlerFor(Math.toIntExact(configurationView.snapshot().dispatchMaxAttempts()));
     final NotificationId notificationId;
     try {
       notificationId = NotificationId.of(body);

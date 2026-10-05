@@ -14,10 +14,14 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot;
+import co.edu.uco.notification.core.domain.configuration.ConfigurationSource;
+import co.edu.uco.notification.core.domain.configuration.ParameterRegistry;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.exception.DispatchResultNotPersistedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
+import co.edu.uco.notification.core.usecase.ConfigurationHolder;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.utils.CorrelationId;
@@ -25,6 +29,8 @@ import co.edu.uco.notification.utils.TraceParent;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
@@ -71,8 +77,25 @@ class NotificationDispatchListenerTest {
 
   private NotificationDispatchListener listenerFor(
       final DispatchNotificationUseCase useCase, final int maxAttempts) {
-    return new NotificationDispatchListener(
-        useCase, rabbitTemplate, recoverer, properties, maxAttempts);
+    return listenerFor(useCase, holderWith(maxAttempts));
+  }
+
+  private NotificationDispatchListener listenerFor(
+      final DispatchNotificationUseCase useCase, final ConfigurationHolder holder) {
+    return new NotificationDispatchListener(useCase, rabbitTemplate, recoverer, properties, holder);
+  }
+
+  private static ConfigurationSnapshot snapshotWith(final long version, final long maxAttempts) {
+    return new ConfigurationSnapshot(
+        version,
+        ConfigurationSource.DEFAULTS,
+        Map.of(ParameterRegistry.DISPATCH_MAX_ATTEMPTS, maxAttempts),
+        Instant.now(),
+        java.util.Set.of());
+  }
+
+  private static ConfigurationHolder holderWith(final long maxAttempts) {
+    return new ConfigurationHolder(snapshotWith(0, maxAttempts));
   }
 
   private static Message message(
@@ -307,6 +330,102 @@ class NotificationDispatchListenerTest {
   void constructorRejectsNullUseCase() {
     org.junit.jupiter.api.Assertions.assertThrows(
         NullPointerException.class,
-        () -> new NotificationDispatchListener(null, rabbitTemplate, recoverer, properties, 3));
+        () ->
+            new NotificationDispatchListener(
+                null, rabbitTemplate, recoverer, properties, holderWith(3)));
+  }
+
+  @Test
+  void constructorRejectsNullConfigurationView() {
+    org.junit.jupiter.api.Assertions.assertThrows(
+        NullPointerException.class,
+        () ->
+            new NotificationDispatchListener(
+                mock(DispatchNotificationUseCase.class),
+                rabbitTemplate,
+                recoverer,
+                properties,
+                null));
+  }
+
+  @Test
+  void raisingTheMaximumFromThreeToFiveAdmitsAnotherRetryAtTheThirdFailure() throws IOException {
+    final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
+    final NotificationId id = NotificationId.newId();
+    final NotificationNotFoundException failure = new NotificationNotFoundException(id);
+    when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
+    final ConfigurationHolder holder = holderWith(3);
+    final NotificationDispatchListener listener = listenerFor(useCase, holder);
+    final Message atThree = message(id.value(), null, null);
+    atThree.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 2);
+
+    listener.onMessage(atThree, channel, TAG);
+
+    verify(recoverer).recover(atThree, failure);
+    verify(rabbitTemplate, never()).send(any(String.class), any(String.class), any(Message.class));
+
+    holder.replace(snapshotWith(1, 5));
+    final Message nextMessage = message(id.value(), null, null);
+    nextMessage.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 2);
+
+    listener.onMessage(nextMessage, channel, TAG + 1);
+
+    final ArgumentCaptor<Message> republished = ArgumentCaptor.forClass(Message.class);
+    verify(rabbitTemplate).send(eq("dex"), eq("drk"), republished.capture());
+    assertEquals(
+        3,
+        republished
+            .getValue()
+            .getMessageProperties()
+            .getHeaders()
+            .get(NotificationDispatchListener.ATTEMPT_HEADER));
+    verify(recoverer, never()).recover(eq(nextMessage), any());
+  }
+
+  @Test
+  void aMessageInProgressKeepsTheMaximumItReadWhenTheConfigurationChangesMidDispatch()
+      throws IOException {
+    final NotificationId id = NotificationId.newId();
+    final ConfigurationHolder holder = holderWith(3);
+    final NotificationNotFoundException failure = new NotificationNotFoundException(id);
+    final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
+    when(useCase.dispatch(eq(id)))
+        .thenReturn(
+            Mono.defer(
+                () -> {
+                  holder.replace(snapshotWith(1, 5));
+                  return Mono.error(failure);
+                }));
+    final Message inProgress = message(id.value(), null, null);
+    inProgress.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 2);
+
+    listenerFor(useCase, holder).onMessage(inProgress, channel, TAG);
+
+    verify(recoverer).recover(inProgress, failure);
+    verify(rabbitTemplate, never()).send(any(String.class), any(String.class), any(Message.class));
+  }
+
+  @Test
+  void loweringTheMaximumSendsTheNextMessageToTheDeadLetterQueueEarlier() throws IOException {
+    final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
+    final NotificationId id = NotificationId.newId();
+    final NotificationNotFoundException failure = new NotificationNotFoundException(id);
+    when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
+    final ConfigurationHolder holder = holderWith(5);
+    final NotificationDispatchListener listener = listenerFor(useCase, holder);
+    final Message first = message(id.value(), null, null);
+    first.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 1);
+
+    listener.onMessage(first, channel, TAG);
+
+    verify(recoverer, never()).recover(any(), any());
+
+    holder.replace(snapshotWith(1, 2));
+    final Message second = message(id.value(), null, null);
+    second.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 1);
+
+    listener.onMessage(second, channel, TAG + 1);
+
+    verify(recoverer).recover(second, failure);
   }
 }

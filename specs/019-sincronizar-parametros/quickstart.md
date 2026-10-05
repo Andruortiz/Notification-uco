@@ -21,7 +21,7 @@ Docker encendido y `JAVA_TOOL_OPTIONS="-Dapi.version=1.44"` en este equipo.
 | Arranque sin Parámetros: valores por defecto y última conocida | `ConfigurationSyncE2ETest` |
 | Cambio válido adoptado en menos de un intervalo, el listener usa el nuevo tope | `ConfigurationSyncE2ETest` (bloqueada por E4) |
 | Cambio inválido rechazado completo, versión intacta, evento con motivo | `ConfigurationSyncE2ETest`, `ConfigurationValidatorTest` |
-| Reglas (b), (c), (d) y arranque fallido con defectos inválidos | `ConfigurationValidatorTest`, `ConfigurationStartupTest` |
+| Reglas (b), (c), (d): unitarias sobre instantáneas sintéticas y arranque fallido con defectos inválidos (la regla (a) va por E2E) | `ConfigurationValidatorTest`, `ConfigurationStartupTest` |
 | Operación en curso conserva su valor | `ConfigurationHolderTest`, `ConfigurationSyncE2ETest` |
 | Versión menor o igual ignorada; reversión con versión nueva | `ApplyConfigurationChangeServiceTest` |
 | `GET /configuration`: roles, contenido exacto, sin secretos | `ConfigurationSyncE2ETest`, `ParameterRegistryTest` |

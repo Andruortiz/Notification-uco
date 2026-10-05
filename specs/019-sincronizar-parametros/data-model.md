@@ -11,7 +11,7 @@
 | `provider.<id>.connect-timeout-ms` | entero (ms) | `notification.provider.<id>.connect-timeout-ms` (5 000) | 500 a 30 000 | proveedor (`brevo`, `twilio`, `fcm`) | en caliente |
 | `requeue.interval-ms` | entero (ms) | `notification.scheduler.requeue-interval-ms` (30 000) | 5 000 a 600 000 | global | en caliente |
 
-Los rangos son una propuesta (Pregunta abierta Q4). Ningún descriptor inicial usa el modo "con reinicio";
+Los rangos fueron aceptados por el usuario como punto de partida (Q4). Ningún descriptor inicial usa el modo "con reinicio";
 ese modo se ejerce con un descriptor de prueba. El proveedor `simulated` no tiene tiempos gestionables.
 
 ## Entidades de `core` (`domain/configuration`)

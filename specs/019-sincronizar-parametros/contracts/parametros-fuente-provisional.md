@@ -4,6 +4,8 @@
 publicado. Lo propone este servicio para poder construir y probar el adaptador de sondeo. Se descarta o se
 reemplaza cuando SUP-02 se cierre; el puerto `ParametersSourcePort` aísla el cambio. El adaptador HTTP queda
 inactivo mientras `notification.parameters.base-url` esté vacía.
+El usuario decidió incluir el adaptador contra este contrato; el contrato definitivo de SUP-02 sigue abierto
+(Principio VII, vence 2026-11-15, dueño andrualv) y el adaptador debe poder ajustarse a él sin tocar el núcleo.
 
 ## Consulta del estado completo
 

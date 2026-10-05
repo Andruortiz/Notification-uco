@@ -16,7 +16,7 @@ Estado verificado del código (rama basada en `develop` tras la fusión de 017-E
 | El catálogo se refresca con un `@Scheduled` y un caché local que se reemplaza completo | `ChannelCatalogRefresher`, `ChannelCatalogCache` | Patrón a imitar para el sondeo y el reemplazo atómico |
 | Toda ruta sin regla exige `ADMINISTRADOR` | `RouteAuthorizationPolicy.minimumRoleFor` | Aun así se añade la regla explícita (legibilidad y prueba) |
 | El contrato ya trae `/channels:register` y `/providers:register` como "bloqueados" | `api-notificaciones.yaml` | Precedente de operaciones identificadas como planificadas (Principio II) |
-| No existe ningún límite de proveedor declarado en código | búsqueda en `core` e `infrastructure` | La regla (d) necesita una fuente (D8, pregunta abierta Q3) |
+| No existe ningún límite de proveedor declarado en código | búsqueda en `core` e `infrastructure` | La regla (d) necesita una fuente (D8, decisión Q3) |
 
 ## Decisiones
 
@@ -52,7 +52,7 @@ Estado verificado del código (rama basada en `develop` tras la fusión de 017-E
   y se anota como candidato a un descriptor futuro.
 - **Alternativas**: gobernar también `RetryPolicy` (rechazada: duplica el significado de la clave y cambia el
   comportamiento del ciclo recuperable, fuera del alcance de las historias 1-3).
-- **Pregunta abierta Q2**: confirmar esta lectura.
+- **Decisión del usuario (Q2)**: lectura confirmada; `dispatch.max-attempts` es el tope por mensaje, no el `RetryPolicy`.
 
 ### D4. Lectura por operación: una instantánea por operación
 
@@ -92,7 +92,11 @@ Estado verificado del código (rama basada en `develop` tras la fusión de 017-E
   contexto de correlación del ciclo lleva el prefijo `param-` (igual que `sched-`).
 - **Adaptador HTTP**: la spec no trae el contrato de SUP-02. Se propone `HttpParametersSource` contra un
   contrato **provisional** (contracts/parametros-fuente-provisional.md), inactivo por defecto, marcado como
-  Supuesto S-1. Es la Pregunta abierta Q1.
+  Supuesto S-1.
+- **Decisión del usuario (Q1)**: el adaptador HTTP se incluye, inactivo por defecto. El contrato definitivo de
+  SUP-02 sigue abierto (Principio VII, vence 2026-11-15, dueño andrualv). El adaptador se aísla tras
+  `ParametersSourcePort` y la ruta, la autenticación y la forma de la versión viven solo en `HttpParametersSource`
+  y `ParametersProperties`, de modo que el contrato definitivo se adopta sin tocar el núcleo.
 - **Alternativas**: publicación por evento de RabbitMQ (rechazada por ahora: SUP-02 no la fija y exigiría
   topología nueva); archivo de configuración recargable (rechazada: no es el componente de Parámetros).
 
@@ -104,13 +108,19 @@ Estado verificado del código (rama basada en `develop` tras la fusión de 017-E
   proveedores habilitados por canal (los adaptadores con `disabledReason` vacío), espera y número de intentos
   del análisis de adjuntos, ventana de barrido, esquema de contenido de cada canal y los límites que acepta
   cada proveedor. Esos últimos no existen hoy en código: se propone una tabla `ProviderContentLimits` en
-  infraestructura, con valores de la documentación de cada proveedor, marcada como Supuesto S-2 (Pregunta
-  abierta Q3).
+  infraestructura, con valores de la documentación de cada proveedor, marcada como Supuesto S-2.
 - **Consecuencia sobre la spec (resuelta de forma conservadora)**: con solo los cuatro grupos iniciales
   gestionables, las reglas (b), (c) y (d) no pueden violarse con un cambio publicado (sus entradas son valores
   de arranque); solo pueden fallar en el arranque (FR-019). Los escenarios 3, 4 y 5 de la historia 3 se
   verifican con pruebas unitarias del validador sobre instantáneas sintéticas y con una prueba de arranque
   fallido, no con una publicación E2E. La regla (a) sí es alcanzable por publicación y se prueba E2E.
+- **Decisión del usuario (Q3)**: se implementa `ProviderContentLimits` con los valores de la documentación
+  pública de Brevo, Twilio y FCM. Los valores de la tabla deben confirmarse antes de producción (pendiente en
+  plan.md, dueño andrualv). Fuentes: este plan no registró valores numéricos ni citas de la documentación de
+  cada proveedor, y no se inventan aquí; al implementar, cada valor de la tabla lleva su fuente (URL de la
+  documentación y fecha de consulta) en este documento, y los valores sin fuente verificable no se incluyen.
+- **Decisión del usuario (Q5)**: las reglas (b), (c) y (d) se prueban con pruebas unitarias sobre instantáneas
+  sintéticas y una prueba de arranque fallido; la regla (a) con E2E. Aceptado.
 - **Alternativas**: volver gestionables la ventana de barrido y los proveedores habilitados (rechazada: la
   spec los declara fuera del registro inicial, FR-003).
 

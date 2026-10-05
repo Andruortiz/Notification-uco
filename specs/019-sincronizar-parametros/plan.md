@@ -92,10 +92,10 @@ Reevaluación tras el diseño: sin cambios; sin violaciones, por lo que no hay t
 - **R-1**: el `WebClient` por versión (D5) modifica los tres adaptadores de proveedor y sus pruebas E2E.
 - **R-2**: conflictos de fusión con E4 en `RabbitRetryConfig` y `NotificationDispatchListener`; rebasar sobre
   `develop` antes de tocarlos.
-- **R-3**: SUP-02 sigue abierto; el adaptador HTTP se basa en un contrato provisional (S-1) y puede cambiar.
-- **R-4**: los límites de contenido por proveedor (S-2) son supuestos hasta que se confirmen.
+- **R-3**: SUP-02 sigue abierto; el adaptador HTTP (incluido por decisión del usuario) se basa en un contrato provisional (S-1), está inactivo por defecto y debe poder ajustarse al definitivo sin tocar el núcleo.
+- **R-4**: los límites de contenido por proveedor (S-2) se implementan con los valores de la documentación pública, y deben confirmarse antes de producción.
 
-### Supuestos propios del plan (no están en la spec; requieren confirmación)
+### Supuestos propios del plan (aceptados por el usuario; S-1 y S-2 siguen sujetos a confirmación externa)
 
 - **S-1**: contrato provisional de la fuente de Parámetros (`contracts/parametros-fuente-provisional.md`).
 - **S-2**: tabla `ProviderContentLimits` con los límites de contenido que acepta cada proveedor.
@@ -107,6 +107,7 @@ Reevaluación tras el diseño: sin cambios; sin violaciones, por lo que no hay t
 | Pendiente | Dueño | Fecha de revisión |
 |---|---|---|
 | Sustituir el adaptador HTTP provisional por el contrato definitivo de SUP-02 y decidir sondeo frente a evento | andrualv, con el equipo del Componente de Parámetros | 2026-11-15 |
+| Confirmar los valores de `ProviderContentLimits` contra la documentación vigente de Brevo, Twilio y FCM antes de producción | andrualv | antes del primer despliegue a producción |
 | Descriptor gestionable para el `RetryPolicy` del dominio y para la ventana de barrido de adjuntos | andrualv | 2026-11-30 |
 
 ## Project Structure
@@ -164,12 +165,15 @@ infrastructure/src/test/java/co/edu/uco/notification/infrastructure/
 **Structure Decision**: núcleo y puertos en `core`; transporte, persistencia y exposición en `infrastructure`,
 siguiendo la estructura del catálogo (`adapter/out/catalog`) y del reencolador (`adapter/in/scheduler`).
 
-## Preguntas abiertas para el usuario
+## Decisiones del usuario sobre las preguntas abiertas
 
-| # | Pregunta | Propuesta del plan |
+Las cinco preguntas abiertas del borrador quedaron resueltas por el usuario; no quedan preguntas abiertas.
+El estado de aprobación del plan sigue siendo el del encabezado.
+
+| # | Decisión | Dónde se refleja |
 |---|---|---|
-| Q1 | ¿Se incluye un adaptador HTTP con contrato provisional (S-1), o solo el puerto, el sondeo y la fuente nula hasta que SUP-02 exista? | Incluir el HTTP inactivo por defecto, para poder probar el flujo completo |
-| Q2 | ¿"Intentos máximos de despacho" es el tope por mensaje (S-4) y no el `RetryPolicy` del dominio? | Sí |
-| Q3 | ¿Cuáles son los límites de contenido que acepta cada proveedor para la regla (d) (S-2)? | Valores de la documentación pública de Brevo, Twilio y FCM, a confirmar |
-| Q4 | ¿Son aceptables los rangos de data-model.md (S-3)? | Sí, como punto de partida |
-| Q5 | ¿Se acepta que las reglas (b), (c) y (d) solo puedan fallar en el arranque y se prueben en unitarias, porque ningún parámetro inicial gestionable las afecta? | Sí (research D8) |
+| Q1 | Se incluye el adaptador HTTP (`HttpParametersSource`) contra el contrato provisional, inactivo por defecto. El contrato definitivo de SUP-02 sigue abierto (Principio VII, vence 2026-11-15, dueño andrualv); el adaptador debe poder ajustarse al definitivo sin tocar el núcleo. | research D4; contracts/parametros-fuente-provisional.md; Pendiente explícito |
+| Q2 | "Intentos máximos de despacho" es el tope de reintento por mensaje (`notification.rabbit.dispatch.max-attempts`, defecto 3), no el `RetryPolicy` del dominio. | research D3 |
+| Q3 | Se implementa la tabla `ProviderContentLimits` con los valores de la documentación pública de Brevo, Twilio y FCM; los valores deben confirmarse antes de producción. | research D8 y sección de límites |
+| Q4 | Se aceptan los rangos de data-model.md como punto de partida. | data-model.md |
+| Q5 | Las reglas (b), (c) y (d) se prueban con pruebas unitarias sobre instantáneas sintéticas y una prueba de arranque fallido; la regla (a) con E2E. | research D8; quickstart.md |

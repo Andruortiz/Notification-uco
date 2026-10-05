@@ -15,6 +15,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
     def = "{'tenantId': 1, 'externalId': 1}",
     unique = true)
 @CompoundIndex(name = "tenant_acceptedAt", def = "{'tenantId': 1, 'acceptedAt': -1}")
+@CompoundIndex(name = "status_pendingSince", def = "{'status': 1, 'pendingSince': 1}")
 public record NotificationDocument(
     @Id String id,
     String tenantId,
@@ -30,6 +31,9 @@ public record NotificationDocument(
     Instant acceptedAt,
     List<DeliveryAttemptDocument> deliveryAttempts,
     String correlationId,
+    Instant pendingSince,
+    Instant dispatchReservedAt,
+    Integer currentCycle,
     @Version Long version) {
 
   public NotificationDocument {

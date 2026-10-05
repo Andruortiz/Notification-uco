@@ -52,6 +52,8 @@ notification:
   scheduler:
     requeue-interval-ms: ${NOTIFICATION_REQUEUE_INTERVAL_MS:30000}
     pending-orphan-threshold-ms: ${NOTIFICATION_PENDING_ORPHAN_THRESHOLD_MS:60000}
+    in-process-timeout-ms: ${NOTIFICATION_IN_PROCESS_TIMEOUT_MS:600000}
+    batch-size: ${NOTIFICATION_REQUEUE_BATCH_SIZE:100}
   catalog:
     refresh-interval-ms: ${NOTIFICATION_CATALOG_REFRESH_INTERVAL_MS:30000}
     channels:

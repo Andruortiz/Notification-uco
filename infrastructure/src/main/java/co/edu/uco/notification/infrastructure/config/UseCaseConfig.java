@@ -175,11 +175,16 @@ public class UseCaseConfig {
       final NotificationEventPublisherPort eventPublisherPort,
       final RetryPolicy retryPolicy,
       @Value("${notification.scheduler.pending-orphan-threshold-ms:60000}")
-          final long pendingOrphanThresholdMs) {
+          final long pendingOrphanThresholdMs,
+      @Value("${notification.scheduler.in-process-timeout-ms:600000}")
+          final long inProcessTimeoutMs,
+      @Value("${notification.scheduler.batch-size:100}") final int batchSize) {
     return new RequeuePendingNotificationsService(
         notificationRepository,
         eventPublisherPort,
         retryPolicy,
-        Duration.ofMillis(pendingOrphanThresholdMs));
+        Duration.ofMillis(pendingOrphanThresholdMs),
+        Duration.ofMillis(inProcessTimeoutMs),
+        batchSize);
   }
 }

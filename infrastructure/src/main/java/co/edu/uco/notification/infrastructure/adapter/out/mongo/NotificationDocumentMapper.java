@@ -45,6 +45,9 @@ final class NotificationDocumentMapper {
             .map(NotificationDocumentMapper::toDocument)
             .toList(),
         notification.correlationId() == null ? null : notification.correlationId().value(),
+        notification.pendingSince(),
+        notification.dispatchReservedAt(),
+        notification.currentCycle(),
         notification.version());
   }
 
@@ -68,7 +71,12 @@ final class NotificationDocumentMapper {
                     .toList()),
             document.priority()),
         document.status(),
-        new NotificationMetadata(document.acceptedAt(), document.version()),
+        new NotificationMetadata(
+            document.acceptedAt(),
+            document.version(),
+            document.pendingSince(),
+            document.dispatchReservedAt(),
+            document.currentCycle() == null ? 1 : document.currentCycle()),
         Objects.requireNonNullElse(document.deliveryAttempts(), List.<DeliveryAttemptDocument>of())
             .stream()
             .map(NotificationDocumentMapper::toDomain)
@@ -126,7 +134,11 @@ final class NotificationDocumentMapper {
 
   private static DeliveryAttemptDocument toDocument(final DeliveryAttempt attempt) {
     return new DeliveryAttemptDocument(
-        attempt.occurredOn(), attempt.result(), attempt.origin(), attempt.providerId().value());
+        attempt.occurredOn(),
+        attempt.result(),
+        attempt.origin(),
+        attempt.providerId().value(),
+        attempt.cycle());
   }
 
   private static DeliveryAttempt toDomain(final DeliveryAttemptDocument document) {
@@ -134,6 +146,7 @@ final class NotificationDocumentMapper {
         document.occurredOn(),
         document.result(),
         document.origin(),
-        ProviderId.of(document.providerId()));
+        ProviderId.of(document.providerId()),
+        document.cycle() == null ? 1 : document.cycle());
   }
 }

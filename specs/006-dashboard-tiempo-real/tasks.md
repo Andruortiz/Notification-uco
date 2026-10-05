@@ -281,15 +281,17 @@ el previo a la desconexión.
       `tenantId` (Principio IX), sin credenciales ni el contenido completo de la notificación — vive en
       `NotificationLiveUpdatesController`, porque el adaptador RabbitMQ solo conoce `notificationId` y
       `core` no tiene logging
-- [ ] T039 Ejecutar manualmente los escenarios de [quickstart.md](./quickstart.md) (ciclo de vida en
+- [X] T039 Ejecutar manualmente los escenarios de [quickstart.md](./quickstart.md) (ciclo de vida en
       vivo, vista filtrada, resincronización tras reconexión, aislamiento por tenant, multi-réplica)
       contra el `docker compose` local — pendiente explícito al 2026-09-19: no se ha ejecutado; falta
       asignar dueño
-- [ ] T040 [P] Confirmar que `Front-Notification` (repositorio separado) podría consumir el nuevo
+  Verificado 2026-10-05 en el navegador integrado, con el backend aislado (base y vhost nuevos, proveedor simulado) y el frontend `Front-Notification` real en el puerto 5173 con un token JWT de desarrollo: ciclo de vida en vivo: con el listado abierto, una notificación aceptada por curl apareció sin recargar y pasó a `Entregada` (indicador "En vivo"); vista filtrada: un stream con `status=PENDING` recibió `UPSERT` mientras estuvo pendiente y `REMOVE` al pasar a `DELIVERED`; resincronización: un `EventSource` directo recuperó la conexión tras detener y reiniciar el backend y reprodujo la foto actual, incluida una notificación creada antes del corte; aislamiento por tenant: un stream de otro tenant no recibió ningún evento de `demo-tenant`; multi-réplica: un stream conectado a una segunda instancia (puerto 8061) recibió los eventos de una notificación aceptada en la primera. No se ejecutó el paso 4 del primer escenario (reintentos con `RECOVERABLE_FAILURE`), que cubre `specs/001` y el E2E automatizado. Observaciones: (a) detrás del proxy de desarrollo de Vite, si el backend cae de golpe la conexión del navegador queda abierta, el indicador sigue en "En vivo" y la interfaz no se recupera al volver el backend hasta recargar; conectado directo al backend el navegador sí detecta el corte; no se comprobó si ocurre sin el proxy de Vite; (b) un stream filtrado también recibe `REMOVE` de notificaciones que nunca coincidieron con su filtro.
+- [X] T040 [P] Confirmar que `Front-Notification` (repositorio separado) podría consumir el nuevo
       endpoint SSE sin cambios adicionales del lado del backend — no es parte de esta historia, pero
       vale la pena verificar que el contrato resultante es consumible sin sorpresas — reasignada a
       HU2-079 (frontend): el `EventSource` nativo no envía cabeceras y el stream exige `X-Tenant-Id`,
       por lo que no se puede dar por verificada (decisión abierta sobre cómo suscribirse)
+  Verificado 2026-10-05 en el navegador integrado, con el backend aislado (base y vhost nuevos, proveedor simulado) y el frontend `Front-Notification` real en el puerto 5173 con un token JWT de desarrollo: el frontend ya consume el stream sin cambios en el backend: `src/api/liveUpdates.ts` usa `fetchEventSource` con la cabecera `Authorization`, y el backend acepta además `access_token` en la consulta para el `EventSource` nativo, que fue probado en el navegador con CORS desde el origen del frontend. La limitación que motivó reasignarla a HU2-079 (cabeceras y `X-Tenant-Id`) quedó resuelta con la autenticación interina (015).
 
 ---
 

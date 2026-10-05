@@ -150,11 +150,12 @@ después.
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Validar manualmente el Escenario 2 de
+- [X] T015 [US2] Validar manualmente el Escenario 2 de
       [quickstart.md](./quickstart.md) con `NOTIFICATION_DISPATCH_MAX_ATTEMPTS=1` contra el
       `docker compose` local, confirmando que no se requiere recompilar ni redesplegar código — solo
       cambiar la variable de entorno (SC-001 de la historia; sin tarea de producción nueva, ya que
       T012 ya externaliza el valor)
+  Verificado 2026-10-05 a mano, con el servicio local aislado (base `qs_manual` y vhost `qs` nuevos, proveedor simulado y token JWT en lugar de `X-Tenant-Id`): una notificación válida llegó a `DELIVERED` en el primer intento y la DLQ no recibió ningún mensaje nuevo.
 
 **Checkpoint**: User Story 1 y User Story 2 funcionan de forma independiente
 
@@ -167,9 +168,10 @@ después.
 - [x] T016 [P] Confirmar Spotless/SpotBugs/FindSecBugs sin hallazgos sobre todos los archivos nuevos o
       modificados de esta historia — `mvn verify` pasó ambas puertas (llegó hasta jacoco-check sin
       fallos de Spotless ni SpotBugs)
-- [ ] T017 Ejecutar manualmente ambos escenarios de [quickstart.md](./quickstart.md) de punta a punta
+- [X] T017 Ejecutar manualmente ambos escenarios de [quickstart.md](./quickstart.md) de punta a punta
       contra el `docker compose` local (mensaje envenenado → DLQ; mensaje exitoso → nunca DLQ) —
       queda como validación manual pendiente, igual que T010 en HU2-071 (CORS)
+  Verificado 2026-10-05 a mano, con el servicio local aislado (base `qs_manual` y vhost `qs` nuevos, proveedor simulado y token JWT en lugar de `X-Tenant-Id`): escenario 1: un `notificationId` inexistente publicado con `message_id` produjo 4 fallos en el log (3 intentos más la entrega extra descrita), `notification.dispatch.queue` quedó en 0 y la DLQ en 1 mensaje con el id original y `x-exception-message: Notification not found`; escenario 2 como en T015. Observación: un mensaje publicado sin `message_id` detiene el consumidor completo (`Stopping container from aborted consumer`) porque la política de reintentos con estado lo exige.
 - [x] T018 [P] Si la implementación se desvió de alguna decisión documentada en
       [research.md](./research.md) o [data-model.md](./data-model.md), actualizar esos archivos para
       que sigan siendo la fuente de verdad del diseño — ver Notas de implementación agregadas a

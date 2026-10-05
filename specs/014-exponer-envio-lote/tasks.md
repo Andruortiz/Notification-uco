@@ -73,9 +73,12 @@ tumbaba el lote completo (H3), una carrera de idempotencia intra-lote no se reso
 
 ## Phase 4: Polish & Cross-Cutting Concerns
 
-- [ ] T007 `./mvnw -B -ntp spotless:apply` y revisar que el código nuevo no tenga comentarios (Principio III)
-- [ ] T008 `HexagonalArchitectureTest` y `ModularityTests` en verde
-- [ ] T009 `./mvnw -B -ntp clean verify` completo en verde (cobertura >= 80 % líneas y >= 70 % ramas, Spotless, SpotBugs/FindSecBugs)
+- [X] T007 `./mvnw -B -ntp spotless:apply` y revisar que el código nuevo no tenga comentarios (Principio III)
+  Verificado 2026-10-05: `./mvnw spotless:check` sin diferencias sobre el árbol actual.
+- [X] T008 `HexagonalArchitectureTest` y `ModularityTests` en verde
+  Verificado 2026-10-05: `HexagonalArchitectureTest` (3 pruebas) y `ModularityTests` (2) en verde, 0 fallos.
+- [X] T009 `./mvnw -B -ntp clean verify` completo en verde (cobertura >= 80 % líneas y >= 70 % ramas, Spotless, SpotBugs/FindSecBugs)
+  Verificado 2026-10-05: CI de `develop` (ejecución del merge de #55, 2026-10-04): Build, Test, Seguridad, Code Quality e Imagen en verde; `verify` local completo con BUILD SUCCESS el 2026-10-04.
 
 ---
 

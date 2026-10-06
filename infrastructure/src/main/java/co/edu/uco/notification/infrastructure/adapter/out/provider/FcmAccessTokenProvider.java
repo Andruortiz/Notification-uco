@@ -13,6 +13,7 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import org.springframework.http.MediaType;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -31,7 +32,7 @@ public final class FcmAccessTokenProvider {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final Base64.Encoder BASE64URL = Base64.getUrlEncoder().withoutPadding();
 
-  private final WebClient webClient;
+  private final Supplier<WebClient> clientSource;
   private final FcmServiceAccount serviceAccount;
   private final URI tokenUri;
   private final String audience;
@@ -40,7 +41,14 @@ public final class FcmAccessTokenProvider {
 
   public FcmAccessTokenProvider(
       final WebClient webClient, final FcmServiceAccount serviceAccount, final String tokenUrl) {
-    this.webClient = Preconditions.requireNonNull(webClient, "webClient must not be null");
+    this(ProviderHttpClients.fixedClientSource(webClient), serviceAccount, tokenUrl);
+  }
+
+  public FcmAccessTokenProvider(
+      final Supplier<WebClient> clientSource,
+      final FcmServiceAccount serviceAccount,
+      final String tokenUrl) {
+    this.clientSource = Preconditions.requireNonNull(clientSource, "clientSource must not be null");
     this.serviceAccount =
         Preconditions.requireNonNull(serviceAccount, "serviceAccount must not be null");
     Preconditions.requireNonBlank(tokenUrl, "tokenUrl must not be blank");
@@ -65,7 +73,8 @@ public final class FcmAccessTokenProvider {
     final MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
     form.add("grant_type", GRANT_TYPE);
     form.add("assertion", assertion(Instant.now()));
-    return webClient
+    return clientSource
+        .get()
         .post()
         .uri(tokenUri)
         .accept(MediaType.APPLICATION_JSON)

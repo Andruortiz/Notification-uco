@@ -1,5 +1,6 @@
 package co.edu.uco.notification.infrastructure.config;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
@@ -9,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
+import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
 import java.time.Duration;
 import java.time.Instant;
@@ -39,6 +41,8 @@ class RabbitRetryConfigCustomAttemptsTest {
 
   @Autowired private RabbitTopologyProperties properties;
 
+  @Autowired private ConfigurationView configurationView;
+
   @MockBean private DispatchNotificationUseCase dispatchNotificationUseCase;
 
   @Test
@@ -63,6 +67,11 @@ class RabbitRetryConfigCustomAttemptsTest {
         "con max-attempts=1, un único fallo ya debe mover el mensaje a la cola de mensajes muertos");
     assertNull(deadLettered.getMessageProperties().getHeaders().get("x-dispatch-attempt"));
     verify(dispatchNotificationUseCase, times(1)).dispatch(any());
+  }
+
+  @Test
+  void theMaximumResolvedPerMessageComesFromTheConfigurationViewSeededByTheProperty() {
+    assertEquals(1, configurationView.snapshot().dispatchMaxAttempts());
   }
 
   private Message awaitDeadLetteredMessage() {

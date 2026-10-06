@@ -1,16 +1,21 @@
 package co.edu.uco.notification.infrastructure.config;
 
+import co.edu.uco.notification.core.domain.configuration.ConfigurationValidator;
+import co.edu.uco.notification.core.domain.configuration.FixedConfiguration;
+import co.edu.uco.notification.core.domain.configuration.ParameterRegistry;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.port.in.*;
 import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ContentTypeDetectorPort;
+import co.edu.uco.notification.core.port.out.LastKnownConfigurationPort;
 import co.edu.uco.notification.core.port.out.MalwareScannerPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
+import co.edu.uco.notification.core.port.out.ParametersSourcePort;
 import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
 import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
@@ -41,6 +46,52 @@ public class UseCaseConfig {
       @Value("${notification.attachments.sweeper.batch-size:100}") final int batchSize) {
     return new ExpireAbandonedUploadsService(
         attachmentUploadRepository, attachmentStoragePort, scanDeadline, batchSize, clock);
+  }
+
+  @Bean
+  ApplyConfigurationChangeUseCase applyConfigurationChangeUseCase(
+      final ConfigurationHolder configurationHolder,
+      final ConfigurationValidator configurationValidator,
+      final FixedConfiguration fixedConfiguration,
+      final Clock clock) {
+    return new ApplyConfigurationChangeService(
+        configurationHolder, configurationValidator, fixedConfiguration, clock);
+  }
+
+  @Bean
+  RestoreLastKnownConfigurationUseCase restoreLastKnownConfigurationUseCase(
+      final LastKnownConfigurationPort lastKnownConfigurationPort,
+      final ConfigurationHolder configurationHolder,
+      final ConfigurationValidator configurationValidator,
+      final FixedConfiguration fixedConfiguration,
+      final ParametersProperties parametersProperties,
+      final Clock clock) {
+    return new RestoreLastKnownConfigurationService(
+        lastKnownConfigurationPort,
+        configurationHolder,
+        configurationValidator,
+        fixedConfiguration,
+        clock,
+        parametersProperties.lastKnownLoadTimeout());
+  }
+
+  @Bean
+  SynchronizeConfigurationUseCase synchronizeConfigurationUseCase(
+      final ParametersSourcePort parametersSourcePort,
+      final ApplyConfigurationChangeUseCase applyConfigurationChangeUseCase,
+      final LastKnownConfigurationPort lastKnownConfigurationPort,
+      final ConfigurationHolder configurationHolder) {
+    return new SynchronizeConfigurationService(
+        parametersSourcePort,
+        applyConfigurationChangeUseCase,
+        lastKnownConfigurationPort,
+        configurationHolder);
+  }
+
+  @Bean
+  QueryConfigurationUseCase queryConfigurationUseCase(
+      final ConfigurationHolder configurationHolder, final ParameterRegistry parameterRegistry) {
+    return new QueryConfigurationService(configurationHolder, parameterRegistry);
   }
 
   @Bean

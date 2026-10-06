@@ -4,14 +4,16 @@ import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
+import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.infrastructure.config.TwilioProviderProperties;
 import co.edu.uco.notification.utils.PhoneNumbers;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.Optional;
+import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
@@ -28,15 +30,29 @@ public class TwilioNotificationProvider implements NotificationSenderPort {
   private static final ProviderId PROVIDER_ID = ProviderId.of("twilio");
   private static final String SEND_PATH = "/2010-04-01/Accounts/{accountSid}/Messages.json";
 
-  private final WebClient webClient;
+  private final Supplier<WebClient> clientSource;
   private final TwilioProviderProperties properties;
   private final Optional<String> disabledReason;
 
+  @Autowired
   public TwilioNotificationProvider(
-      @Qualifier("twilioWebClient") final WebClient twilioWebClient,
+      final ProviderHttpClients providerHttpClients,
+      final ConfigurationView configurationView,
       final TwilioProviderProperties properties) {
-    this.webClient =
-        Preconditions.requireNonNull(twilioWebClient, "twilioWebClient must not be null");
+    this(
+        ProviderHttpClients.providerClientSource(
+            PROVIDER_ID.value(), properties.baseUrl(), providerHttpClients, configurationView),
+        properties);
+  }
+
+  TwilioNotificationProvider(
+      final WebClient fixedClient, final TwilioProviderProperties properties) {
+    this(ProviderHttpClients.fixedClientSource(fixedClient), properties);
+  }
+
+  private TwilioNotificationProvider(
+      final Supplier<WebClient> clientSource, final TwilioProviderProperties properties) {
+    this.clientSource = clientSource;
     this.properties = Preconditions.requireNonNull(properties, "properties must not be null");
     this.disabledReason = properties.disabledReason();
     disabledReason.ifPresent(reason -> ProviderLogs.disabled(LOGGER, PROVIDER_ID, reason));
@@ -54,7 +70,8 @@ public class TwilioNotificationProvider implements NotificationSenderPort {
           LOGGER, notification, PROVIDER_ID, "invalid-recipient-format");
       return Mono.just(AttemptResult.PERMANENT_FAILURE);
     }
-    return webClient
+    return clientSource
+        .get()
         .post()
         .uri(SEND_PATH, properties.accountSid())
         .headers(headers -> headers.setBasicAuth(properties.accountSid(), properties.authToken()))

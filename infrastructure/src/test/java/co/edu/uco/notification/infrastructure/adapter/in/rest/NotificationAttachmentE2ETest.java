@@ -71,7 +71,7 @@ import reactor.core.publisher.Mono;
       "MONGO_USERNAME=test",
       "MONGO_PASSWORD=test",
       "notification.catalog.refresh-interval-ms=1000",
-      "notification.scheduler.requeue-interval-ms=1000"
+      "notification.scheduler.requeue-interval-ms=15000"
     })
 @Testcontainers
 class NotificationAttachmentE2ETest {

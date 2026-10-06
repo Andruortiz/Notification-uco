@@ -56,6 +56,12 @@ notification:
     pending-orphan-threshold-ms: ${NOTIFICATION_PENDING_ORPHAN_THRESHOLD_MS:60000}
     in-process-timeout-ms: ${NOTIFICATION_IN_PROCESS_TIMEOUT_MS:600000}
     batch-size: ${NOTIFICATION_REQUEUE_BATCH_SIZE:100}
+  parameters:
+    base-url: ${NOTIFICATION_PARAMETERS_BASE_URL:}
+    poll-interval-ms: ${NOTIFICATION_PARAMETERS_POLL_INTERVAL_MS:30000}
+    timeout-ms: ${NOTIFICATION_PARAMETERS_TIMEOUT_MS:5000}
+    connect-timeout-ms: ${NOTIFICATION_PARAMETERS_CONNECT_TIMEOUT_MS:2000}
+    last-known-load-timeout-ms: ${NOTIFICATION_PARAMETERS_LAST_KNOWN_LOAD_TIMEOUT_MS:5000}
   catalog:
     refresh-interval-ms: ${NOTIFICATION_CATALOG_REFRESH_INTERVAL_MS:30000}
     channels:

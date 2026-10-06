@@ -1,6 +1,7 @@
 package co.edu.uco.notification.core.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -45,10 +46,12 @@ import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import co.edu.uco.notification.utils.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -670,5 +673,47 @@ class DispatchNotificationServiceTest {
 
     verify(notificationSenderPort).send(notification);
     assertEquals(NotificationStatus.DELIVERED, notification.status());
+  }
+
+  @Test
+  void aFailedReservationReleaseIsReportedWithItsErrorCodeAndNoCategoryText() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationRepository.releaseReservation(notification.notificationId()))
+        .thenReturn(Mono.error(new IllegalStateException("mongo down")));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.error(new ProviderDisabledException(ProviderId.of("brevo"), "disabled")));
+
+    try (LogCapture logs = new LogCapture(DispatchNotificationService.class)) {
+      StepVerifier.create(service.dispatch(notification.notificationId()))
+          .expectError(ProviderDisabledException.class)
+          .verify();
+
+      assertEquals(1, logs.records(Level.SEVERE, "DISPATCH_RESERVATION_NOT_RELEASED").size());
+      final String message = logs.records().get(0).getMessage();
+      assertTrue(
+          message.contains("errorCode=" + ErrorCode.DISPATCH_RESERVATION_NOT_RELEASED.format()));
+      assertFalse(message.contains("category="));
+    }
+  }
+
+  @Test
+  void eventsThatCouldNotBePublishedAreReportedWithTheirErrorCodeAndNoCategoryText() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(eventPublisherPort.publish(any()))
+        .thenReturn(Mono.error(new IllegalStateException("broker down")));
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    try (LogCapture logs = new LogCapture(DispatchNotificationService.class)) {
+      StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+      assertEquals(1, logs.records(Level.SEVERE, "DISPATCH_EVENTS_NOT_PUBLISHED").size());
+      final String message = logs.records().get(0).getMessage();
+      assertTrue(message.contains("errorCode=" + ErrorCode.DISPATCH_EVENTS_NOT_PUBLISHED.format()));
+      assertFalse(message.contains("category="));
+    }
   }
 }

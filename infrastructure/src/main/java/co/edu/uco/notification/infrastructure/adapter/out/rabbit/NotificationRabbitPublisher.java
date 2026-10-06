@@ -11,7 +11,7 @@ import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import co.edu.uco.notification.utils.TraceParent;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -115,16 +115,16 @@ public class NotificationRabbitPublisher implements NotificationEventPublisherPo
       final String eventType = event.getClass().getSimpleName();
       if (event instanceof NotificationFailed || event instanceof NotificationDiscarded) {
         LOGGER.error(
-            LogFields.fields(
-                "event", eventType, LogFields.FAILURE_CATEGORY, FailureCategory.PERMANENT_BUSINESS),
+            LogFields.failure(
+                event instanceof NotificationFailed
+                    ? ErrorCode.NOTIFICATION_FAILED
+                    : ErrorCode.NOTIFICATION_DISCARDED,
+                "event",
+                eventType),
             LIFECYCLE_MESSAGE);
       } else if (event instanceof NotificationRecoverable) {
         LOGGER.warn(
-            LogFields.fields(
-                "event",
-                eventType,
-                LogFields.FAILURE_CATEGORY,
-                FailureCategory.RECOVERABLE_PROVIDER),
+            LogFields.failure(ErrorCode.PROVIDER_RECOVERABLE_FAILURE, "event", eventType),
             LIFECYCLE_MESSAGE);
       } else {
         LOGGER.info(LogFields.fields("event", eventType), LIFECYCLE_MESSAGE);

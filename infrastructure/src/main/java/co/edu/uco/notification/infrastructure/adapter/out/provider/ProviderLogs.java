@@ -5,7 +5,7 @@ import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.LogSanitizer;
 import org.slf4j.Logger;
 
@@ -26,13 +26,12 @@ final class ProviderLogs {
       final String reason) {
     try (LogContext ignored = LogContext.of(notification)) {
       logger.info(
-          LogFields.fields(
+          LogFields.failure(
+              ErrorCode.PROVIDER_REJECTED_BEFORE_CALL,
               "providerId",
               providerId.value(),
               "reason",
-              reason,
-              LogFields.FAILURE_CATEGORY,
-              FailureCategory.PERMANENT_BUSINESS),
+              reason),
           "Notification rejected before calling provider");
     }
   }
@@ -82,7 +81,11 @@ final class ProviderLogs {
       final String providerErrorCode) {
     try (LogContext ignored = LogContext.of(notification)) {
       logger.warn(
-          LogFields.fields(
+          LogFields.failure(
+              codeOf(
+                  result,
+                  ErrorCode.PROVIDER_REJECTED_PERMANENT,
+                  ErrorCode.PROVIDER_REJECTED_RECOVERABLE),
               "providerId",
               providerId.value(),
               "result",
@@ -92,9 +95,7 @@ final class ProviderLogs {
               "providerErrorCode",
               LogSanitizer.safe(providerErrorCode),
               "recipient",
-              LogSanitizer.maskRecipient(notification.recipient().address()),
-              LogFields.FAILURE_CATEGORY,
-              categoryOf(result)),
+              LogSanitizer.maskRecipient(notification.recipient().address())),
           "Notification rejected by provider");
     }
   }
@@ -107,15 +108,17 @@ final class ProviderLogs {
       final Throwable error) {
     try (LogContext ignored = LogContext.of(notification)) {
       logger.warn(
-          LogFields.fields(
+          LogFields.failure(
+              codeOf(
+                  result,
+                  ErrorCode.PROVIDER_REJECTED_PERMANENT,
+                  ErrorCode.PROVIDER_REJECTED_RECOVERABLE),
               "providerId",
               providerId.value(),
               "result",
               result,
               "errorType",
-              error.getClass().getSimpleName(),
-              LogFields.FAILURE_CATEGORY,
-              categoryOf(result)),
+              error.getClass().getSimpleName()),
           "Notification dispatch failed");
     }
   }
@@ -129,7 +132,11 @@ final class ProviderLogs {
       final Throwable error) {
     try (LogContext ignored = LogContext.of(notification)) {
       logger.warn(
-          LogFields.fields(
+          LogFields.failure(
+              codeOf(
+                  result,
+                  ErrorCode.PROVIDER_AUTHORIZATION_PERMANENT,
+                  ErrorCode.PROVIDER_AUTHORIZATION_RECOVERABLE),
               "providerId",
               providerId.value(),
               "stage",
@@ -139,16 +146,13 @@ final class ProviderLogs {
               "httpStatus",
               httpStatus,
               "errorType",
-              error == null ? null : error.getClass().getSimpleName(),
-              LogFields.FAILURE_CATEGORY,
-              categoryOf(result)),
+              error == null ? null : error.getClass().getSimpleName()),
           "Notification authorization failed");
     }
   }
 
-  private static FailureCategory categoryOf(final AttemptResult result) {
-    return result == AttemptResult.PERMANENT_FAILURE
-        ? FailureCategory.PERMANENT_BUSINESS
-        : FailureCategory.RECOVERABLE_PROVIDER;
+  private static ErrorCode codeOf(
+      final AttemptResult result, final ErrorCode permanent, final ErrorCode recoverable) {
+    return result == AttemptResult.PERMANENT_FAILURE ? permanent : recoverable;
   }
 }

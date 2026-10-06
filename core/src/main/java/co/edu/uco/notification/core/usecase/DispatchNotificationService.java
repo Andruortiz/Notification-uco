@@ -18,7 +18,7 @@ import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.repository.NotificationRepository;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Duration;
 import java.util.List;
@@ -123,8 +123,8 @@ public final class DispatchNotificationService implements DispatchNotificationUs
                   System.Logger.Level.ERROR,
                   "DISPATCH_RESERVATION_NOT_RELEASED notificationId="
                       + notification.notificationId().value()
-                      + " category="
-                      + FailureCategory.RECOVERABLE_INFRASTRUCTURE,
+                      + " errorCode="
+                      + ErrorCode.DISPATCH_RESERVATION_NOT_RELEASED.format(),
                   releaseFailure);
               return Mono.empty();
             })
@@ -156,8 +156,8 @@ public final class DispatchNotificationService implements DispatchNotificationUs
                   System.Logger.Level.ERROR,
                   "DISPATCH_EVENTS_NOT_PUBLISHED notificationId="
                       + notification.notificationId().value()
-                      + " category="
-                      + FailureCategory.RECOVERABLE_INFRASTRUCTURE,
+                      + " errorCode="
+                      + ErrorCode.DISPATCH_EVENTS_NOT_PUBLISHED.format(),
                   error);
               return Mono.empty();
             });

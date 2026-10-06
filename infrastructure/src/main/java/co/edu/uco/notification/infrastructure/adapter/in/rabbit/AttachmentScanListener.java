@@ -12,7 +12,7 @@ import co.edu.uco.notification.infrastructure.config.CorrelationContext;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
 import co.edu.uco.notification.utils.TraceParent;
@@ -100,7 +100,7 @@ public class AttachmentScanListener {
       UploadId.of(request.uploadId());
     } catch (final RuntimeException | IOException cause) {
       LOGGER.warn(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.PERMANENT_BUSINESS),
+          LogFields.failure(ErrorCode.ATTACHMENT_SCAN_MESSAGE_UNREADABLE),
           "Attachment scan message is unreadable, sending it to the dead-letter queue",
           cause);
       settler.deadLetter(message, channel, deliveryTag, cause);
@@ -150,7 +150,7 @@ public class AttachmentScanListener {
           .block();
     } catch (final RuntimeException failure) {
       LOGGER.error(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          LogFields.failure(ErrorCode.ATTACHMENT_UPLOAD_NOT_FAILED),
           "Attachment upload could not be failed after exhausting the scan attempts",
           failure);
     }

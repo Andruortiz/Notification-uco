@@ -9,7 +9,7 @@ import co.edu.uco.notification.core.exception.NotificationVersionConflictExcepti
 import co.edu.uco.notification.core.port.in.RequeuePendingNotificationsUseCase;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Duration;
 import java.time.Instant;
@@ -67,7 +67,10 @@ public final class RequeuePendingNotificationsService
                 requeueAndPublish(notification)
                     .onErrorResume(
                         NotificationVersionConflictException.class, error -> Mono.empty())
-                    .onErrorResume(error -> logFailure("REQUEUE_FAILED", notification, error)))
+                    .onErrorResume(
+                        error ->
+                            logFailure(
+                                "REQUEUE_FAILED", ErrorCode.REQUEUE_FAILED, notification, error)))
         .onErrorResume(error -> logPassFailure("REQUEUE_RECOVERABLE_PASS_FAILED", error))
         .then();
   }
@@ -81,7 +84,10 @@ public final class RequeuePendingNotificationsService
             notification ->
                 eventPublisherPort
                     .enqueueForDispatch(notification)
-                    .onErrorResume(error -> logFailure("ENQUEUE_FAILED", notification, error)))
+                    .onErrorResume(
+                        error ->
+                            logFailure(
+                                "ENQUEUE_FAILED", ErrorCode.ENQUEUE_FAILED, notification, error)))
         .onErrorResume(error -> logPassFailure("REQUEUE_ORPHAN_PASS_FAILED", error))
         .then();
   }
@@ -99,23 +105,26 @@ public final class RequeuePendingNotificationsService
                         + notification.notificationId().value()
                         + " tenantId="
                         + notification.tenantId().value()
-                        + " category="
-                        + FailureCategory.RECOVERABLE_INFRASTRUCTURE))
+                        + " errorCode="
+                        + ErrorCode.DISPATCH_STUCK_IN_PROCESS_RELEASED.format()))
         .onErrorResume(error -> logPassFailure("REQUEUE_STUCK_PASS_FAILED", error))
         .then();
   }
 
   private static <T> Mono<T> logFailure(
-      final String code, final Notification notification, final Throwable error) {
+      final String marker,
+      final ErrorCode code,
+      final Notification notification,
+      final Throwable error) {
     LOGGER.log(
         System.Logger.Level.ERROR,
-        code
+        marker
             + " notificationId="
             + notification.notificationId().value()
             + " tenantId="
             + notification.tenantId().value()
-            + " category="
-            + FailureCategory.RECOVERABLE_INFRASTRUCTURE,
+            + " errorCode="
+            + code.format(),
         error);
     return Mono.empty();
   }
@@ -123,7 +132,7 @@ public final class RequeuePendingNotificationsService
   private static <T> Mono<T> logPassFailure(final String code, final Throwable error) {
     LOGGER.log(
         System.Logger.Level.ERROR,
-        code + " category=" + FailureCategory.RECOVERABLE_INFRASTRUCTURE,
+        code + " errorCode=" + ErrorCode.REQUEUE_PASS_FAILED.format(),
         error);
     return Mono.empty();
   }

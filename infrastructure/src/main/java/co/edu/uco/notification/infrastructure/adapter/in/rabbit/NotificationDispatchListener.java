@@ -9,7 +9,7 @@ import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import co.edu.uco.notification.utils.TraceParent;
 import com.rabbitmq.client.Channel;
@@ -106,7 +106,7 @@ public class NotificationDispatchListener {
       notificationId = NotificationId.of(body);
     } catch (final RuntimeException cause) {
       LOGGER.warn(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.PERMANENT_BUSINESS),
+          LogFields.failure(ErrorCode.DISPATCH_MESSAGE_INVALID),
           "Dispatch message has no notification id, sending it to the dead-letter queue",
           cause);
       settler.deadLetter(message, channel, deliveryTag, cause);
@@ -131,7 +131,7 @@ public class NotificationDispatchListener {
       settler.acknowledge(channel, deliveryTag);
     } else if (failure instanceof DispatchResultNotPersistedException) {
       LOGGER.error(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          LogFields.failure(ErrorCode.DISPATCH_RESULT_NOT_PERSISTED),
           "Dispatch result could not be persisted, sending the message to the dead-letter queue",
           failure);
       settler.deadLetter(message, channel, deliveryTag, failure);

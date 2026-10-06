@@ -15,8 +15,12 @@
 
 ## Phase 1: Setup
 
-- [ ] T001 Confirmar línea base: `./mvnw -B -ntp clean compile` y `HexagonalArchitectureTest,ModularityTests` en verde antes de cualquier cambio; anotar en la tarea el resultado
-- [ ] T002 [P] Confirmar que `core` y `utils` no ganan dependencias de Micrometer ni OpenTelemetry y que las dependencias de cada entrega se añaden solo en `infrastructure` y en la entrega que las usa (Prometheus en E2, tracing y OTLP en E3), para que cada entrega sea desplegable sola
+- [x] T001 Confirmar línea base: `./mvnw -B -ntp clean compile` y `HexagonalArchitectureTest,ModularityTests` en verde antes de cualquier cambio; anotar en la tarea el resultado
+
+  Hecho: `clean compile` en verde; `HexagonalArchitectureTest` (3) y `ModularityTests` (2) en verde, 5 pruebas, 0 fallos, antes de cualquier cambio.
+- [x] T002 [P] Confirmar que `core` y `utils` no ganan dependencias de Micrometer ni OpenTelemetry y que las dependencias de cada entrega se añaden solo en `infrastructure` y en la entrega que las usa (Prometheus en E2, tracing y OTLP en E3), para que cada entrega sea desplegable sola
+
+  Hecho: `core/pom.xml` y `utils/pom.xml` no declaran Micrometer, OpenTelemetry ni actuator, y `core/src` y `utils/src` no importan `io.micrometer` ni `io.opentelemetry` (Grep sin resultados). E1 no añade ninguna dependencia a ningún pom.
 
 ---
 
@@ -28,21 +32,45 @@
 
 ### Pruebas primero (E1)
 
-- [ ] T003 [P] [US2] `utils/src/test/java/co/edu/uco/notification/utils/ErrorCodeTest.java`: enteros y textos únicos, `format()` = `NTF-<n>`, categoría no nula, coherencia de rangos 1xxx-5xxx, genéricos 3000/4000/5000, y que cada código tiene emisor o prueba que lo emite (FR-010, FR-014); debe fallar (no existe la clase)
-- [ ] T004 [P] [US2] Pruebas unitarias con `StepVerifier` en `core/src/test/java/.../usecase/DispatchNotificationServiceTest.java` y `RequeuePendingNotificationsServiceTest.java`: el fallo se reporta con `ErrorCode` y ya no con `category=` en texto (FR-013); deben fallar
-- [ ] T005 [P] [US2] `infrastructure/src/test/java/.../adapter/in/rest/NotificationExceptionHandlerTest.java`: cada excepción mapeada devuelve `code` del catálogo con `message` y `correlationId`; una excepción no catalogada devuelve el genérico de su categoría y nunca `getMessage()` (FR-011, FR-012); debe fallar
-- [ ] T006 [P] [US2] Prueba de contrato `infrastructure/src/test/java/.../adapter/in/rest/ErrorResponseContractTest.java`: el esquema `ErrorResponse` del YAML tiene `code` obligatorio con la enumeración igual a `ErrorCode.values()` y todas las respuestas de error lo referencian
+- [x] T003 [P] [US2] `utils/src/test/java/co/edu/uco/notification/utils/ErrorCodeTest.java`: enteros y textos únicos, `format()` = `NTF-<n>`, categoría no nula, coherencia de rangos 1xxx-5xxx, genéricos 3000/4000/5000, y que cada código tiene emisor o prueba que lo emite (FR-010, FR-014); debe fallar (no existe la clase)
+
+  Hecho: `ErrorCodeTest` (6 pruebas) escrita antes de la clase y vista fallar por compilación (`ErrorCode` no existía); el control de emisores escanea los fuentes de producción de los tres módulos buscando `ErrorCode.<NOMBRE>`; los tres genéricos (3000, 4000, 5000) se excluyen de ese escaneo y se comprueban por `genericFor(`, que es su único punto de uso. En verde tras T008 y T009-T011.
+- [x] T004 [P] [US2] Pruebas unitarias con `StepVerifier` en `core/src/test/java/.../usecase/DispatchNotificationServiceTest.java` y `RequeuePendingNotificationsServiceTest.java`: el fallo se reporta con `ErrorCode` y ya no con `category=` en texto (FR-013); deben fallar
+
+  Hecho: se añadieron 2 pruebas a `DispatchNotificationServiceTest` y 4 a `RequeuePendingNotificationsServiceTest` con `LogCapture`, que afirman `errorCode=NTF-<n>` y la ausencia de `category=` en cada punto de log de `core`. Fallaron por compilación antes de existir `ErrorCode`. Desviación: las dos clases no usan `StepVerifier` para el log, que es un efecto lateral; `StepVerifier` se usa para el `Mono` como en el resto de la clase. En `core` el código viaja en el texto del mensaje porque `LogFields` es de `infrastructure`.
+- [x] T005 [P] [US2] `infrastructure/src/test/java/.../adapter/in/rest/NotificationExceptionHandlerTest.java`: cada excepción mapeada devuelve `code` del catálogo con `message` y `correlationId`; una excepción no catalogada devuelve el genérico de su categoría y nunca `getMessage()` (FR-011, FR-012); debe fallar
+
+  Hecho: `NotificationExceptionHandlerTest` ampliada (11 pruebas): cada excepción mapeada devuelve su `code`, una excepción no catalogada devuelve `NTF-5000` con mensaje genérico sin `getMessage()`, un `ResponseStatusException` 5xx usa el genérico de infraestructura y cada respuesta mapeada se registra una vez con `errorCode` y `failureCategory`. Desviación: dos aserciones previas que exigían "ningún log" en respuestas mapeadas (`aResponseStatusException...` y `existingMappingsAreUnchanged`) se modificaron, porque FR-011 y SC-002 exigen que el log lleve el mismo código que la respuesta.
+- [x] T006 [P] [US2] Prueba de contrato `infrastructure/src/test/java/.../adapter/in/rest/ErrorResponseContractTest.java`: el esquema `ErrorResponse` del YAML tiene `code` obligatorio con la enumeración igual a `ErrorCode.values()` y todas las respuestas de error lo referencian
+
+  Hecho: `ErrorResponseContractTest` (4 pruebas, lee el YAML con SnakeYAML): `code` y `correlationId` obligatorios, enumeración igual a `ErrorCode.values()`, todas las respuestas 4xx y 5xx de las operaciones referencian `ErrorResponse` y también las respuestas reutilizables de `components`.
 
 ### Implementación (E1)
 
-- [ ] T007 [US2] Contrato primero: añadir `code` (enum `NTF-<n>`, `required`) a `ErrorResponse` en `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml` y revisar que ninguna respuesta de error defina un esquema propio (Principio II, `contracts/api-notificaciones-cambios.md`)
-- [ ] T008 [US2] Crear `U/ErrorCode.java` (entero estable, `format()`, `category()` explícito, rangos Q4 y genéricos 3000/4000/5000) con los códigos de todos los puntos de fallo actuales
-- [ ] T009 [US2] Sustituir los mensajes `category=` por `ErrorCode` en `C/usecase/DispatchNotificationService.java` y `C/usecase/RequeuePendingNotificationsService.java`; las excepciones de dominio pueden llevar el código sin depender de frameworks
-- [ ] T010 [US2] `I/adapter/in/rest/NotificationExceptionHandler.java` y el record de respuesta de error: mapear cada excepción a su `ErrorCode` y emitir `code`; genérico por categoría para lo no catalogado
-- [ ] T011 [P] [US2] Registrar `errorCode` y `failureCategory` (derivada del código) vía `LogFields` en `I/adapter/out/provider/ProviderLogs.java`, `I/adapter/in/rabbit/NotificationDispatchListener.java`, `ManualAckSettler.java`, `AttachmentScanListener.java` y el adaptador de MinIO; añadir `errorCode` a `LogFields` y a `logback-spring.xml`
-- [ ] T012 [US2] Ejecutar `spotless:apply` y las clases de T003-T006 en verde
-- [ ] T013 [US2] E2E `infrastructure/src/test/java/.../ErrorCodeE2ETest.java` (`@SpringBootTest` RANDOM_PORT, Mongo, RabbitMQ, `WebTestClient`): validación, 401/403, rechazo permanente del proveedor simulado y fallo recuperable; en cada caso `code` de la respuesta = `errorCode` del log = catálogo (SC-002); mensajes publicados con `NotificationEventPublisherPort.publish`
-- [ ] T014 [US2] Entrega E1: `./mvnw -B -ntp verify` completo en verde (en segundo plano, timeout alto; anotar cualquier exclusión de las dos pruebas de DLQ) y commit `feat(errorcode): catalogo ErrorCode y campo code en errores (020)`
+- [x] T007 [US2] Contrato primero: añadir `code` (enum `NTF-<n>`, `required`) a `ErrorResponse` en `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml` y revisar que ninguna respuesta de error defina un esquema propio (Principio II, `contracts/api-notificaciones-cambios.md`)
+
+  Hecho: `ErrorResponse` gana `code` (enum con los 44 códigos, `required`) en `api-notificaciones.yaml`, y la respuesta 413 de `POST /notifications`, que no declaraba cuerpo, ahora referencia `ErrorResponse`. Ninguna respuesta define esquema de error propio.
+- [x] T008 [US2] Crear `U/ErrorCode.java` (entero estable, `format()`, `category()` explícito, rangos Q4 y genéricos 3000/4000/5000) con los códigos de todos los puntos de fallo actuales
+
+  Hecho: `utils/ErrorCode.java` con 44 códigos (1xxx a 5xxx, genéricos 3000, 4000 y 5000, `format()`, `category()` explícito y `genericFor(FailureCategory)`).
+- [x] T009 [US2] Sustituir los mensajes `category=` por `ErrorCode` en `C/usecase/DispatchNotificationService.java` y `C/usecase/RequeuePendingNotificationsService.java`; las excepciones de dominio pueden llevar el código sin depender de frameworks
+
+  Hecho: `DispatchNotificationService` y `RequeuePendingNotificationsService` usan `errorCode=NTF-<n>` en lugar de `category=`; `REQUEUE_FAILED`, `ENQUEUE_FAILED`, `REQUEUE_PASS_FAILED`, `DISPATCH_STUCK_IN_PROCESS_RELEASED`, `DISPATCH_RESERVATION_NOT_RELEASED` y `DISPATCH_EVENTS_NOT_PUBLISHED`. Desviación: las excepciones de dominio no llevan el código (el plan lo dejaba como posibilidad); el handler las mapea por tipo, sin cambiar `core`.
+- [x] T010 [US2] `I/adapter/in/rest/NotificationExceptionHandler.java` y el record de respuesta de error: mapear cada excepción a su `ErrorCode` y emitir `code`; genérico por categoría para lo no catalogado
+
+  Hecho: `NotificationExceptionHandler` centraliza la respuesta en `respond(...)`, que emite `code` y registra cada error mapeado en INFO (4xx) o WARN (5xx) con `errorCode`, `failureCategory`, `status` y `correlationId`; lo no catalogado usa `ErrorCode.genericFor(RECOVERABLE_INFRASTRUCTURE)`. `AuthenticationWebFilter` también emite `code` (`NTF-2001` y `NTF-2002`) y lo registra. `ErrorResponse` pasa a `(code, message, correlationId)`.
+- [x] T011 [P] [US2] Registrar `errorCode` y `failureCategory` (derivada del código) vía `LogFields` en `I/adapter/out/provider/ProviderLogs.java`, `I/adapter/in/rabbit/NotificationDispatchListener.java`, `ManualAckSettler.java`, `AttachmentScanListener.java` y el adaptador de MinIO; añadir `errorCode` a `LogFields` y a `logback-spring.xml`
+
+  Hecho: `LogFields.failure(ErrorCode, ...)` registra `errorCode` y `failureCategory` derivada del código; sustituye a `fields(FAILURE_CATEGORY, ...)` en `ProviderLogs`, `NotificationDispatchListener`, `ManualAckSettler`, `AttachmentScanListener`, `NotificationRabbitPublisher`, `NotificationUpdatesRabbitAdapter`, `AbandonedUploadsSchedulerAdapter`, `ConfigurationEventLogger` y `MinioAttachmentStorageAdapter`. Desviación: `logback-spring.xml` no cambia, porque `errorCode` viaja como campo de marcador y el codificador JSON ya lo serializa; solo las claves de MDC requieren `includeMdcKeyName`.
+- [x] T012 [US2] Ejecutar `spotless:apply` y las clases de T003-T006 en verde
+
+  Hecho: `spotless:apply` ejecutado; `ErrorCodeTest` (6), `NotificationExceptionHandlerTest` (11), `ErrorResponseContractTest` (4), `DispatchNotificationServiceTest` y `RequeuePendingNotificationsServiceTest` en verde, junto con `AuthenticationWebFilterTest` (27), `ManualAckSettlerTest`, `NotificationDispatchListenerTest`, `AttachmentScanListenerTest`, `NotificationRabbitPublisherLoggingTest` y `StructuredLogLayoutTest`.
+- [x] T013 [US2] E2E `infrastructure/src/test/java/.../ErrorCodeE2ETest.java` (`@SpringBootTest` RANDOM_PORT, Mongo, RabbitMQ, `WebTestClient`): validación, 401/403, rechazo permanente del proveedor simulado y fallo recuperable; en cada caso `code` de la respuesta = `errorCode` del log = catálogo (SC-002); mensajes publicados con `NotificationEventPublisherPort.publish`
+
+  Hecho: `ErrorCodeE2ETest` (5 pruebas, Mongo y RabbitMQ reales, `WebTestClient`) en verde: validación (`NTF-1003`), 401 (`NTF-2001`) y 403 (`NTF-2002`) con `code` de la respuesta = `errorCode` del log con el mismo `correlationId` y la categoría del catálogo; rechazo permanente (`NTF-3020`) y fallo recuperable (`NTF-4002`) con un `NotificationSenderPort` controlable, esperando el estado final por la API. Desviación: el proveedor simulado no sirve porque su resultado es fijo por contexto; la prueba registra un sender `controllable` y el flujo de aceptación es el real (el publicador real emite los eventos, no se arma ningún mensaje a mano).
+- [x] T014 [US2] Entrega E1: `./mvnw -B -ntp verify` completo en verde (en segundo plano, timeout alto; anotar cualquier exclusión de las dos pruebas de DLQ) y commit `feat(errorcode): catalogo ErrorCode y campo code en errores (020)`
+
+  Hecho: `./mvnw -B -ntp clean verify` completo en verde (BUILD SUCCESS): utils 35, core 688, infrastructure 866 pruebas, 0 fallos, 0 errores; Spotless, SpotBugs y umbrales de JaCoCo en verde; sin exclusiones, las dos pruebas de DLQ incluidas. Se usó el broker del `docker-compose` del proyecto en el 5673 con `RABBITMQ_USERNAME=notification` (con `guest` fallaban por autenticación, no por el código).
 
 **Checkpoint E1**: ErrorCode desplegable por sí solo.
 

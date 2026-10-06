@@ -15,6 +15,15 @@ public record ParameterDescriptorResponse(
     List<String> scopeIds,
     String adoption) {
 
+  public ParameterDescriptorResponse {
+    scopeIds = scopeIds == null ? null : List.copyOf(scopeIds);
+  }
+
+  @Override
+  public List<String> scopeIds() {
+    return scopeIds == null ? null : List.copyOf(scopeIds);
+  }
+
   static ParameterDescriptorResponse from(final ParameterDescription description) {
     final ParameterDescriptor descriptor = description.descriptor();
     return new ParameterDescriptorResponse(

@@ -15,6 +15,21 @@ public record LastKnownConfigurationDocument(
     String source,
     Date adoptedAt) {
 
+  public LastKnownConfigurationDocument {
+    values = values == null ? null : List.copyOf(values);
+    adoptedAt = adoptedAt == null ? null : new Date(adoptedAt.getTime());
+  }
+
+  @Override
+  public List<Document> values() {
+    return values == null ? null : List.copyOf(values);
+  }
+
+  @Override
+  public Date adoptedAt() {
+    return adoptedAt == null ? null : new Date(adoptedAt.getTime());
+  }
+
   public static final String COLLECTION = "configuration_last_known";
   public static final String CURRENT_ID = "current";
 }

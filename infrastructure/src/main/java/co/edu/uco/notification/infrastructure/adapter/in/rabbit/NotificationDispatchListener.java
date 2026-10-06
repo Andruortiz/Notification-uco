@@ -15,6 +15,7 @@ import co.edu.uco.notification.utils.TraceParent;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.function.IntFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.Message;
@@ -36,8 +37,7 @@ public class NotificationDispatchListener {
   private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDispatchListener.class);
 
   private final DispatchNotificationUseCase dispatchNotificationUseCase;
-  private final RabbitTemplate rabbitTemplate;
-  private final MessageRecoverer dlqRecoverer;
+  private final IntFunction<ManualAckSettler> settlerFactory;
   private final RabbitTopologyProperties properties;
   private final ConfigurationView configurationView;
 
@@ -50,22 +50,23 @@ public class NotificationDispatchListener {
     this.dispatchNotificationUseCase =
         Preconditions.requireNonNull(
             dispatchNotificationUseCase, "dispatchNotificationUseCase must not be null");
-    this.rabbitTemplate = rabbitTemplate;
-    this.dlqRecoverer = dlqRecoverer;
     this.properties = Preconditions.requireNonNull(properties, "properties must not be null");
+    this.settlerFactory =
+        maxAttempts ->
+            new ManualAckSettler(
+                rabbitTemplate,
+                dlqRecoverer,
+                properties.dispatch().exchange(),
+                properties.dispatch().routingKey(),
+                ATTEMPT_HEADER,
+                maxAttempts,
+                "Notification dispatch");
     this.configurationView =
         Preconditions.requireNonNull(configurationView, "configurationView must not be null");
   }
 
   private ManualAckSettler settlerFor(final int maxAttempts) {
-    return new ManualAckSettler(
-        rabbitTemplate,
-        dlqRecoverer,
-        properties.dispatch().exchange(),
-        properties.dispatch().routingKey(),
-        ATTEMPT_HEADER,
-        maxAttempts,
-        "Notification dispatch");
+    return settlerFactory.apply(maxAttempts);
   }
 
   @RabbitListener(

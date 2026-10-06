@@ -11,6 +11,21 @@ public record ConfigurationResponse(
     List<String> pendingRestart,
     List<ParameterDescriptorResponse> parameters) {
 
+  public ConfigurationResponse {
+    pendingRestart = pendingRestart == null ? null : List.copyOf(pendingRestart);
+    parameters = parameters == null ? null : List.copyOf(parameters);
+  }
+
+  @Override
+  public List<String> pendingRestart() {
+    return pendingRestart == null ? null : List.copyOf(pendingRestart);
+  }
+
+  @Override
+  public List<ParameterDescriptorResponse> parameters() {
+    return parameters == null ? null : List.copyOf(parameters);
+  }
+
   static ConfigurationResponse from(final ConfigurationDescription description) {
     return new ConfigurationResponse(
         description.version(),

@@ -5,6 +5,8 @@ import co.edu.uco.notification.core.exception.ParametersUnavailableException;
 import co.edu.uco.notification.core.port.out.ParametersSourcePort;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -62,5 +64,15 @@ public class HttpParametersSource implements ParametersSourcePort {
     return new ConfigurationChange(response.version(), response.values());
   }
 
-  public record StateResponse(Long version, Map<String, Object> values) {}
+  public record StateResponse(Long version, Map<String, Object> values) {
+
+    public StateResponse {
+      values = values == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(values));
+    }
+
+    @Override
+    public Map<String, Object> values() {
+      return values == null ? null : Collections.unmodifiableMap(new LinkedHashMap<>(values));
+    }
+  }
 }

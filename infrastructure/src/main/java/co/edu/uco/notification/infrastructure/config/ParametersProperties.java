@@ -18,13 +18,18 @@ public record ParametersProperties(
 
   public ParametersProperties {
     baseUrl = baseUrl == null ? "" : baseUrl.trim();
-    pollIntervalMs = pollIntervalMs == null ? DEFAULT_POLL_INTERVAL_MS : pollIntervalMs;
-    timeoutMs = timeoutMs == null ? DEFAULT_TIMEOUT_MS : timeoutMs;
-    connectTimeoutMs = connectTimeoutMs == null ? DEFAULT_CONNECT_TIMEOUT_MS : connectTimeoutMs;
-    lastKnownLoadTimeoutMs =
-        lastKnownLoadTimeoutMs == null
-            ? DEFAULT_LAST_KNOWN_LOAD_TIMEOUT_MS
-            : lastKnownLoadTimeoutMs;
+    if (pollIntervalMs == null) {
+      pollIntervalMs = DEFAULT_POLL_INTERVAL_MS;
+    }
+    if (timeoutMs == null) {
+      timeoutMs = DEFAULT_TIMEOUT_MS;
+    }
+    if (connectTimeoutMs == null) {
+      connectTimeoutMs = DEFAULT_CONNECT_TIMEOUT_MS;
+    }
+    if (lastKnownLoadTimeoutMs == null) {
+      lastKnownLoadTimeoutMs = DEFAULT_LAST_KNOWN_LOAD_TIMEOUT_MS;
+    }
   }
 
   public boolean hasSource() {

@@ -30,7 +30,7 @@ import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 @Component
-public class LastKnownConfigurationMongoAdapter implements LastKnownConfigurationPort {
+public final class LastKnownConfigurationMongoAdapter implements LastKnownConfigurationPort {
 
   private static final Logger LOG =
       LoggerFactory.getLogger(LastKnownConfigurationMongoAdapter.class);

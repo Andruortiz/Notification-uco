@@ -175,8 +175,8 @@ sin campo admitido, comprobar que la solicitud no lo lleva y que está documenta
 ### Edge Cases
 
 - Cardinalidad: ninguna etiqueta de métrica admite valores no acotados (`tenantId`, `notificationId`,
-  `correlationId`, destinatario). Solo `channel`, `provider`, `result`, `errorCode` y valores de
-  catálogo cerrado.
+  `correlationId`, destinatario). Solo `channel`, `provider`, `result`, `errorCode`, `failureCategory` y
+  valores de catálogo cerrado.
 - Exposición: el endpoint de métricas no devuelve nada sensible ni los valores de configuración; no
   es accesible desde el puerto público de la API, y ningún otro endpoint de actuator está expuesto.
 - Rendimiento: instrumentar no puede romper RNF-02 (≤ 200 ms p95 de aceptación) ni bloquear hilos

@@ -194,7 +194,9 @@ infrastructure/src/main/java/co/edu/uco/notification/infrastructure/
 └── resources/{application.yml,logback-spring.xml,static/openapi/api-notificaciones.yaml}
 
 infrastructure/src/test/java/co/edu/uco/notification/infrastructure/
-├── ObservabilityE2ETest.java                        (E2E: métricas, trazas, logs, errores)
+├── ErrorCodeE2ETest.java, MetricsE2ETest.java, TracingE2ETest.java, TracingResilienceE2ETest.java,
+│   ProviderCorrelationE2ETest.java                  (un E2E por entrega)
+├── ObservabilityE2ETest.java                        (E2E integrado: métricas, trazas, logs, errores)
 ├── ActuatorExposureE2ETest.java                     (8061 solo health y prometheus; 8060 nada)
 ├── adapter/out/metrics/MicrometerNotificationMetricsTest.java
 └── adapter/out/provider/*CorrelationForwardingTest.java
@@ -212,7 +214,7 @@ observación en `infrastructure`, sin tocar `core`.
 | Unitaria `core` | pruebas de los cuatro casos de uso con `NotificationMetricsPort` simulado, `StepVerifier` | Una llamada por hecho; reaceptación idempotente no cuenta; lote cuenta notificaciones (FR-002, FR-003) |
 | Integración adaptador | `MicrometerNotificationMetricsTest` con `SimpleMeterRegistry` | Nombres, etiquetas cerradas, sin etiquetas prohibidas (FR-008) |
 | Integración proveedor | servidor HTTP simulado por proveedor | Brevo lleva el id; Twilio y FCM no (SC-007) |
-| E2E | `ObservabilityE2ETest` (`@SpringBootTest`, Mongo, RabbitMQ, `WebTestClient`, exportador de trazas en memoria) | SC-001 a SC-005, SC-008 con dos tenants; mismo `correlationId` y `traceId` en log, tramos y métricas; el puerto público no sirve métricas; `Duration` afirmada para el endpoint de métricas (SC-004) |
+| E2E | un E2E por entrega (`ErrorCodeE2ETest`, `MetricsE2ETest`, `TracingE2ETest`, `ProviderCorrelationE2ETest`) más `ObservabilityE2ETest` integrado (FR-022) (`@SpringBootTest`, Mongo, RabbitMQ, `WebTestClient`, exportador de trazas en memoria) | SC-001 a SC-005, SC-008 con dos tenants; mismo `correlationId` y `traceId` en log, tramos y métricas; el puerto público no sirve métricas; `Duration` afirmada para el endpoint de métricas (SC-004) |
 | E2E exposición | `ActuatorExposureE2ETest` (puertos 8060 y 8061 reales) | `env`, `beans`, `heapdump`, `configprops`, `loggers`, `threaddump`, `mappings` ausentes en ambos; `health` y `prometheus` en 8061 (FR-023 a FR-025, SC-009) |
 | Resiliencia | arranque con endpoint OTLP inalcanzable | La aceptación y el despacho no fallan ni se retrasan (SC-006) |
 | Arquitectura | `HexagonalArchitectureTest`, `ModularityTests` | `core` sin Micrometer ni OpenTelemetry |

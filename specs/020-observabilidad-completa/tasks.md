@@ -16,7 +16,7 @@
 ## Phase 1: Setup
 
 - [ ] T001 Confirmar línea base: `./mvnw -B -ntp clean compile` y `HexagonalArchitectureTest,ModularityTests` en verde antes de cualquier cambio; anotar en la tarea el resultado
-- [ ] T002 [P] Añadir al `pom.xml` de `infrastructure` (versiones del BOM de Spring Boot) `micrometer-registry-prometheus`, `micrometer-tracing-bridge-otel`, `opentelemetry-exporter-otlp` y, en alcance test, `micrometer-tracing-test` y `opentelemetry-sdk-testing`; confirmar que `core` y `utils` no ganan dependencias nuevas
+- [ ] T002 [P] Confirmar que `core` y `utils` no ganan dependencias de Micrometer ni OpenTelemetry y que las dependencias de cada entrega se añaden solo en `infrastructure` y en la entrega que las usa (Prometheus en E2, tracing y OTLP en E3), para que cada entrega sea desplegable sola
 
 ---
 
@@ -65,12 +65,12 @@
 
 - [ ] T019 [US1] Crear `C/port/out/NotificationMetricsPort.java` (métodos `void` con tipos del dominio: aceptada por canal, intento despachado con proveedor, resultado y duración, fallo con `ErrorCode`)
 - [ ] T020 [US1] Cablear el puerto en `C/usecase/SendNotificationService.java`, `SendNotificationBatchService.java`, `DispatchNotificationService.java` (duración alrededor de `NotificationSenderPort.send`) y `RequeuePendingNotificationsService.java`
-- [ ] T021 [US1] Crear `I/adapter/out/metrics/MicrometerNotificationMetrics.java` con `MeterRegistry` y cablearlo en `I/config/UseCaseConfig.java`; temporizador con histograma para p95/p99 (FR-004)
+- [ ] T021 [US1] Añadir `micrometer-registry-prometheus` al `pom.xml` de `infrastructure` (versión del BOM) y crear `I/adapter/out/metrics/MicrometerNotificationMetrics.java` con `MeterRegistry` y cablearlo en `I/config/UseCaseConfig.java`; temporizador con histograma para p95/p99 (FR-004)
 - [ ] T022 [US1] `infrastructure/src/main/resources/application.yml`: `management.server.port=${MANAGEMENT_PORT:8061}`, `management.endpoints.web.exposure.include=health,prometheus` (lista explícita, sin comodines), `management.endpoint.prometheus.enabled`, histograma de percentiles de `http.server.requests` y de las métricas de listeners Rabbit (FR-006, FR-023)
 - [ ] T023 [US1] `I/adapter/in/web/AuthenticationWebFilter.java`: eliminar `/actuator` de las rutas exentas del puerto principal (FR-024); confirmar que el puerto de gestión no hereda el filtro
 - [ ] T024 [P] [US1] Despliegue (FR-026): documentar el puerto 8061, `MANAGEMENT_PORT` y `/actuator/prometheus` en `README.md`; exponer y comprobar salud en 8061 en `docker-compose.yml` (sin publicarlo fuera si no hace falta); añadir `EXPOSE 8061` al `Dockerfile` junto a 8060; revisar que las sondas de `specs/` y `quickstart.md` apunten a 8061
 - [ ] T025 [US1] Ejecutar `spotless:apply` y las clases de T015-T018 en verde, más `HexagonalArchitectureTest` y `ModularityTests` (core sin Micrometer)
-- [ ] T026 [US1] E2E `infrastructure/src/test/java/.../MetricsE2ETest.java`: N notificaciones por canal y por resultado simulado, contadores del endpoint de 8061 exactos (SC-001); dos tenants sin `tenantId` en ninguna etiqueta (SC-008); datos centinela (destinatario, contenido, credencial, token) con 0 apariciones junto a control positivo (SC-005); la consulta responde en `Duration` ≤ 2 s afirmada (SC-004)
+- [ ] T026 [US1] E2E `infrastructure/src/test/java/.../MetricsE2ETest.java`: N notificaciones por canal y por resultado simulado, contadores del endpoint de 8061 exactos (SC-001); dos tenants sin `tenantId` en ninguna etiqueta (SC-008); datos centinela (destinatario, contenido, credencial, token) con 0 apariciones junto a control positivo (SC-005); la consulta responde en `Duration` ≤ 2 s afirmada (SC-004); existen `http.server.requests` con percentiles, métricas del consumo Rabbit y de JVM (FR-006, escenario 4 de US1)
 - [ ] T027 [US1] Entrega E2: `./mvnw -B -ntp verify` completo en verde y commit `feat(metricas): metricas de negocio y puerto de gestion 8061 (020)`
 
 **Checkpoint E2**: métricas y exposición mínima de actuator desplegables.
@@ -91,13 +91,14 @@
 
 ### Implementación (E3)
 
+- [ ] T030a [US3] Añadir al `pom.xml` de `infrastructure` (versiones del BOM) `micrometer-tracing-bridge-otel` y `opentelemetry-exporter-otlp`, y en alcance test `micrometer-tracing-test` y `opentelemetry-sdk-testing`
 - [ ] T031 [US3] `I/config/ObservabilityConfig.java` (nuevo): observación en REST, `RabbitTemplate`, contenedor de listeners (`observation-enabled`) y `ObservationFilter` del `correlationId`; `spring.reactor.context-propagation=auto` verificando que no choca con `Hooks.enableAutomaticContextPropagation()` ni con `CorrelationContextConfig`
 - [ ] T032 [US3] Retirar el estampado y la restauración manuales de `traceparent` en `I/adapter/out/rabbit/NotificationRabbitPublisher.java`, `I/adapter/in/rabbit/NotificationDispatchListener.java`, `AttachmentScanListener.java`, `I/adapter/in/web/CorrelationIdWebFilter.java`, `I/config/CorrelationContext.java`, `LogContext.java` y `LogFields.java`; el tramo de consumo se cierra tras el ack/nack de `ManualAckSettler`
-- [ ] T033 [US3] Decidir y ejecutar el destino de `U/TraceParent.java` y `TraceParentTest.java`: conservar solo si sigue habiendo un consumidor real; si no, eliminarlos junto con sus pruebas y las de `AttachmentScanListenerCorrelationTest`, `NotificationDispatchListenerTest`, `NotificationControllerTest` y `CorrelationIdWebFilterTest` que los usen (Principio VII)
+- [ ] T033 [US3] Tras T032, buscar consumidores de `U/TraceParent.java` con `Grep`; si queda alguno de producción distinto de pruebas, conservarlo; si no, eliminar `TraceParent` y `TraceParentTest.java` junto con sus pruebas y las de `AttachmentScanListenerCorrelationTest`, `NotificationDispatchListenerTest`, `NotificationControllerTest` y `CorrelationIdWebFilterTest` que los usen (Principio VII)
 - [ ] T034 [US3] Verificar que los `WebClient` de Brevo, Twilio y FCM (`I/adapter/out/provider/ProviderHttpClients.java`, `FcmProviderConfig.java`) usan el `WebClient.Builder` autoconfigurado y ajustar si no
 - [ ] T035 [US3] `application.yml` y `logback-spring.xml`: `management.otlp.tracing.endpoint` vacío por defecto (sin exportador), transporte OTLP/HTTP, `management.tracing.sampling.probability=${TRACING_SAMPLING_PROBABILITY:1.0}` en local y 0.1 en el perfil de producción (Q7); `traceId` y `spanId` del MDC en el JSON del log
 - [ ] T036 [US3] Ejecutar `spotless:apply` y las clases de T028-T030 en verde
-- [ ] T037 [US3] E2E `infrastructure/src/test/java/.../TracingE2ETest.java` con exportador en memoria: con `traceparent` válido, sin él y con uno inválido (se descarta sin escribirse en logs); 100 % de tramos (REST, publicación, consumo, despacho, proveedor) y de logs del recorrido con el mismo `traceId` (SC-003); `correlationId` como atributo del tramo; dos solicitudes concurrentes sin mezcla (SC-008); mensajes producidos con `NotificationEventPublisherPort.publish`
+- [ ] T037 [US3] E2E `infrastructure/src/test/java/.../TracingE2ETest.java` con exportador en memoria: con `traceparent` válido, sin él y con uno inválido (se descarta sin escribirse en logs); 100 % de tramos (REST, publicación, consumo, despacho, proveedor) y de logs del recorrido con el mismo `traceId` (SC-003); `correlationId` como atributo del tramo; dos solicitudes concurrentes sin mezcla (SC-008); un reencolado del planificador inicia traza propia y conserva el `correlationId` persistido; mensajes producidos con `NotificationEventPublisherPort.publish`
 - [ ] T038 [US3] E2E integrado `infrastructure/src/test/java/.../ObservabilityE2ETest.java`: aceptación, publicación, consumo, despacho simulado, lectura de métricas, trazas y logs, afirmando los tres señales con el mismo `correlationId` y `traceId` (FR-022)
 - [ ] T039 [US3] Entrega E3: `./mvnw -B -ntp verify` completo en verde y commit `feat(trazado): micrometer tracing y opentelemetry con correlacion (020)`
 

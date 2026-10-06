@@ -11,10 +11,12 @@ import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.DispatchResultNotPersistedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.repository.NotificationRepository;
@@ -37,13 +39,15 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   private final NotificationSenderRegistry notificationSenderRegistry;
   private final NotificationEventPublisherPort eventPublisherPort;
   private final RetryPolicy retryPolicy;
+  private final NotificationMetricsPort metricsPort;
 
   public DispatchNotificationService(
       final NotificationRepository notificationRepository,
       final ChannelCatalogPort channelCatalogPort,
       final NotificationSenderRegistry notificationSenderRegistry,
       final NotificationEventPublisherPort eventPublisherPort,
-      final RetryPolicy retryPolicy) {
+      final RetryPolicy retryPolicy,
+      final NotificationMetricsPort metricsPort) {
     this.notificationRepository =
         Preconditions.requireNonNull(
             notificationRepository, "notificationRepository must not be null");
@@ -55,6 +59,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
     this.eventPublisherPort =
         Preconditions.requireNonNull(eventPublisherPort, "eventPublisherPort must not be null");
     this.retryPolicy = Preconditions.requireNonNull(retryPolicy, "retryPolicy must not be null");
+    this.metricsPort = Preconditions.requireNonNull(metricsPort, "metricsPort must not be null");
   }
 
   private record Outcome(AttemptResult result, ProviderId providerId) {}
@@ -102,15 +107,34 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   private Mono<Outcome> sendThrough(final Notification notification, final ChannelRoute route) {
     final ProviderId providerId = route.preferredProvider();
     return Mono.fromCallable(() -> notificationSenderRegistry.resolve(providerId))
-        .flatMap(sender -> attempt(sender, notification))
+        .flatMap(sender -> attempt(sender, notification, providerId))
+        .doOnError(
+            ProviderDisabledException.class,
+            error ->
+                metricsPort.dispatchAttempted(
+                    notification.channelType(), providerId, AttemptResult.PERMANENT_FAILURE))
+        .doOnNext(
+            result -> metricsPort.dispatchAttempted(notification.channelType(), providerId, result))
         .map(result -> new Outcome(result, providerId));
   }
 
-  private static Mono<AttemptResult> attempt(
-      final NotificationSenderPort sender, final Notification notification) {
-    return notification.content().hasAttachments() && !sender.supportsAttachments()
-        ? Mono.just(AttemptResult.PERMANENT_FAILURE)
-        : sender.send(notification);
+  private Mono<AttemptResult> attempt(
+      final NotificationSenderPort sender,
+      final Notification notification,
+      final ProviderId providerId) {
+    if (notification.content().hasAttachments() && !sender.supportsAttachments()) {
+      return Mono.just(AttemptResult.PERMANENT_FAILURE);
+    }
+    return Mono.defer(
+        () -> {
+          final long startedAt = System.nanoTime();
+          return sender
+              .send(notification)
+              .doOnNext(
+                  result ->
+                      metricsPort.providerCalled(
+                          providerId, result, Duration.ofNanos(System.nanoTime() - startedAt)));
+        });
   }
 
   private Mono<Outcome> releaseAndPropagate(
@@ -126,6 +150,8 @@ public final class DispatchNotificationService implements DispatchNotificationUs
                       + " errorCode="
                       + ErrorCode.DISPATCH_RESERVATION_NOT_RELEASED.format(),
                   releaseFailure);
+              metricsPort.errorRecorded(
+                  ErrorCode.DISPATCH_RESERVATION_NOT_RELEASED, notification.channelType(), null);
               return Mono.empty();
             })
         .then(Mono.<Outcome>error(error));
@@ -143,11 +169,13 @@ public final class DispatchNotificationService implements DispatchNotificationUs
         .onErrorMap(
             error -> !(error instanceof NotificationVersionConflictException),
             error -> new DispatchResultNotPersistedException(notification.notificationId(), error))
-        .flatMap(saved -> publishEvents(notification, events));
+        .flatMap(saved -> publishEvents(notification, outcome.providerId(), events));
   }
 
   private Mono<Void> publishEvents(
-      final Notification notification, final List<DomainEvent> events) {
+      final Notification notification,
+      final ProviderId providerId,
+      final List<DomainEvent> events) {
     return eventPublisherPort
         .publish(events)
         .onErrorResume(
@@ -159,6 +187,8 @@ public final class DispatchNotificationService implements DispatchNotificationUs
                       + " errorCode="
                       + ErrorCode.DISPATCH_EVENTS_NOT_PUBLISHED.format(),
                   error);
+              metricsPort.errorRecorded(
+                  ErrorCode.DISPATCH_EVENTS_NOT_PUBLISHED, notification.channelType(), providerId);
               return Mono.empty();
             });
   }

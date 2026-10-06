@@ -8,6 +8,7 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.in.RequeuePendingNotificationsUseCase;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
@@ -29,6 +30,7 @@ public final class RequeuePendingNotificationsService
   private final Duration pendingOrphanThreshold;
   private final Duration inProcessTimeout;
   private final int batchSize;
+  private final NotificationMetricsPort metricsPort;
 
   public RequeuePendingNotificationsService(
       final NotificationRepository notificationRepository,
@@ -36,7 +38,8 @@ public final class RequeuePendingNotificationsService
       final RetryPolicy retryPolicy,
       final Duration pendingOrphanThreshold,
       final Duration inProcessTimeout,
-      final int batchSize) {
+      final int batchSize,
+      final NotificationMetricsPort metricsPort) {
     this.notificationRepository =
         Preconditions.requireNonNull(
             notificationRepository, "notificationRepository must not be null");
@@ -50,6 +53,7 @@ public final class RequeuePendingNotificationsService
         Preconditions.requireNonNull(inProcessTimeout, "inProcessTimeout must not be null");
     Preconditions.requireTrue(batchSize > 0, "batchSize must be positive");
     this.batchSize = batchSize;
+    this.metricsPort = Preconditions.requireNonNull(metricsPort, "metricsPort must not be null");
   }
 
   @Override
@@ -107,11 +111,13 @@ public final class RequeuePendingNotificationsService
                         + notification.tenantId().value()
                         + " errorCode="
                         + ErrorCode.DISPATCH_STUCK_IN_PROCESS_RELEASED.format()))
+        .doOnNext(
+            notification -> metricsPort.errorRecorded(ErrorCode.DISPATCH_STUCK_IN_PROCESS_RELEASED))
         .onErrorResume(error -> logPassFailure("REQUEUE_STUCK_PASS_FAILED", error))
         .then();
   }
 
-  private static <T> Mono<T> logFailure(
+  private <T> Mono<T> logFailure(
       final String marker,
       final ErrorCode code,
       final Notification notification,
@@ -126,14 +132,16 @@ public final class RequeuePendingNotificationsService
             + " errorCode="
             + code.format(),
         error);
+    metricsPort.errorRecorded(code);
     return Mono.empty();
   }
 
-  private static <T> Mono<T> logPassFailure(final String code, final Throwable error) {
+  private <T> Mono<T> logPassFailure(final String code, final Throwable error) {
     LOGGER.log(
         System.Logger.Level.ERROR,
         code + " errorCode=" + ErrorCode.REQUEUE_PASS_FAILED.format(),
         error);
+    metricsPort.errorRecorded(ErrorCode.REQUEUE_PASS_FAILED);
     return Mono.empty();
   }
 

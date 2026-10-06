@@ -10,7 +10,7 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -51,7 +51,7 @@ class AttachmentHealthIndicatorsTest {
         "notification.attachments.storage.endpoint", () -> "http://localhost:" + closedPort);
   }
 
-  @LocalServerPort private int port;
+  @LocalManagementPort private int port;
 
   private WebTestClient webTestClient;
 

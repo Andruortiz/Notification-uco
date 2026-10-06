@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.port.out.ContentTypeDetectorPort;
 import co.edu.uco.notification.core.port.out.LastKnownConfigurationPort;
 import co.edu.uco.notification.core.port.out.MalwareScannerPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
@@ -161,9 +162,14 @@ public class UseCaseConfig {
       final ChannelCatalogPort channelCatalogPort,
       final NotificationRepository notificationRepository,
       final NotificationEventPublisherPort eventPublisherPort,
-      final AttachmentResolver attachmentResolver) {
+      final AttachmentResolver attachmentResolver,
+      final NotificationMetricsPort metricsPort) {
     return new SendNotificationService(
-        channelCatalogPort, notificationRepository, eventPublisherPort, attachmentResolver);
+        channelCatalogPort,
+        notificationRepository,
+        eventPublisherPort,
+        attachmentResolver,
+        metricsPort);
   }
 
   @Bean
@@ -178,13 +184,15 @@ public class UseCaseConfig {
       final ChannelCatalogPort channelCatalogPort,
       final NotificationSenderRegistry notificationSenderRegistry,
       final NotificationEventPublisherPort eventPublisherPort,
-      final RetryPolicy retryPolicy) {
+      final RetryPolicy retryPolicy,
+      final NotificationMetricsPort metricsPort) {
     return new DispatchNotificationService(
         notificationRepository,
         channelCatalogPort,
         notificationSenderRegistry,
         eventPublisherPort,
-        retryPolicy);
+        retryPolicy,
+        metricsPort);
   }
 
   @Bean
@@ -239,13 +247,15 @@ public class UseCaseConfig {
           final long pendingOrphanThresholdMs,
       @Value("${notification.scheduler.in-process-timeout-ms:600000}")
           final long inProcessTimeoutMs,
-      @Value("${notification.scheduler.batch-size:100}") final int batchSize) {
+      @Value("${notification.scheduler.batch-size:100}") final int batchSize,
+      final NotificationMetricsPort metricsPort) {
     return new RequeuePendingNotificationsService(
         notificationRepository,
         eventPublisherPort,
         retryPolicy,
         Duration.ofMillis(pendingOrphanThresholdMs),
         Duration.ofMillis(inProcessTimeoutMs),
-        batchSize);
+        batchSize,
+        metricsPort);
   }
 }

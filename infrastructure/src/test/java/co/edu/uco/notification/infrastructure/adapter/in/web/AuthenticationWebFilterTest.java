@@ -29,11 +29,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.support.GenericApplicationContext;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.http.server.reactive.MockServerHttpRequest;
 import org.springframework.mock.web.server.MockServerWebExchange;
 import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.ServerWebExchangeDecorator;
 import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -264,13 +267,22 @@ class AuthenticationWebFilterTest {
   }
 
   @Test
-  void exemptsActuatorHealth() {
-    final ServerWebExchange exchange = exchange(HttpMethod.GET, "/actuator/health");
-    final AtomicBoolean chainInvoked = new AtomicBoolean(false);
+  void actuatorRoutesAreNotExemptedOnTheMainPort() {
+    for (final String path :
+        List.of(
+            "/actuator",
+            "/actuator/health",
+            "/actuator/health/liveness",
+            "/actuator/prometheus",
+            "/actuator/env")) {
+      final ServerWebExchange exchange = exchange(HttpMethod.GET, path);
+      final AtomicBoolean chainInvoked = new AtomicBoolean(false);
 
-    StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
+      StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
 
-    assertTrue(chainInvoked.get());
+      assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode(), path);
+      assertFalse(chainInvoked.get(), path);
+    }
   }
 
   @Test
@@ -488,11 +500,60 @@ class AuthenticationWebFilterTest {
   }
 
   @Test
-  void exemptsTheDocumentationAndHealthRoutesBySegment() {
+  void actuatorRoutesAreExemptedOnlyInTheManagementContext() {
+    final ApplicationContext management =
+        new GenericApplicationContext(new GenericApplicationContext());
+    for (final String path : List.of("/actuator/health", "/actuator/prometheus")) {
+      final ServerWebExchange exchange = inContext(exchange(HttpMethod.GET, path), management);
+      final AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+      StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
+
+      assertTrue(chainInvoked.get(), path);
+    }
+  }
+
+  @Test
+  void theBusinessRoutesStayProtectedInTheManagementContext() {
+    final ApplicationContext management =
+        new GenericApplicationContext(new GenericApplicationContext());
+    final ServerWebExchange exchange =
+        inContext(exchange(HttpMethod.GET, "/notifications"), management);
+    final AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+    StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
+
+    assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
+    assertFalse(chainInvoked.get());
+  }
+
+  @Test
+  void actuatorRoutesAreNotExemptedInARootContext() {
+    final ApplicationContext root = new GenericApplicationContext();
+    final ServerWebExchange exchange =
+        inContext(exchange(HttpMethod.GET, "/actuator/health"), root);
+    final AtomicBoolean chainInvoked = new AtomicBoolean(false);
+
+    StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
+
+    assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
+    assertFalse(chainInvoked.get());
+  }
+
+  private static ServerWebExchange inContext(
+      final ServerWebExchange exchange, final ApplicationContext context) {
+    return new ServerWebExchangeDecorator(exchange) {
+      @Override
+      public ApplicationContext getApplicationContext() {
+        return context;
+      }
+    };
+  }
+
+  @Test
+  void exemptsTheDocumentationRoutesBySegment() {
     for (final String path :
         List.of(
-            "/actuator",
-            "/actuator/health/liveness",
             "/openapi/api-notificaciones.yaml",
             "/swagger-ui.html",
             "/swagger-ui/index.html",

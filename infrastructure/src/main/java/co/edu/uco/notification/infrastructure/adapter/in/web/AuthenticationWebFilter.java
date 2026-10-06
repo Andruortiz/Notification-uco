@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
@@ -39,8 +40,9 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String SUBSCRIBE_PATH = "/notifications:subscribe";
   private static final String TICKET_PARAM = "ticket";
+  private static final String ACTUATOR_PATH = "/actuator";
   private static final List<String> EXEMPT_PATHS =
-      List.of("/actuator", "/v3/api-docs", "/swagger-ui", "/swagger-ui.html", "/openapi");
+      List.of("/v3/api-docs", "/swagger-ui", "/swagger-ui.html", "/openapi");
 
   private final TokenValidationPort tokenValidationPort;
   private final SubscriptionTicketPort subscriptionTicketPort;
@@ -167,11 +169,23 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
         .contextWrite(context -> context.put(LogFields.TENANT_ID, principal.tenantId().value()));
   }
 
+  private static boolean isManagementContext(final ServerWebExchange exchange) {
+    final ApplicationContext context = exchange.getApplicationContext();
+    return context != null && context.getParent() != null;
+  }
+
+  private static boolean isActuatorPath(final String path) {
+    return path.equals(ACTUATOR_PATH) || path.startsWith(ACTUATOR_PATH + "/");
+  }
+
   private boolean isExempt(final ServerWebExchange exchange) {
     if (exchange.getRequest().getMethod() == HttpMethod.OPTIONS) {
       return true;
     }
     final String path = exchange.getRequest().getPath().value();
+    if (isManagementContext(exchange) && isActuatorPath(path)) {
+      return true;
+    }
     return EXEMPT_PATHS.stream()
         .anyMatch(exempt -> path.equals(exempt) || path.startsWith(exempt + "/"));
   }

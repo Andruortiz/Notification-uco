@@ -18,7 +18,20 @@ spring:
     publisher-confirm-type: correlated
 
 management:
+  server:
+    port: ${MANAGEMENT_PORT:8061}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        spring.rabbitmq.listener: true
   endpoint:
+    prometheus:
+      enabled: true
     health:
       probes:
         enabled: true

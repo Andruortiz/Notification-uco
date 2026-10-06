@@ -115,6 +115,10 @@ paths:
             traceparent:
               $ref: '#/components/headers/TraceParent'
           description: El cuerpo de la solicitud supera 8 MB.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '503':
           headers:
             X-Correlation-Id:
@@ -1659,8 +1663,57 @@ components:
     ErrorResponse:
       type: object
       required:
+        - code
         - correlationId
       properties:
+        code:
+          type: string
+          description: Código estable del error, con formato NTF-<número>; el prefijo del número indica la categoría (1 validación, 2 autenticación y autorización, 3 negocio, 4 proveedor, 5 infraestructura).
+          enum:
+            - NTF-1001
+            - NTF-1002
+            - NTF-1003
+            - NTF-1004
+            - NTF-1005
+            - NTF-2001
+            - NTF-2002
+            - NTF-3000
+            - NTF-3001
+            - NTF-3002
+            - NTF-3003
+            - NTF-3004
+            - NTF-3005
+            - NTF-3006
+            - NTF-3007
+            - NTF-3008
+            - NTF-3010
+            - NTF-3011
+            - NTF-3020
+            - NTF-3021
+            - NTF-3030
+            - NTF-4000
+            - NTF-4002
+            - NTF-4010
+            - NTF-4011
+            - NTF-4012
+            - NTF-4020
+            - NTF-4021
+            - NTF-5000
+            - NTF-5001
+            - NTF-5002
+            - NTF-5003
+            - NTF-5004
+            - NTF-5005
+            - NTF-5006
+            - NTF-5007
+            - NTF-5010
+            - NTF-5020
+            - NTF-5021
+            - NTF-5022
+            - NTF-5030
+            - NTF-5040
+            - NTF-5050
+            - NTF-5060
         message:
           type: string
         correlationId:

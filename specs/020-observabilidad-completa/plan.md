@@ -6,7 +6,7 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente
+**Estado**: Aceptado
 
 **Versión del plan**: 1
 
@@ -23,11 +23,29 @@
 
 La 020 entrega las cuatro excepciones del Principio VII que dejó la 016: métricas técnicas y de negocio,
 catálogo `ErrorCode`, trazado con Micrometer Tracing y OpenTelemetry, y reenvío del `correlationId` a los
-proveedores que lo admitan. El plan se escribe sobre las respuestas **recomendadas y pendientes de
-confirmación** de `spec.md` (Q1 a Q8); si el usuario decide otra cosa, se revisa el plan (versión 2).
+proveedores que lo admitan. El usuario CONFIRMÓ las decisiones Q1 a Q8 de `spec.md` el 2026-10-05, tal como las decidió, y el plan
+refleja esas decisiones (resumen en la sección "Decisiones confirmadas").
 
 Enfoque: `core` solo gana un puerto de salida `NotificationMetricsPort` y usa `ErrorCode` (de `utils`);
 todo lo de Micrometer, Prometheus, OpenTelemetry y OTLP vive en `infrastructure`.
+
+## Decisiones confirmadas (usuario, 2026-10-05)
+
+- Q1: Prometheus por pull en `/actuator/prometheus`.
+- Q2: puerto de gestión 8061 separado. No se exime `/actuator/**` indiscriminadamente en
+  `AuthenticationWebFilter`: el puerto de gestión expone solo `health` (sondas `liveness` y `readiness`) y
+  `prometheus`; la exención del filtro en el puerto principal se limita a lo estrictamente necesario
+  (ninguna ruta de actuator). `env`, `beans`, `heapdump`, `configprops`, `loggers`, `threaddump`,
+  `mappings` y demás no se exponen ni en 8061 ni en 8060, con pruebas (FR-023 a FR-026, SC-009).
+- Q3: métricas `notification.accepted`, `attempts`, `dispatched`, `provider.duration` y `errors` con
+  dimensiones canal y proveedor, sin `tenantId`.
+- Q4: `enum ErrorCode` en `utils`, entero estable más `NTF-<n>`, rangos 1xxx a 5xxx por categoría.
+- Q5: campo aditivo `code` en `ErrorResponse`.
+- Q6: no se asume soporte de proveedores; la primera tarea verifica la documentación vigente de Brevo,
+  Twilio y FCM; se implementa solo donde esté soportado y se documenta con evidencia (fuente y fecha) lo
+  demás. Si ninguno o solo Brevo, no se abre excepción del Principio VII.
+- Q7: OTLP/HTTP solo con endpoint configurado; muestreo 1.0 local y 0.1 producción.
+- Q8: `traceId` y `correlationId` con propósitos distintos; sustituye el FR-016 de la spec 016.
 
 ## Technical Context
 
@@ -64,8 +82,8 @@ adaptador afectadas, 1 puerto nuevo en `core`
 | III. Sin comentarios | Código nuevo sin comentarios; Javadoc solo si una herramienta lo exige. |
 | IV. Pruebas | E2E explícito (tarea propia), pruebas con dos tenants, afirmaciones de `Duration` para SC-004 y SC-006; cobertura ≥80 % líneas y ≥70 % ramas por `verify`. |
 | V. Commits | Una línea, español sin tildes, `tipo(ámbito): descripción`. |
-| VI. Aprobación | El plan queda `Pendiente`; no se generan tareas ni código hasta que el usuario lo marque `Aceptado`. |
-| VII. Sin soluciones temporales | Cierra las cuatro excepciones de la 016. Lo que un proveedor no pueda soportar se documenta con motivo; si fuera una brecha real, se abre excepción con dueño y fecha (ver Riesgos). Se retira el estampado manual de `traceparent` en favor de la observación. |
+| VI. Aprobación | El usuario confirmó Q1 a Q8 y aprobó el plan el 2026-10-05; el Estado del plan es `Aceptado`, por lo que se generan tareas y luego se implementa. |
+| VII. Sin soluciones temporales | Cierra las cuatro excepciones de la 016. Lo que un proveedor no soporte se documenta como "no soportado por el proveedor" con evidencia (fuente y fecha); no abre excepción (Q6). Se retira el estampado manual de `traceparent` en favor de la observación. |
 | IX. Observabilidad | Completa RNF-10: métricas, código de error y traza; `correlationId` y `traceId` cruzan logs y tramos, y el `correlationId` llega al proveedor que lo admita. |
 | RabbitMQ ack manual y DLQ | Sin cambios en el modelo de ack; el tramo de consumo se cierra tras el ack/nack. Sin excepciones. |
 
@@ -99,10 +117,15 @@ Resultado: sin violaciones; sin entradas en Complexity Tracking.
 - Métricas técnicas: se activan `http.server.requests` con histograma de percentiles
   (`management.metrics.distribution.percentiles-histogram`), las del contenedor Rabbit y las de JVM que
   ya autoconfigura Boot; no se escribe código propio para ellas.
-- Exposición: `micrometer-registry-prometheus`; `management.endpoints.web.exposure.include=health,prometheus`;
-  `management.server.port=${MANAGEMENT_PORT:8061}` y `AuthenticationWebFilter` deja de eximir
-  `/actuator` en el puerto público (la API ya no lo sirve allí). Las sondas de la plataforma pasan al
-  puerto de gestión (cambio coordinado, ver Riesgos).
+- Exposición: `micrometer-registry-prometheus`; `management.endpoints.web.exposure.include=health,prometheus`
+  (lista explícita, sin comodines); `management.server.port=${MANAGEMENT_PORT:8061}`. El puerto principal
+  no sirve actuator y `AuthenticationWebFilter` elimina la exención indiscriminada de `/actuator`,
+  limitándola a lo estrictamente necesario. Pruebas: `env`, `beans`, `heapdump`, `configprops`, `loggers`,
+  `threaddump` y `mappings` no responden ni en 8061 ni en 8060; `health` y `prometheus` sí en 8061.
+- Despliegue: README, `docker-compose.yml`, `Dockerfile` (`EXPOSE 8061` junto a 8060) y las sondas de la
+  plataforma pasan al puerto de gestión (cambio coordinado, ver Riesgos).
+- Errores: el contador `notification.errors` lleva `errorCode`, `failureCategory`, `channel` y `provider`
+  (estos últimos solo en el despacho).
 
 ### 3. Trazado
 
@@ -121,13 +144,16 @@ Resultado: sin violaciones; sin entradas en Complexity Tracking.
 
 ### 4. Reenvío a proveedores
 
-- Primera tarea de implementación: verificar la documentación vigente de Brevo, Twilio y FCM y
-  fijar en `research.md` qué campo admite cada una (D5); no se escribe código antes.
+- Primera tarea de la entrega: verificar la documentación vigente de Brevo, Twilio y FCM y fijar en
+  `research.md`, con fuente y fecha de consulta, qué campo admite cada una (D5); no se asume soporte y
+  no se escribe código antes.
 - Brevo: añadir el campo de correlación elegido a `BrevoEmailRequest` (junto al `Idempotency-Key`
   existente, que se conserva) con el valor de `Notification.correlationId`, validado por
   `CorrelationId`.
-- Twilio y FCM: sin cambios de solicitud; el motivo queda documentado y probado con una aserción de
-  que la solicitud saliente no lo lleva (SC-007).
+- Proveedor sin soporte verificado (previsiblemente Twilio y FCM): sin cambios de solicitud; queda
+  "no soportado por el proveedor" con evidencia en `research.md` y una aserción de que la solicitud
+  saliente no lo lleva (SC-007). Si el resultado es ninguno o solo Brevo, no hay excepción del
+  Principio VII.
 
 ## Project Structure
 
@@ -163,12 +189,13 @@ infrastructure/src/main/java/co/edu/uco/notification/infrastructure/
 ├── adapter/in/rest/NotificationExceptionHandler.java        (code)
 ├── adapter/in/rabbit/*, adapter/out/rabbit/*                (errorCode, observación; sin traceparent manual)
 ├── adapter/out/provider/{BrevoEmailRequest,BrevoNotificationProvider,ProviderLogs}.java
-├── adapter/in/web/AuthenticationWebFilter.java              (deja de eximir /actuator en el puerto público)
+├── adapter/in/web/AuthenticationWebFilter.java              (sin exención indiscriminada de /actuator)
 ├── config/{UseCaseConfig,ObservabilityConfig(nuevo),CorrelationContextConfig}.java
 └── resources/{application.yml,logback-spring.xml,static/openapi/api-notificaciones.yaml}
 
 infrastructure/src/test/java/co/edu/uco/notification/infrastructure/
 ├── ObservabilityE2ETest.java                        (E2E: métricas, trazas, logs, errores)
+├── ActuatorExposureE2ETest.java                     (8061 solo health y prometheus; 8060 nada)
 ├── adapter/out/metrics/MicrometerNotificationMetricsTest.java
 └── adapter/out/provider/*CorrelationForwardingTest.java
 ```
@@ -186,6 +213,7 @@ observación en `infrastructure`, sin tocar `core`.
 | Integración adaptador | `MicrometerNotificationMetricsTest` con `SimpleMeterRegistry` | Nombres, etiquetas cerradas, sin etiquetas prohibidas (FR-008) |
 | Integración proveedor | servidor HTTP simulado por proveedor | Brevo lleva el id; Twilio y FCM no (SC-007) |
 | E2E | `ObservabilityE2ETest` (`@SpringBootTest`, Mongo, RabbitMQ, `WebTestClient`, exportador de trazas en memoria) | SC-001 a SC-005, SC-008 con dos tenants; mismo `correlationId` y `traceId` en log, tramos y métricas; el puerto público no sirve métricas; `Duration` afirmada para el endpoint de métricas (SC-004) |
+| E2E exposición | `ActuatorExposureE2ETest` (puertos 8060 y 8061 reales) | `env`, `beans`, `heapdump`, `configprops`, `loggers`, `threaddump`, `mappings` ausentes en ambos; `health` y `prometheus` en 8061 (FR-023 a FR-025, SC-009) |
 | Resiliencia | arranque con endpoint OTLP inalcanzable | La aceptación y el despacho no fallan ni se retrasan (SC-006) |
 | Arquitectura | `HexagonalArchitectureTest`, `ModularityTests` | `core` sin Micrometer ni OpenTelemetry |
 
@@ -196,14 +224,15 @@ demuestra que las métricas sí se emiten. Los mensajes de las pruebas de consum
 ## Riesgos
 
 1. **Mover las sondas al puerto de gestión** rompe los manifiestos de la plataforma si no se coordina.
-   Mitigación: decisión del usuario (Q2) antes de implementar; alternativa documentada en `research.md`.
+   Mitigación: decisión confirmada (Q2); tareas explícitas de README, compose y Dockerfile; aviso al
+   equipo de plataforma en el informe de la entrega.
 2. **Doble origen de `traceparent`** (manual de la 016 y observación). Mitigación: retirar el manual
    en la misma historia y probar que un mensaje lleva una sola cabecera válida.
 3. **Contexto Reactor y `.block()`** en listeners con ack manual: el tramo puede cerrarse antes del ack
    o perder el contexto. Mitigación: prueba E2E de continuidad de `traceId` publicación a consumo.
 4. **Proveedores sin campo de correlación** (probablemente Twilio y FCM): el requisito condicional se
-   cumple solo con Brevo. Si el usuario exige los tres, hace falta una decisión de diseño (por ejemplo
-   `StatusCallback` parametrizado) y posiblemente una excepción nueva con dueño y fecha.
+   cumple solo donde la documentación vigente lo admita; el resto se documenta con evidencia y no abre
+   excepción (Q6).
 5. **Cambio de contrato `ErrorResponse`**: aditivo, pero los clientes con esquema cerrado se ven
    afectados. Mitigación: documentar en `contracts/api-notificaciones-cambios.md` y verificar
    compatibilidad.

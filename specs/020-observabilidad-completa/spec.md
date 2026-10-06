@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-05
 
-**Status**: Draft (clarificaciones pendientes de confirmación del usuario)
+**Status**: Clarificaciones confirmadas por el usuario el 2026-10-05; plan aceptado
 
 **Input**: User description: "Entregar ahora, sin diferir, las cuatro excepciones del Principio VII que dejó
 la spec 016: métricas técnicas y de negocio de RNF-10, reenvío del identificador de correlación a los
@@ -27,40 +27,37 @@ HU2-073) y los endpoints de actuator expuestos por defecto son los de salud.
 
 ### Session 2026-10-05
 
-Preguntas que requieren decisión del usuario. No fueron respondidas: cada una lleva una respuesta
-recomendada marcada como **pendiente de confirmación**. El plan se escribe sobre las recomendaciones y
-se revisa si el usuario decide otra cosa.
+Decisiones CONFIRMADAS por el usuario el 2026-10-05, tal como las decidió.
 
-- Q1: ¿Backend de métricas y forma de exponerlas? -> Recomendado (pendiente de confirmación):
-  Micrometer con registro Prometheus, extraído por la plataforma en `/actuator/prometheus`. Alternativa:
-  empujar métricas por OTLP.
-- Q2: ¿Protección del endpoint de métricas? Hoy `AuthenticationWebFilter` exime `/actuator` completo. ->
-  Recomendado (pendiente de confirmación): puerto de gestión separado (`management.server.port`,
-  por defecto 8061) no publicado fuera del clúster; el puerto de la API (8060) no expone `metrics` ni
-  `prometheus`.
-- Q3: ¿Qué métricas de negocio? -> Recomendado (pendiente de confirmación): contadores
-  `notification.accepted`, `notification.dispatched` (resultado: `delivered`, `recoverable`, `failed`,
-  `discarded`), `notification.attempts` y `notification.provider.duration` (temporizador), etiquetados
-  por `channel` y `provider`; sin etiqueta `tenantId` (cardinalidad no acotada). Ver FR-001 a FR-005.
-- Q4: ¿Formato del `ErrorCode`? -> Recomendado (pendiente de confirmación): `enum` en `utils` con un
-  entero estable por código y su representación textual `NTF-<entero>` (rangos: 1xxx validación, 2xxx
-  autenticación y autorización, 3xxx negocio, 4xxx proveedor, 5xxx infraestructura); cada código
-  declara su `FailureCategory`. Alternativa: códigos alfanuméricos por dominio (`NTF-VAL-001`).
-- Q5: ¿Se expone `ErrorCode` al cliente? -> Recomendado (pendiente de confirmación): sí, como campo
-  `code` del `ErrorResponse` (cambio aditivo y compatible) además del log y las métricas.
-- Q6: ¿Qué proveedores admiten propagar el id? -> Recomendado (pendiente de confirmación): Brevo, por
-  su mecanismo de datos personalizados del mensaje; Twilio y FCM no tienen un campo de correlación
-  que no sea visible al destinatario o a la app, por lo que no se envía. La verificación contra la
-  documentación vigente de cada API es una tarea previa a implementar (ver `research.md`). Si algún
-  proveedor no puede, se registra como excepción del Principio VII con dueño y fecha (FR-020).
-- Q7: ¿Destino y muestreo del trazado? -> Recomendado (pendiente de confirmación): exportación OTLP
-  por HTTP configurada por variable de entorno, desactivada si no hay endpoint, muestreo
-  `management.tracing.sampling.probability` por variable de entorno con valor por defecto 0.1 en
-  producción y 1.0 en local/pruebas.
-- Q8: ¿`traceId` sustituye al `correlationId`? -> Recomendado (pendiente de confirmación): no. El
-  `correlationId` sigue siendo el identificador de negocio (persistido, devuelto al cliente); `traceId`
-  se añade como campo de log aparte. Esto reemplaza la restricción de la 016 que impedía interpretar y
-  generar `traceparent` (FR-016 de la 016).
+- Q1 (CONFIRMADA 2026-10-05): Prometheus por pull en `/actuator/prometheus`, con Micrometer y registro
+  Prometheus. No se empujan métricas por OTLP.
+- Q2 (CONFIRMADA 2026-10-05): puerto de gestión separado (`management.server.port`, por defecto 8061),
+  no publicado fuera del clúster. NO se exime `/actuator/**` indiscriminadamente en
+  `AuthenticationWebFilter`: en el puerto de gestión se expone solo lo aprobado explícitamente
+  (`prometheus` y los endpoints operativos aprobados, es decir `health` con sus sondas `liveness` y
+  `readiness`), y la exención del filtro en el puerto principal (8060) se limita a lo estrictamente
+  necesario (ninguna ruta de actuator si el puerto de gestión sirve las sondas). Los demás endpoints de
+  actuator (`env`, `beans`, `heapdump`, `configprops`, `loggers`, `threaddump`, `mappings`, etc.) no
+  quedan expuestos ni en 8061 ni en 8060 (FR-023 a FR-026).
+- Q3 (CONFIRMADA 2026-10-05): métricas de negocio `notification.accepted`, `notification.attempts`,
+  `notification.dispatched`, `notification.provider.duration` y `notification.errors`, con dimensiones
+  `channel` y `provider` (más `result` y `errorCode` donde corresponda, de catálogo cerrado) y sin
+  `tenantId`. Ver FR-001 a FR-005.
+- Q4 (CONFIRMADA 2026-10-05): `enum ErrorCode` en `utils`, entero estable más texto `NTF-<n>`, rangos por
+  categoría 1xxx a 5xxx (1xxx validación, 2xxx autenticación y autorización, 3xxx negocio, 4xxx
+  proveedor, 5xxx infraestructura); cada código declara su `FailureCategory`.
+- Q5 (CONFIRMADA 2026-10-05): campo aditivo `code` en `ErrorResponse`, además del log y las métricas.
+- Q6 (CONFIRMADA 2026-10-05): NO se asume soporte de ningún proveedor. La primera tarea es verificar en
+  la documentación vigente de Brevo, Twilio y FCM si admiten enviar o recibir un identificador útil de
+  correlación. Se implementa la correlación solo donde esté soportada y se documenta con evidencia
+  (fuente y fecha de consulta) en `research.md` cada proveedor que no la soporte. Si ninguno o solo
+  Brevo la soporta, NO se abre excepción del Principio VII: queda como "no soportado por el proveedor"
+  documentado.
+- Q7 (CONFIRMADA 2026-10-05): exportación OTLP/HTTP solo si hay endpoint configurado; muestreo 1.0 en
+  local y 0.1 en producción.
+- Q8 (CONFIRMADA 2026-10-05): `traceId` y `correlationId` tienen propósitos distintos; el `traceId` no
+  reemplaza al `correlationId` (negocio, persistido, devuelto al cliente). Esto sustituye el FR-016 de
+  la spec 016 (anotado también en `specs/016-logs-correlation-id/spec.md`).
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -180,8 +177,8 @@ sin campo admitido, comprobar que la solicitud no lo lleva y que está documenta
 - Cardinalidad: ninguna etiqueta de métrica admite valores no acotados (`tenantId`, `notificationId`,
   `correlationId`, destinatario). Solo `channel`, `provider`, `result`, `errorCode` y valores de
   catálogo cerrado.
-- Exposición: el endpoint de métricas no devuelve nada sensible ni los valores de configuración; y no
-  es accesible desde el puerto público de la API.
+- Exposición: el endpoint de métricas no devuelve nada sensible ni los valores de configuración; no
+  es accesible desde el puerto público de la API, y ningún otro endpoint de actuator está expuesto.
 - Rendimiento: instrumentar no puede romper RNF-02 (≤ 200 ms p95 de aceptación) ni bloquear hilos
   reactivos; el exportador de trazas es asíncrono y por lotes.
 - Pérdida de la traza: si el colector no responde, el servicio degrada a solo logs y métricas; nunca
@@ -203,7 +200,7 @@ sin campo admitido, comprobar que la solicitud no lo lleva y que está documenta
 **Métricas**
 
 - **FR-001**: El servicio MUST exponer métricas en un endpoint de consulta externa en formato
-  Prometheus, en un puerto de gestión no público (Q1, Q2).
+  Prometheus (`/actuator/prometheus`, pull), en un puerto de gestión (8061) no público (Q1, Q2).
 - **FR-002**: El servicio MUST registrar el contador `notification.accepted` por `channel`, contando
   cada notificación aceptada (incluidas las de lote) una sola vez; una reaceptación idempotente no
   incrementa el contador.
@@ -211,8 +208,9 @@ sin campo admitido, comprobar que la solicitud no lo lleva y que está documenta
   y `notification.attempts` por `channel` y `provider`, una vez por intento de despacho.
 - **FR-004**: El servicio MUST registrar un temporizador `notification.provider.duration` por
   `provider` y `result`, con histograma para p95 y p99.
-- **FR-005**: El servicio MUST registrar métricas de errores por `errorCode` y `failureCategory` sin
-  etiquetas de cardinalidad no acotada.
+- **FR-005**: El servicio MUST registrar el contador `notification.errors` por `errorCode`,
+  `failureCategory`, `channel` y `provider` (estos dos últimos cuando el error ocurre en el despacho)
+  sin etiquetas de cardinalidad no acotada.
 - **FR-006**: Las métricas técnicas MUST cubrir latencia (percentiles), rendimiento y tasa de error de
   la API y del consumo de mensajería, más estado del proceso (JVM, hilos, memoria) y de los clientes
   de MongoDB y RabbitMQ en la medida en que la plataforma ya los instrumente.
@@ -253,11 +251,14 @@ sin campo admitido, comprobar que la solicitud no lo lleva y que está documenta
 
 **Reenvío a proveedores**
 
-- **FR-019**: Para cada proveedor cuya API admita un campo de correlación no visible para el
-  destinatario, el adaptador MUST enviar el `correlationId` persistido de la notificación (Q6).
-- **FR-020**: Para cada proveedor que no lo admita, la spec MUST registrar el motivo y, si el
-  requisito no puede cumplirse, una excepción del Principio VII con dueño y fecha; no se improvisa un
-  canal alternativo.
+- **FR-019**: La primera tarea de la entrega de proveedores MUST verificar, en la documentación vigente
+  de Brevo, Twilio y FCM, si admiten enviar o recibir un identificador útil de correlación no visible
+  para el destinatario, y dejar la evidencia (fuente y fecha de consulta) en `research.md`. No se
+  asume soporte de ningún proveedor (Q6).
+- **FR-020**: Para cada proveedor cuya API lo admita, el adaptador MUST enviar el `correlationId`
+  persistido de la notificación. Para cada proveedor que no lo admita, `research.md` MUST registrar
+  "no soportado por el proveedor" con la evidencia; no se improvisa un canal alternativo ni se abre
+  excepción del Principio VII por ese motivo.
 - **FR-021**: El `correlationId` enviado al proveedor MUST haber pasado por `CorrelationId`
   (1 a 64 caracteres del conjunto permitido); un valor inválido no se envía.
 
@@ -266,6 +267,23 @@ sin campo admitido, comprobar que la solicitud no lo lleva y que está documenta
 - **FR-022**: Una prueba E2E por flujo MUST recorrer aceptación, publicación, consumo, despacho
   simulado y lectura de métricas, trazas y logs, y afirmar los tres señales con el mismo
   `correlationId` y `traceId`.
+
+**Exposición de actuator (Q2)**
+
+- **FR-023**: El puerto de gestión (8061) MUST exponer únicamente `health` (con las sondas `liveness` y
+  `readiness`) y `prometheus`; la lista se declara de forma explícita en
+  `management.endpoints.web.exposure.include` y ningún otro endpoint de actuator (`env`, `beans`,
+  `heapdump`, `configprops`, `loggers`, `threaddump`, `mappings`, `metrics`, `info` y demás) responde
+  en 8061.
+- **FR-024**: El puerto principal (8060) MUST NOT servir ningún endpoint de actuator, y
+  `AuthenticationWebFilter` MUST NOT eximir `/actuator/**` de forma indiscriminada: la exención se
+  limita a lo estrictamente necesario para el puerto principal (ninguna ruta de actuator mientras el
+  puerto de gestión sirva las sondas).
+- **FR-025**: Pruebas automatizadas MUST verificar que `env`, `beans`, `heapdump`, `configprops`,
+  `loggers`, `threaddump` y `mappings` no están expuestos ni en 8061 ni en 8060, y que `prometheus` y
+  `health` responden solo en 8061 (control positivo).
+- **FR-026**: El README, `docker-compose.yml`, el `Dockerfile` (`EXPOSE`) y las sondas documentadas
+  MUST actualizarse para el puerto de gestión 8061 en la misma entrega que lo introduce.
 
 ### Key Entities
 
@@ -294,6 +312,8 @@ sin campo admitido, comprobar que la solicitud no lo lleva y que está documenta
 - **SC-007**: Para cada proveedor con campo admitido, 100 % de las solicitudes salientes de prueba
   llevan el `correlationId`; para los demás, 0 solicitudes lo llevan.
 - **SC-008**: Con dos tenants concurrentes, 0 métricas o tramos exponen o mezclan datos de tenant.
+- **SC-009**: De los endpoints de actuator no aprobados (`env`, `beans`, `heapdump`, `configprops`,
+  `loggers`, `threaddump`, `mappings`), 0 responden con contenido en 8060 o en 8061.
 
 ## Assumptions
 
@@ -301,10 +321,10 @@ sin campo admitido, comprobar que la solicitud no lo lleva y que está documenta
 - El colector OTLP y el servidor de métricas los provee la plataforma; su elección, retención y
   alertas quedan fuera de alcance (igual que el agregador de logs en la 016).
 - La autenticación interina y el aislamiento por tenant (HU2-096) siguen vigentes; el puerto de
-  gestión no requiere autenticación porque no es accesible desde fuera del clúster (Q2).
+  gestión no requiere autenticación porque no es accesible desde fuera del clúster y solo expone
+  `health` y `prometheus` (Q2).
 - `FailureCategory` se conserva; `ErrorCode` la complementa, no la sustituye.
 - Las excepciones del Principio VII de la 016 (métricas, reenvío a proveedores, `ErrorCode`) y la de
-  Micrometer Tracing/OpenTelemetry quedan cerradas al aprobarse esta historia; solo lo que un
-  proveedor no pueda soportar permanece como excepción nueva con dueño (equipo de desarrollo del
-  componente) y fecha acordada con el usuario.
+  Micrometer Tracing/OpenTelemetry quedan cerradas al entregarse esta historia. Lo que un proveedor no
+  soporte queda documentado como "no soportado por el proveedor" y no abre excepción nueva (Q6).
 - Los umbrales de alerta, tableros y SLO quedan fuera de alcance; solo se entregan las señales.

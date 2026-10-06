@@ -1,6 +1,6 @@
 # Contrato operativo: métricas y trazas
 
-Propuesto; pendiente de confirmación (Q1 a Q3, Q7). Los nombres siguen la convención de Micrometer;
+Confirmado por el usuario el 2026-10-05 (Q1 a Q3, Q7). Los nombres siguen la convención de Micrometer;
 Prometheus los muestra con puntos convertidos a guion bajo y sufijos `_total` y `_seconds`.
 
 ## Exposición
@@ -9,7 +9,8 @@ Prometheus los muestra con puntos convertidos a guion bajo y sufijos `_total` y 
 |---|---|
 | Puerto de gestión | `MANAGEMENT_PORT`, por defecto 8061; no se publica fuera del clúster |
 | Endpoints | `/actuator/health` (liveness y readiness) y `/actuator/prometheus` |
-| Puerto de la API (8060) | No sirve `prometheus` ni `metrics` |
+| Puerto de la API (8060) | No sirve ningún endpoint de actuator |
+| Endpoints no aprobados | `env`, `beans`, `heapdump`, `configprops`, `loggers`, `threaddump`, `mappings`, `metrics`, `info` no se exponen ni en 8061 ni en 8060 (lista de exposición explícita) |
 | Trazas | OTLP por HTTP si `OTEL_EXPORTER_OTLP_ENDPOINT` (o la propiedad equivalente) está definido; si no, sin exportador |
 | Muestreo | `management.tracing.sampling.probability` por variable de entorno; 0.1 en producción, 1.0 en local y pruebas |
 
@@ -21,7 +22,7 @@ Prometheus los muestra con puntos convertidos a guion bajo y sufijos `_total` y 
 | `notification.attempts` | contador | `channel`, `provider` | Una vez por intento de despacho |
 | `notification.dispatched` | contador | `channel`, `provider`, `result` (`delivered`, `recoverable`, `failed`, `discarded`) | Una vez por resultado de un intento |
 | `notification.provider.duration` | temporizador con histograma | `provider`, `result` | Una vez por llamada al proveedor |
-| `notification.errors` | contador | `errorCode`, `failureCategory` | Una vez por fallo registrado |
+| `notification.errors` | contador | `errorCode`, `failureCategory`, `channel`, `provider` (estas dos solo en el despacho) | Una vez por fallo registrado |
 
 ## Métricas técnicas (autoconfiguradas por Boot, sin código propio)
 

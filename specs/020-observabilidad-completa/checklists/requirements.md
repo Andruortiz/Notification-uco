@@ -6,5 +6,5 @@
 - [x] Casos límite identificados (cardinalidad, exposición, degradación del colector, lote)
 - [x] Alcance acotado (tableros, alertas y SLO fuera)
 - [x] Dependencias y supuestos explícitos
-- [ ] Q1 a Q8 confirmadas por el usuario (pendiente)
+- [x] Q1 a Q8 confirmadas por el usuario (2026-10-05)
 - [ ] Verificación de capacidades de proveedores contra su documentación (primera tarea de implementación)

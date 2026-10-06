@@ -1,7 +1,7 @@
 # Research: Observabilidad completa (020)
 
-Las decisiones marcadas "pendiente de confirmación" repiten las preguntas de `spec.md`
-(Clarifications); ninguna está resuelta hasta que el usuario responda.
+Las decisiones Q1 a Q8 de `spec.md` (Clarifications) fueron CONFIRMADAS por el usuario el
+2026-10-05; este documento conserva el análisis de alternativas.
 
 ## Estado heredado de la 016 (no se duplica)
 
@@ -19,7 +19,7 @@ Las decisiones marcadas "pendiente de confirmación" repiten las preguntas de `s
 - `core` registra fallos con `System.Logger` y texto `category=` (`DispatchNotificationService`,
   `RequeuePendingNotificationsService`).
 
-## D1 — Backend y exposición de métricas (pendiente de confirmación: Prometheus por pull)
+## D1 — Backend y exposición de métricas (CONFIRMADA 2026-10-05: Prometheus por pull)
 
 | Opción | Pros | Contras |
 |---|---|---|
@@ -27,7 +27,7 @@ Las decisiones marcadas "pendiente de confirmación" repiten las preguntas de `s
 | B. Exportar métricas por OTLP | Un solo canal de salida con las trazas | Requiere colector con soporte de métricas; menos legible para depurar localmente |
 | C. Solo `/actuator/metrics` | Sin dependencia | Formato propio de Boot; no lo consume una plataforma estándar |
 
-Protección (pendiente de confirmación): puerto de gestión separado (`management.server.port`, 8061)
+Protección (CONFIRMADA 2026-10-05, sin exención indiscriminada de `/actuator/**`): puerto de gestión separado (`management.server.port`, 8061)
 con `health` y `prometheus`; la API (8060) deja de exponer actuator. Riesgo: las sondas hoy apuntan
 al 8060; moverlas obliga a cambiar los manifiestos de la plataforma. Alternativa de menor impacto:
 mantener un solo puerto y exigir autenticación (rol `ADMINISTRADOR`) a `/actuator/prometheus` en lugar
@@ -51,7 +51,7 @@ decorador de cada adaptador; se mide en el caso de uso para no repetirla en tres
 Cardinalidad: `channel` (3 valores), `provider` (3 + simulado), `result` (4), `errorCode` (cerrado).
 `tenantId` excluido: una métrica por tenant crece sin cota; el análisis por tenant se hace con logs.
 
-## D3 — Formato y alcance de `ErrorCode` (pendiente de confirmación)
+## D3 — Formato y alcance de `ErrorCode` (CONFIRMADA 2026-10-05)
 
 Estado de los fallos hoy: `FailureCategory` (3 valores), cadenas de texto en `core`, `message`
 libre en `ErrorResponse`, motivos en `AttachmentRejectionReason` y `AttemptResult`.
@@ -66,7 +66,7 @@ libre en `ErrorResponse`, motivos en `AttachmentRejectionReason` y `AttemptResul
 excepciones y motivos concretos ocurre en `infrastructure` (`NotificationExceptionHandler`,
 `ProviderLogs`, listeners); `core` solo transporta códigos.
 
-Rangos propuestos (pendiente): 1xxx validación de entrada y de formato; 2xxx autenticación y
+Rangos confirmados: 1xxx validación de entrada y de formato; 2xxx autenticación y
 autorización; 3xxx reglas de negocio (idempotencia, adjuntos, límites de lote, preferencias, estado
 inválido); 4xxx proveedor (rechazo, tiempo de espera, 5xx, credencial, deshabilitado); 5xxx
 infraestructura (MongoDB, RabbitMQ, almacenamiento, configuración).
@@ -109,7 +109,7 @@ generar" `traceparent`; aquí se interpreta y se genera. `TraceParent` (utils) d
 transporte AMQP; se decide en el plan si se conserva solo para validación del valor de entrada o se
 elimina.
 
-## D5 — Reenvío del correlationId a los proveedores (pendiente de confirmación)
+## D5 — Reenvío del correlationId a los proveedores (CONFIRMADA 2026-10-05: sin asumir soporte)
 
 La capacidad de cada API se verifica contra su documentación vigente en la primera tarea de
 implementación; esta tabla es la hipótesis de trabajo, no un hecho verificado.
@@ -120,10 +120,18 @@ implementación; esta tabla es la hipótesis de trabajo, no un hecho verificado.
 | Twilio (SMS) | ninguno propio de correlación; `StatusCallback` con parámetro en la URL | No hay campo que no sea parte de la URL de callback; usar la URL contamina el contrato | No soportado de forma limpia; se documenta |
 | FCM (push, HTTP v1) | `data` del mensaje | `data` llega a la app del usuario; no es un campo operativo | No se envía; se documenta |
 
-Si la verificación confirma que solo Brevo lo admite, la historia cumple el "cuando su API lo permita"
-con Brevo y deja constancia para Twilio y FCM; no es una excepción nueva porque el requisito
-condicionaba al soporte del proveedor. Se avisa al usuario antes de dar por cerrada la excepción de la
-016.
+Decisión del usuario: no se asume soporte; se verifica en la documentación vigente y se implementa solo
+donde esté soportado. Si ninguno o solo Brevo lo admite, no se abre excepción del Principio VII: queda
+"no soportado por el proveedor" con evidencia (fuente y fecha de consulta) en la sección de
+verificación siguiente.
+
+### Verificación en la documentación vigente (se completa en la primera tarea de la entrega 4)
+
+| Proveedor | Fuente consultada | Fecha | Resultado |
+|---|---|---|---|
+| Brevo | por completar | por completar | por completar |
+| Twilio | por completar | por completar | por completar |
+| FCM | por completar | por completar | por completar |
 
 El valor se toma de `Notification.correlationId` (persistido), no del MDC, para que un reencolado desde
 el planificador reenvíe el mismo identificador.

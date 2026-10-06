@@ -1,6 +1,6 @@
 # Cambios al contrato de la API (api-notificaciones.yaml)
 
-Se aplican al YAML antes de tocar el handler (Principio II). Pendiente de confirmación (Q5).
+Se aplican al YAML antes de tocar el handler (Principio II). Confirmado por el usuario el 2026-10-05 (Q5).
 
 ## ErrorResponse
 

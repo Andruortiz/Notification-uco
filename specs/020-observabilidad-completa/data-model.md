@@ -1,7 +1,7 @@
 # Data Model: Observabilidad completa (020)
 
 Sin cambios de esquema en MongoDB ni en los mensajes de RabbitMQ (salvo retirar el estampado manual de
-`traceparent`, que la observación sustituye). Pendiente de confirmación (Q4): los rangos y nombres.
+`traceparent`, que la observación sustituye). Rangos y formato confirmados por el usuario el 2026-10-05 (Q4); los nombres concretos se fijan al implementar.
 
 ## ErrorCode (utils)
 

@@ -10,10 +10,10 @@ import co.edu.uco.notification.infrastructure.config.CorrelationContext;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
+import co.edu.uco.notification.infrastructure.config.ReactorObservations;
 import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
-import co.edu.uco.notification.utils.TraceParent;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
@@ -56,21 +56,23 @@ public class NotificationRabbitPublisher implements NotificationEventPublisherPo
               notification.correlationId() != null
                   ? notification.correlationId()
                   : CorrelationContext.from(context);
-          final TraceParent traceParent = CorrelationContext.traceFrom(context);
           return Mono.<Void>fromRunnable(
                   () ->
-                      rabbitTemplate.convertAndSend(
-                          properties.dispatch().exchange(),
-                          properties.dispatch().routingKey(),
-                          notification.notificationId().value(),
-                          message -> {
-                            message
-                                .getMessageProperties()
-                                .setMessageId(notification.notificationId().value());
-                            CorrelationContext.stamp(
-                                message.getMessageProperties(), correlationId, traceParent);
-                            return message;
-                          }))
+                      ReactorObservations.run(
+                          context,
+                          () ->
+                              rabbitTemplate.convertAndSend(
+                                  properties.dispatch().exchange(),
+                                  properties.dispatch().routingKey(),
+                                  notification.notificationId().value(),
+                                  message -> {
+                                    message
+                                        .getMessageProperties()
+                                        .setMessageId(notification.notificationId().value());
+                                    CorrelationContext.stamp(
+                                        message.getMessageProperties(), correlationId);
+                                    return message;
+                                  })))
               .subscribeOn(Schedulers.boundedElastic());
         });
   }
@@ -81,17 +83,16 @@ public class NotificationRabbitPublisher implements NotificationEventPublisherPo
     return Mono.deferContextual(
         context -> {
           final CorrelationId correlationId = CorrelationContext.from(context);
-          final TraceParent traceParent = CorrelationContext.traceFrom(context);
           return Mono.<Void>fromRunnable(
-                  () -> events.forEach(event -> publishEvent(event, correlationId, traceParent)))
+                  () ->
+                      ReactorObservations.run(
+                          context,
+                          () -> events.forEach(event -> publishEvent(event, correlationId))))
               .subscribeOn(Schedulers.boundedElastic());
         });
   }
 
-  private void publishEvent(
-      final DomainEvent event,
-      final CorrelationId contextCorrelationId,
-      final TraceParent traceParent) {
+  private void publishEvent(final DomainEvent event, final CorrelationId contextCorrelationId) {
     final CorrelationId correlationId =
         event.correlationId() != null ? event.correlationId() : contextCorrelationId;
     try {
@@ -100,7 +101,7 @@ public class NotificationRabbitPublisher implements NotificationEventPublisherPo
           "",
           objectMapper.writeValueAsString(event),
           message -> {
-            CorrelationContext.stamp(message.getMessageProperties(), correlationId, traceParent);
+            CorrelationContext.stamp(message.getMessageProperties(), correlationId);
             return message;
           });
     } catch (final JsonProcessingException e) {

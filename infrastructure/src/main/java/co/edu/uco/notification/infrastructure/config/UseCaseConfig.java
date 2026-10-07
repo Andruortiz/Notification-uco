@@ -13,7 +13,6 @@ import co.edu.uco.notification.core.port.out.LastKnownConfigurationPort;
 import co.edu.uco.notification.core.port.out.MalwareScannerPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
-import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
 import co.edu.uco.notification.core.port.out.ParametersSourcePort;
@@ -25,7 +24,6 @@ import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.usecase.*;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -170,12 +168,6 @@ public class UseCaseConfig {
         eventPublisherPort,
         attachmentResolver,
         metricsPort);
-  }
-
-  @Bean
-  NotificationSenderRegistry notificationSenderRegistry(
-      final List<NotificationSenderPort> notificationSenderPorts) {
-    return new NotificationSenderRegistry(notificationSenderPorts);
   }
 
   @Bean

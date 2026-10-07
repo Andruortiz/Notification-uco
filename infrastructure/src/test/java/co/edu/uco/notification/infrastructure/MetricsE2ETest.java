@@ -456,7 +456,11 @@ class MetricsE2ETest {
         "http.server.requests must expose a histogram for percentiles");
     assertTrue(sum(series, "http_server_requests_seconds_count", "uri", "/notifications") >= 1);
     assertTrue(
-        series.stream().anyMatch(entry -> entry.name().startsWith("spring_rabbitmq_listener")),
+        series.stream()
+            .anyMatch(
+                entry ->
+                    entry.name().startsWith("spring_rabbit_listener")
+                        || entry.name().startsWith("spring_rabbitmq_listener")),
         "the Rabbit consumer must be measured");
     assertTrue(series.stream().anyMatch(entry -> entry.name().equals("jvm_memory_used_bytes")));
     assertTrue(series.stream().anyMatch(entry -> entry.name().equals("jvm_threads_live_threads")));

@@ -1,10 +1,13 @@
 package co.edu.uco.notification.infrastructure.adapter.out.rabbit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -18,8 +21,12 @@ import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.utils.CorrelationId;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
 import java.time.Instant;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.core.Message;
@@ -241,5 +248,50 @@ class NotificationRabbitPublisherTest {
     assertThrows(
         NullPointerException.class,
         () -> new NotificationRabbitPublisher(rabbitTemplate, objectMapper, null));
+  }
+
+  @Test
+  void theMessageCarriesNoHandStampedTraceparentAndIsSentInsideTheContextObservation() {
+    final ObservationRegistry registry = ObservationRegistry.create();
+    registry.observationConfig().observationHandler(context -> true);
+    final Observation observation = Observation.start("test.parent", registry);
+    final AtomicReference<Observation> current = new AtomicReference<>();
+    final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
+    doAnswer(
+            invocation -> {
+              current.set(registry.getCurrentObservation());
+              return null;
+            })
+        .when(rabbitTemplate)
+        .convertAndSend(
+            any(String.class),
+            any(String.class),
+            any(Object.class),
+            any(MessagePostProcessor.class));
+    final NotificationRabbitPublisher publisher =
+        new NotificationRabbitPublisher(rabbitTemplate, objectMapper(), PROPERTIES);
+
+    StepVerifier.create(
+            publisher
+                .enqueueForDispatch(aNotification(CorrelationId.of("corr-1")))
+                .contextWrite(
+                    context ->
+                        context
+                            .put(ObservationThreadLocalAccessor.KEY, observation)
+                            .put(
+                                "traceparent",
+                                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01")))
+        .verifyComplete();
+
+    final ArgumentCaptor<MessagePostProcessor> postProcessor =
+        ArgumentCaptor.forClass(MessagePostProcessor.class);
+    verify(rabbitTemplate)
+        .convertAndSend(
+            any(String.class), any(String.class), any(Object.class), postProcessor.capture());
+    final Message message = new Message(new byte[0], new MessageProperties());
+    postProcessor.getValue().postProcessMessage(message);
+    assertFalse(message.getMessageProperties().getHeaders().containsKey("traceparent"));
+    assertSame(observation, current.get());
+    observation.stop();
   }
 }

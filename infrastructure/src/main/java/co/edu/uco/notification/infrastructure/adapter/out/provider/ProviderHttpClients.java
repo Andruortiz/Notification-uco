@@ -20,6 +20,12 @@ public class ProviderHttpClients {
       String providerId, String baseUrl, long responseTimeoutMs, long connectTimeoutMs) {}
 
   private final Map<ClientKey, WebClient> clients = new ConcurrentHashMap<>();
+  private final WebClient.Builder webClientBuilder;
+
+  public ProviderHttpClients(final WebClient.Builder webClientBuilder) {
+    this.webClientBuilder =
+        Preconditions.requireNonNull(webClientBuilder, "webClientBuilder must not be null");
+  }
 
   public WebClient client(
       final String providerId, final String baseUrl, final ConfigurationSnapshot snapshot) {
@@ -32,7 +38,7 @@ public class ProviderHttpClients {
             baseUrl,
             snapshot.providerTimeoutMs(providerId),
             snapshot.providerConnectTimeoutMs(providerId));
-    return clients.computeIfAbsent(key, ProviderHttpClients::build);
+    return clients.computeIfAbsent(key, this::build);
   }
 
   static Supplier<WebClient> providerClientSource(
@@ -50,12 +56,13 @@ public class ProviderHttpClients {
     return () -> fixedClient;
   }
 
-  private static WebClient build(final ClientKey key) {
+  private WebClient build(final ClientKey key) {
     final HttpClient httpClient =
         HttpClient.create()
             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, Math.toIntExact(key.connectTimeoutMs()))
             .responseTimeout(Duration.ofMillis(key.responseTimeoutMs()));
-    return WebClient.builder()
+    return webClientBuilder
+        .clone()
         .baseUrl(key.baseUrl())
         .clientConnector(new ReactorClientHttpConnector(httpClient))
         .build();

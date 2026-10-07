@@ -42,29 +42,16 @@ class CorrelationContextConfigTest {
   }
 
   @Test
-  void tenantNotificationAndTraceparentAreAlsoBridgedToTheMdc() {
-    final String trace = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+  void tenantAndNotificationAreAlsoBridgedToTheMdc() {
     final String seen =
         Mono.just("x")
             .publishOn(Schedulers.parallel())
-            .map(
-                ignored ->
-                    MDC.get(LogFields.TENANT_ID)
-                        + "#"
-                        + MDC.get(LogFields.NOTIFICATION_ID)
-                        + "#"
-                        + MDC.get(LogFields.TRACE_PARENT))
+            .map(ignored -> MDC.get(LogFields.TENANT_ID) + "#" + MDC.get(LogFields.NOTIFICATION_ID))
             .contextWrite(
-                Context.of(
-                    LogFields.TENANT_ID,
-                    "tenant-a",
-                    LogFields.NOTIFICATION_ID,
-                    "n-1",
-                    LogFields.TRACE_PARENT,
-                    trace))
+                Context.of(LogFields.TENANT_ID, "tenant-a", LogFields.NOTIFICATION_ID, "n-1"))
             .block(Duration.ofSeconds(5));
 
-    assertEquals("tenant-a#n-1#" + trace, seen);
+    assertEquals("tenant-a#n-1", seen);
   }
 
   @Test

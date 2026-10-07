@@ -41,7 +41,6 @@ import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.TraceParent;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
@@ -724,22 +723,5 @@ class NotificationControllerTest {
 
     assertNotNull(echoed);
     assertFalse(echoed.contains(" "));
-  }
-
-  @Test
-  void aValidTraceparentIsEchoedInTheResponse() {
-    final NotificationId id = NotificationId.newId();
-    when(getNotificationStatusUseCase.getStatus(any()))
-        .thenReturn(Mono.error(new NotificationNotFoundException(id)));
-    final String traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
-
-    webTestClient
-        .get()
-        .uri("/notifications/{id}", id.value())
-        .header("Authorization", TestTokens.bearer("tenant-1"))
-        .header(TraceParent.HEADER, traceparent)
-        .exchange()
-        .expectHeader()
-        .valueEquals(TraceParent.HEADER, traceparent);
   }
 }

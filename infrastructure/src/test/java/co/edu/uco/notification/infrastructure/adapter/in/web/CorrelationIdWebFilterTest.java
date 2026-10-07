@@ -12,7 +12,6 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenIssuer;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.TraceParent;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,8 +27,6 @@ import reactor.test.StepVerifier;
 
 class CorrelationIdWebFilterTest {
 
-  private static final String TRACEPARENT =
-      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
   private static final String SECRET = "test-only-secret-never-used-in-production-0123456789abcdef";
 
   private final CorrelationIdWebFilter filter = new CorrelationIdWebFilter();
@@ -102,35 +99,16 @@ class CorrelationIdWebFilterTest {
   }
 
   @Test
-  void aValidTraceparentIsExposedInTheContextAndEchoedInTheResponse() {
+  void theTraceparentRequestHeaderIsNeitherEchoedNorPutInTheContext() {
     final MockServerWebExchange exchange =
         MockServerWebExchange.from(
-            MockServerHttpRequest.get("/notifications").header(TraceParent.HEADER, TRACEPARENT));
-    final AtomicReference<String> seen = new AtomicReference<>();
+            MockServerHttpRequest.get("/notifications")
+                .header("traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"));
 
-    StepVerifier.create(filter.filter(exchange, capturingTrace(seen))).verifyComplete();
+    StepVerifier.create(filter.filter(exchange, capturing(new AtomicReference<>())))
+        .verifyComplete();
 
-    assertEquals(TRACEPARENT, seen.get());
-    assertEquals(TRACEPARENT, exchange.getResponse().getHeaders().getFirst(TraceParent.HEADER));
-  }
-
-  @Test
-  void anInvalidOrMissingTraceparentIsDroppedWithoutGeneratingOne() {
-    final MockServerWebExchange invalid =
-        MockServerWebExchange.from(
-            MockServerHttpRequest.get("/notifications").header(TraceParent.HEADER, "garbage"));
-    final MockServerWebExchange missing =
-        MockServerWebExchange.from(MockServerHttpRequest.get("/notifications"));
-    final AtomicReference<String> seenInvalid = new AtomicReference<>();
-    final AtomicReference<String> seenMissing = new AtomicReference<>();
-
-    StepVerifier.create(filter.filter(invalid, capturingTrace(seenInvalid))).verifyComplete();
-    StepVerifier.create(filter.filter(missing, capturingTrace(seenMissing))).verifyComplete();
-
-    assertNull(seenInvalid.get());
-    assertNull(seenMissing.get());
-    assertNull(invalid.getResponse().getHeaders().getFirst(TraceParent.HEADER));
-    assertNull(missing.getResponse().getHeaders().getFirst(TraceParent.HEADER));
+    assertNull(exchange.getResponse().getHeaders().getFirst("traceparent"));
   }
 
   @Test
@@ -239,15 +217,6 @@ class CorrelationIdWebFilterTest {
         Mono.deferContextual(
             context -> {
               seen.set(context.get(CorrelationId.CONTEXT_KEY));
-              return Mono.empty();
-            });
-  }
-
-  private static WebFilterChain capturingTrace(final AtomicReference<String> seen) {
-    return exchange ->
-        Mono.deferContextual(
-            context -> {
-              seen.set(context.getOrDefault(TraceParent.CONTEXT_KEY, null));
               return Mono.empty();
             });
   }

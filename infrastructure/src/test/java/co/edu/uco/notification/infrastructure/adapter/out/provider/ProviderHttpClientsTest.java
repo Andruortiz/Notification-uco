@@ -31,7 +31,7 @@ class ProviderHttpClientsTest {
 
   @Test
   void sameValuesReturnTheSameClient() {
-    final ProviderHttpClients clients = new ProviderHttpClients();
+    final ProviderHttpClients clients = new ProviderHttpClients(WebClient.builder());
 
     final WebClient first = clients.client("brevo", BASE_URL, snapshot(10_000, 5_000, 10_000));
     final WebClient second = clients.client("brevo", BASE_URL, snapshot(10_000, 5_000, 20_000));
@@ -41,7 +41,7 @@ class ProviderHttpClientsTest {
 
   @Test
   void aDifferentResponseTimeoutProducesANewClientAndThePreviousOneStaysAvailable() {
-    final ProviderHttpClients clients = new ProviderHttpClients();
+    final ProviderHttpClients clients = new ProviderHttpClients(WebClient.builder());
     final WebClient previous = clients.client("brevo", BASE_URL, snapshot(10_000, 5_000, 10_000));
 
     final WebClient next = clients.client("brevo", BASE_URL, snapshot(20_000, 5_000, 10_000));
@@ -53,7 +53,7 @@ class ProviderHttpClientsTest {
 
   @Test
   void aDifferentConnectTimeoutProducesANewClient() {
-    final ProviderHttpClients clients = new ProviderHttpClients();
+    final ProviderHttpClients clients = new ProviderHttpClients(WebClient.builder());
 
     final WebClient previous = clients.client("brevo", BASE_URL, snapshot(10_000, 5_000, 10_000));
     final WebClient next = clients.client("brevo", BASE_URL, snapshot(10_000, 6_000, 10_000));
@@ -63,7 +63,7 @@ class ProviderHttpClientsTest {
 
   @Test
   void eachProviderHasItsOwnClientEvenWithEqualValues() {
-    final ProviderHttpClients clients = new ProviderHttpClients();
+    final ProviderHttpClients clients = new ProviderHttpClients(WebClient.builder());
     final ConfigurationSnapshot snapshot = snapshot(10_000, 5_000, 10_000);
 
     assertNotSame(
@@ -72,7 +72,7 @@ class ProviderHttpClientsTest {
 
   @Test
   void rejectsNullArguments() {
-    final ProviderHttpClients clients = new ProviderHttpClients();
+    final ProviderHttpClients clients = new ProviderHttpClients(WebClient.builder());
     final ConfigurationSnapshot snapshot = snapshot(10_000, 5_000, 10_000);
 
     assertThrows(NullPointerException.class, () -> clients.client(null, BASE_URL, snapshot));

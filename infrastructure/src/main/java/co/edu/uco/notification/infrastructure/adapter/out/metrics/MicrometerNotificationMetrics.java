@@ -84,7 +84,7 @@ public class MicrometerNotificationMetrics implements NotificationMetricsPort {
         .increment();
   }
 
-  private static String resultLabel(final AttemptResult result) {
+  public static String resultLabel(final AttemptResult result) {
     return switch (result) {
       case ACCEPTED -> "delivered";
       case RECOVERABLE_FAILURE -> "recoverable";

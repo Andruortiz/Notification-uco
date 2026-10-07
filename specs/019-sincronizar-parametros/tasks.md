@@ -205,7 +205,7 @@ Módulos reales: `core`, `infrastructure`, `utils`. No se usan `infra-main/` ni 
 
 ## Phase 8: Tareas BLOQUEADAS por la entrega E4 (spec 017: ack manual y cabecera `x-dispatch-attempt`)
 
-**Estado**: **BLOQUEADAS** hasta que E4 esté fusionada en `develop` (estado a 2026-10-05: E4 sin fusionar). No se implementan ni se marcan sin E4. Si T002 confirma E4 fusionada, rebasar sobre `develop` antes de empezar (riesgo R-2: conflicto en `RabbitRetryConfig` y `NotificationDispatchListener`). El descriptor `dispatch.max-attempts` ya está registrado y validado desde la Phase 2; esta fase solo cambia el punto de lectura.
+**Estado**: **CERRADA** (2026-10-07): E4 quedó fusionada en `develop` con el PR #61 y T051 a T055 se ejecutaron tras integrarla. Texto original del bloqueo: hasta que E4 esté fusionada en `develop` (estado a 2026-10-05: E4 sin fusionar) no se implementan ni se marcan. Si T002 confirma E4 fusionada, rebasar sobre `develop` antes de empezar (riesgo R-2: conflicto en `RabbitRetryConfig` y `NotificationDispatchListener`). El descriptor `dispatch.max-attempts` ya está registrado y validado desde la Phase 2; esta fase solo cambia el punto de lectura.
 
 **Goal**: el tope de intentos por mensaje se lee de la instantánea vigente en cada mensaje (US2, escenarios 1 y 2).
 
@@ -229,8 +229,8 @@ Módulos reales: `core`, `infrastructure`, `utils`. No se usan `infra-main/` ni 
   - pendiente: requiere ejecutar pruebas (decisión del usuario).
 - [ ] T059 Ejecutar la demostración manual de `specs/019-sincronizar-parametros/quickstart.md` contra un servicio local aislado y anotar el resultado de cada paso en ese archivo.
   - pendiente: requiere ejecutar pruebas (decisión del usuario).
-- [ ] T060 Revisar que cada SC (SC-001 a SC-007) tiene su prueba citada en `specs/019-sincronizar-parametros/quickstart.md`, que la Phase 8 está cerrada o anotada como bloqueada con motivo, y que las excepciones del Principio VII del plan (contrato definitivo SUP-02 el 2026-11-15, valores de `ProviderContentLimits` antes de producción, descriptor del `RetryPolicy` el 2026-11-30) siguen vigentes con dueño y fecha.
-  - pendiente: requiere ejecutar pruebas (decisión del usuario).
+- [x] T060 Revisar que cada SC (SC-001 a SC-007) tiene su prueba citada en `specs/019-sincronizar-parametros/quickstart.md`, que la Phase 8 está cerrada o anotada como bloqueada con motivo, y que las excepciones del Principio VII del plan (contrato definitivo SUP-02 el 2026-11-15, valores de `ProviderContentLimits` antes de producción, descriptor del `RetryPolicy` el 2026-11-30) siguen vigentes con dueño y fecha.
+  - Resultado 2026-10-07: SC-001 a SC-007 tienen prueba citada en la tabla del quickstart y las doce clases citadas existen en el repositorio. La Phase 8 queda cerrada (E4 fusionada con el PR #61). Las tres excepciones del Principio VII siguen vigentes con dueño andrualv y fecha sin vencer: SUP-02 el 2026-11-15, `ProviderContentLimits` antes del primer despliegue a producción (solo Twilio SMS tiene fuente; Brevo y FCM sin límite hasta verificarlos) y descriptor del `RetryPolicy` el 2026-11-30.
 
 ---
 

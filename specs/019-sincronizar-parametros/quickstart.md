@@ -31,7 +31,7 @@ Docker encendido y `JAVA_TOOL_OPTIONS="-Dapi.version=1.44"` en este equipo.
 | `saveIfNewer` no retrocede; documento corrupto descartado | `LastKnownConfigurationMongoAdapterTest` |
 | Arranque con almacén lento en 30 s o menos | `ConfigurationStartupTest` |
 
-Las pruebas anteriores aún no se han ejecutado en esta rama (decisión del usuario); la fuente de Parámetros
+El `verify` completo del 2026-10-05 pasó en verde (T058 de `tasks.md`); la fuente de Parámetros
 está inactiva por defecto y solo se activa con `notification.parameters.base-url`. Las propiedades
 `notification.parameters.*` y `GET /configuration` están descritas en el `README.md`.
 

@@ -25,11 +25,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -162,7 +164,11 @@ class ErrorCodeE2ETest {
   }
 
   private List<String> lines() {
-    return logs.list.stream().map(LogLines::render).collect(Collectors.toList());
+    final List<ILoggingEvent> snapshot;
+    synchronized (logs) {
+      snapshot = new ArrayList<>(logs.list);
+    }
+    return snapshot.stream().map(LogLines::render).collect(Collectors.toList());
   }
 
   private void assertResponseAndLogAgree(
@@ -247,13 +253,11 @@ class ErrorCodeE2ETest {
     final String notificationId = accept("error-code-permanent");
 
     awaitStatus(notificationId, "FAILED");
-    assertTrue(
-        lines().stream()
-            .anyMatch(
-                line ->
-                    line.contains("errorCode=" + ErrorCode.NOTIFICATION_FAILED.format())
-                        && line.contains("notificationId=" + notificationId)
-                        && line.contains("failureCategory=" + FailureCategory.PERMANENT_BUSINESS)));
+    awaitLine(
+        line ->
+            line.contains("errorCode=" + ErrorCode.NOTIFICATION_FAILED.format())
+                && line.contains("notificationId=" + notificationId)
+                && line.contains("failureCategory=" + FailureCategory.PERMANENT_BUSINESS));
   }
 
   @Test
@@ -263,14 +267,22 @@ class ErrorCodeE2ETest {
     final String notificationId = accept("error-code-recoverable");
 
     awaitStatus(notificationId, "RECOVERABLE");
-    assertTrue(
-        lines().stream()
-            .anyMatch(
-                line ->
-                    line.contains("errorCode=" + ErrorCode.PROVIDER_RECOVERABLE_FAILURE.format())
-                        && line.contains("notificationId=" + notificationId)
-                        && line.contains(
-                            "failureCategory=" + FailureCategory.RECOVERABLE_PROVIDER)));
+    awaitLine(
+        line ->
+            line.contains("errorCode=" + ErrorCode.PROVIDER_RECOVERABLE_FAILURE.format())
+                && line.contains("notificationId=" + notificationId)
+                && line.contains("failureCategory=" + FailureCategory.RECOVERABLE_PROVIDER));
+  }
+
+  private void awaitLine(final Predicate<String> expected) throws InterruptedException {
+    final Instant deadline = Instant.now().plus(LIMIT);
+    while (Instant.now().isBefore(deadline)) {
+      if (lines().stream().anyMatch(expected)) {
+        return;
+      }
+      Thread.sleep(100);
+    }
+    assertTrue(lines().stream().anyMatch(expected), "the expected log line never appeared");
   }
 
   private String accept(final String externalId) throws Exception {

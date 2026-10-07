@@ -4,7 +4,7 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.port.out.NotificationUpdatesPort;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -41,7 +41,7 @@ public class NotificationUpdatesRabbitAdapter implements NotificationUpdatesPort
       }
     } catch (final RuntimeException | IOException e) {
       LOGGER.warn(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.PERMANENT_BUSINESS),
+          LogFields.failure(ErrorCode.UPDATE_EVENT_UNPARSEABLE),
           "Discarding unparseable notification update event",
           e);
     }

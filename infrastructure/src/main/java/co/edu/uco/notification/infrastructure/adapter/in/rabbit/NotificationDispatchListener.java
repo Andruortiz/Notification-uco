@@ -8,11 +8,13 @@ import co.edu.uco.notification.infrastructure.config.CorrelationContext;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
+import co.edu.uco.notification.infrastructure.config.ReactorObservations;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
-import co.edu.uco.notification.utils.TraceParent;
 import com.rabbitmq.client.Channel;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.function.IntFunction;
@@ -40,13 +42,15 @@ public class NotificationDispatchListener {
   private final IntFunction<ManualAckSettler> settlerFactory;
   private final RabbitTopologyProperties properties;
   private final ConfigurationView configurationView;
+  private final ObservationRegistry observationRegistry;
 
   public NotificationDispatchListener(
       final DispatchNotificationUseCase dispatchNotificationUseCase,
       final RabbitTemplate rabbitTemplate,
       @Qualifier("notificationDispatchDlqRecoverer") final MessageRecoverer dlqRecoverer,
       final RabbitTopologyProperties properties,
-      final ConfigurationView configurationView) {
+      final ConfigurationView configurationView,
+      final ObservationRegistry observationRegistry) {
     this.dispatchNotificationUseCase =
         Preconditions.requireNonNull(
             dispatchNotificationUseCase, "dispatchNotificationUseCase must not be null");
@@ -63,6 +67,8 @@ public class NotificationDispatchListener {
                 "Notification dispatch");
     this.configurationView =
         Preconditions.requireNonNull(configurationView, "configurationView must not be null");
+    this.observationRegistry =
+        Preconditions.requireNonNull(observationRegistry, "observationRegistry must not be null");
   }
 
   private ManualAckSettler settlerFor(final int maxAttempts) {
@@ -82,12 +88,9 @@ public class NotificationDispatchListener {
         fromHeader != null
             ? fromHeader
             : CorrelationId.of(LEGACY_PREFIX + CorrelationId.newId().value());
-    final TraceParent traceParent =
-        CorrelationContext.traceFromHeaders(message.getMessageProperties());
     final String body = new String(message.getBody(), StandardCharsets.UTF_8);
-    try (LogContext ignored =
-        LogContext.open(correlationId, null, body).withTraceParent(traceParent)) {
-      process(message, channel, deliveryTag, body, correlationId, traceParent);
+    try (LogContext ignored = LogContext.open(correlationId, null, body)) {
+      process(message, channel, deliveryTag, body, correlationId);
     }
   }
 
@@ -96,8 +99,7 @@ public class NotificationDispatchListener {
       final Channel channel,
       final long deliveryTag,
       final String body,
-      final CorrelationId correlationId,
-      final TraceParent traceParent)
+      final CorrelationId correlationId)
       throws IOException {
     final ManualAckSettler settler =
         settlerFor(Math.toIntExact(configurationView.snapshot().dispatchMaxAttempts()));
@@ -106,37 +108,48 @@ public class NotificationDispatchListener {
       notificationId = NotificationId.of(body);
     } catch (final RuntimeException cause) {
       LOGGER.warn(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.PERMANENT_BUSINESS),
+          LogFields.failure(ErrorCode.DISPATCH_MESSAGE_INVALID),
           "Dispatch message has no notification id, sending it to the dead-letter queue",
           cause);
       settler.deadLetter(message, channel, deliveryTag, cause);
       return;
     }
-    Context context =
-        Context.of(
-            LogFields.CORRELATION_ID,
-            correlationId.value(),
-            LogFields.NOTIFICATION_ID,
-            notificationId.value());
-    if (traceParent != null) {
-      context = context.put(LogFields.TRACE_PARENT, traceParent.value());
-    }
+    final Observation dispatch = startDispatchObservation(correlationId);
+    final Context context =
+        ReactorObservations.with(
+            Context.of(
+                LogFields.CORRELATION_ID,
+                correlationId.value(),
+                LogFields.NOTIFICATION_ID,
+                notificationId.value()),
+            dispatch);
     RuntimeException failure = null;
-    try {
+    try (Observation.Scope ignored = dispatch.openScope()) {
       dispatchNotificationUseCase.dispatch(notificationId).contextWrite(context).block();
     } catch (final RuntimeException cause) {
+      dispatch.error(cause);
       failure = cause;
+    } finally {
+      dispatch.stop();
     }
     if (failure == null) {
       settler.acknowledge(channel, deliveryTag);
     } else if (failure instanceof DispatchResultNotPersistedException) {
       LOGGER.error(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          LogFields.failure(ErrorCode.DISPATCH_RESULT_NOT_PERSISTED),
           "Dispatch result could not be persisted, sending the message to the dead-letter queue",
           failure);
       settler.deadLetter(message, channel, deliveryTag, failure);
     } else {
       settler.handleFailure(message, channel, deliveryTag, failure);
     }
+  }
+
+  private Observation startDispatchObservation(final CorrelationId correlationId) {
+    final Observation.Context observationContext = new Observation.Context();
+    observationContext.put(CorrelationId.CONTEXT_KEY, correlationId.value());
+    return Observation.createNotStarted(
+            "notification.dispatch", () -> observationContext, observationRegistry)
+        .start();
   }
 }

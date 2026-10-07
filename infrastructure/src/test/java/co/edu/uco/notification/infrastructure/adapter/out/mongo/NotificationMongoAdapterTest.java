@@ -20,6 +20,7 @@ import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
 import co.edu.uco.notification.core.usecase.RequeuePendingNotificationsService;
 import co.edu.uco.notification.utils.CorrelationId;
@@ -195,7 +196,8 @@ class NotificationMongoAdapterTest {
             new RetryPolicy(),
             Duration.ofSeconds(60),
             Duration.ofMinutes(10),
-            100);
+            100,
+            Mockito.mock(NotificationMetricsPort.class));
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
@@ -225,7 +227,8 @@ class NotificationMongoAdapterTest {
             new RetryPolicy(),
             Duration.ofSeconds(60),
             Duration.ofMinutes(10),
-            100);
+            100,
+            Mockito.mock(NotificationMetricsPort.class));
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 

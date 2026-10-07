@@ -1,3 +1,8 @@
+management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+
 notification:
   auth:
     jwt:

@@ -102,6 +102,16 @@ Si el token trae varios roles, gana el de mayor privilegio; si ninguno es valido
 
 **Pendiente de acordar con el equipo de seguridad:** los nombres reales de los claims, la tabla de roles, el emisor y la audiencia, y como se garantiza que la peticion llega a traves del PEP (red privada, mTLS o firma). Esos valores se ajustan por configuracion.
 
+## Metricas y puerto de gestion
+
+El servicio expone la gestion en un puerto aparte del de la API: la API sigue en el 8060 y el puerto de gestion es `MANAGEMENT_PORT` (por defecto 8061). El 8061 no se publica fuera del cluster; las sondas de Kubernetes y el scrape de Prometheus lo consultan por la red interna.
+
+- `GET http://localhost:8061/actuator/health/liveness` y `/actuator/health/readiness`: sondas de salud.
+- `GET http://localhost:8061/actuator/prometheus`: metricas en formato Prometheus (negocio, `http.server.requests` con percentiles, consumo de RabbitMQ y JVM).
+- Solo `health` y `prometheus` estan expuestos, con lista explicita; `env`, `beans`, `heapdump`, `configprops`, `loggers`, `threaddump`, `mappings`, `metrics` e `info` no responden. El 8060 no sirve ninguna ruta de `/actuator`.
+- Metricas de negocio: `notification_accepted_total`, `notification_attempts_total`, `notification_dispatched_total`, `notification_provider_duration_seconds` y `notification_errors_total`, con etiquetas de cardinalidad cerrada (`channel`, `provider`, `result`, `errorCode`, `failureCategory`); nunca `tenantId`, `notificationId`, `correlationId` ni datos del destinatario.
+- El `docker-compose.yml` solo levanta las dependencias; el servicio corre con `./mvnw -pl infrastructure spring-boot:run` o con el `Dockerfile`, que declara `EXPOSE 8060 8061`.
+
 ## Azure Key Vault
 
 Las variables de entorno del servicio (`MONGO_PASSWORD`, `BREVO_API_KEY`, `AUTH_JWT_HS256_SECRET`, etc.)

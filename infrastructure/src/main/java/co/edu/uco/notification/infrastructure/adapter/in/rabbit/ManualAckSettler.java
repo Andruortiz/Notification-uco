@@ -1,7 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rabbit;
 
 import co.edu.uco.notification.infrastructure.config.LogFields;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
@@ -65,23 +65,14 @@ final class ManualAckSettler {
     final int attempt = attemptCount(message) + 1;
     if (attempt >= maxAttempts) {
       LOGGER.warn(
-          LogFields.fields(
-              "attempt",
-              attempt,
-              LogFields.FAILURE_CATEGORY,
-              FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          LogFields.failure(ErrorCode.MESSAGE_ATTEMPTS_EXHAUSTED, "attempt", attempt),
           label + " exhausted attempts, sending the message to the dead-letter queue",
           cause);
       deadLetter(message, channel, deliveryTag, cause);
     } else {
       LOGGER.warn(
-          LogFields.fields(
-              "attempt",
-              attempt,
-              "maxAttempts",
-              maxAttempts,
-              LogFields.FAILURE_CATEGORY,
-              FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          LogFields.failure(
+              ErrorCode.MESSAGE_ATTEMPT_FAILED, "attempt", attempt, "maxAttempts", maxAttempts),
           label + " attempt failed, requeueing",
           cause);
       settle(
@@ -107,7 +98,7 @@ final class ManualAckSettler {
           });
     } catch (final RuntimeException publicationFailure) {
       LOGGER.error(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          LogFields.failure(ErrorCode.MESSAGE_REPUBLISH_FAILED),
           label + " message could not be republished, rejecting it so the broker dead-letters it",
           publicationFailure);
       channel.basicNack(deliveryTag, false, false);

@@ -18,7 +18,9 @@ import co.edu.uco.notification.core.domain.valueobject.BatchId;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
+import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.Priority;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
@@ -43,6 +45,7 @@ import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.ContentTypeDetectorPort;
 import co.edu.uco.notification.core.port.out.MalwareScannerPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.port.out.ScanVerdictCachePort;
 import co.edu.uco.notification.core.repository.AttachmentUploadRepository;
 import co.edu.uco.notification.core.repository.NotificationBatchRepository;
@@ -573,7 +576,8 @@ class SendNotificationBatchServiceTest {
               notificationRepository,
               eventPublisherPort,
               new AttachmentResolver(
-                  new AttachmentInspector(detector, scanner, cache), uploads, storage)),
+                  new AttachmentInspector(detector, scanner, cache), uploads, storage),
+              Mockito.mock(NotificationMetricsPort.class)),
           notificationBatchRepository);
     }
   }
@@ -601,5 +605,52 @@ class SendNotificationBatchServiceTest {
     assertNotNull(result);
     assertEquals(2, captured.getAllValues().size());
     captured.getAllValues().forEach(item -> assertEquals(correlationId, item.correlationId()));
+  }
+
+  @Test
+  void aBatchCountsEachAcceptedNotificationAndSkipsDuplicates() {
+    final NotificationMetricsPort metrics = Mockito.mock(NotificationMetricsPort.class);
+    final ChannelCatalogPort catalog = Mockito.mock(ChannelCatalogPort.class);
+    final NotificationRepository repository = Mockito.mock(NotificationRepository.class);
+    final NotificationEventPublisherPort publisher =
+        Mockito.mock(NotificationEventPublisherPort.class);
+    final AttachmentResolver resolver = Mockito.mock(AttachmentResolver.class);
+    when(resolver.resolve(any(), any())).thenReturn(Mono.just(List.of()));
+    when(catalog.findActiveRoute(any(), any()))
+        .thenReturn(
+            Mono.just(
+                new ChannelRoute(ChannelType.of("EMAIL"), List.of(ProviderId.of("brevo")), null)));
+    final Notification existing =
+        Notification.accept(
+            new NotificationRouting(
+                TENANT_ID,
+                ExternalId.of("order-dup"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
+    when(repository.findByTenantAndExternalId(any(), any())).thenReturn(Mono.empty());
+    when(repository.findByTenantAndExternalId(TENANT_ID, ExternalId.of("order-dup")))
+        .thenReturn(Mono.just(existing));
+    when(repository.save(any(Notification.class)))
+        .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+    when(publisher.publish(any())).thenReturn(Mono.empty());
+    when(publisher.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+    final SendNotificationBatchService batch =
+        new SendNotificationBatchService(
+            new SendNotificationService(catalog, repository, publisher, resolver, metrics),
+            notificationBatchRepository);
+
+    final BatchAcceptedResult result =
+        batch
+            .sendBatch(
+                new SendNotificationBatchCommand(
+                    TENANT_ID,
+                    BatchId.of("batch-metrics"),
+                    List.of(item("order-1"), item("order-dup"), item("order-2"))))
+            .block();
+
+    assertNotNull(result);
+    verify(metrics, Mockito.times(2)).notificationAccepted(ChannelType.of("EMAIL"));
   }
 }

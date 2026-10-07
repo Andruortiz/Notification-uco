@@ -17,6 +17,7 @@ import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.List;
@@ -28,12 +29,14 @@ public final class SendNotificationService implements SendNotificationUseCase {
   private final NotificationRepository notificationRepository;
   private final NotificationEventPublisherPort eventPublisherPort;
   private final AttachmentResolver attachmentResolver;
+  private final NotificationMetricsPort metricsPort;
 
   public SendNotificationService(
       final ChannelCatalogPort channelCatalogPort,
       final NotificationRepository notificationRepository,
       final NotificationEventPublisherPort eventPublisherPort,
-      final AttachmentResolver attachmentResolver) {
+      final AttachmentResolver attachmentResolver,
+      final NotificationMetricsPort metricsPort) {
     this.channelCatalogPort =
         Preconditions.requireNonNull(channelCatalogPort, "channelCatalogPort must not be null");
     this.notificationRepository =
@@ -43,6 +46,7 @@ public final class SendNotificationService implements SendNotificationUseCase {
         Preconditions.requireNonNull(eventPublisherPort, "eventPublisherPort must not be null");
     this.attachmentResolver =
         Preconditions.requireNonNull(attachmentResolver, "attachmentResolver must not be null");
+    this.metricsPort = Preconditions.requireNonNull(metricsPort, "metricsPort must not be null");
   }
 
   @Override
@@ -89,6 +93,7 @@ public final class SendNotificationService implements SendNotificationUseCase {
 
     return notificationRepository
         .save(notification)
+        .doOnNext(saved -> metricsPort.notificationAccepted(saved.channelType()))
         .flatMap(
             saved ->
                 eventPublisherPort

@@ -11,13 +11,14 @@ import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyPrope
 import co.edu.uco.notification.infrastructure.config.CorrelationContext;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
+import co.edu.uco.notification.infrastructure.config.ReactorObservations;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
-import co.edu.uco.notification.utils.TraceParent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
+import io.micrometer.observation.ObservationRegistry;
 import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,6 +41,7 @@ public class AttachmentScanListener {
   private final ScanAttachmentUploadUseCase scanAttachmentUploadUseCase;
   private final ObjectMapper objectMapper;
   private final ManualAckSettler settler;
+  private final ObservationRegistry observationRegistry;
 
   public AttachmentScanListener(
       final ScanAttachmentUploadUseCase scanAttachmentUploadUseCase,
@@ -47,7 +49,8 @@ public class AttachmentScanListener {
       final RabbitTemplate rabbitTemplate,
       @Qualifier("attachmentScanDlqRecoverer") final MessageRecoverer attachmentScanDlqRecoverer,
       final AttachmentScanTopologyProperties topology,
-      final AttachmentProperties attachmentProperties) {
+      final AttachmentProperties attachmentProperties,
+      final ObservationRegistry observationRegistry) {
     this.scanAttachmentUploadUseCase =
         Preconditions.requireNonNull(
             scanAttachmentUploadUseCase, "scanAttachmentUploadUseCase must not be null");
@@ -62,6 +65,8 @@ public class AttachmentScanListener {
             ATTEMPT_HEADER,
             attachmentProperties.scan().maxAttempts(),
             "Attachment scan");
+    this.observationRegistry =
+        Preconditions.requireNonNull(observationRegistry, "observationRegistry must not be null");
   }
 
   @RabbitListener(
@@ -78,11 +83,8 @@ public class AttachmentScanListener {
             ? fromHeader
             : CorrelationId.of(
                 NotificationDispatchListener.LEGACY_PREFIX + CorrelationId.newId().value());
-    final TraceParent traceParent =
-        CorrelationContext.traceFromHeaders(message.getMessageProperties());
-    try (LogContext ignored =
-        LogContext.open(correlationId, null, null).withTraceParent(traceParent)) {
-      process(message, channel, deliveryTag, correlationId, traceParent);
+    try (LogContext ignored = LogContext.open(correlationId, null, null)) {
+      process(message, channel, deliveryTag, correlationId);
     }
   }
 
@@ -90,8 +92,7 @@ public class AttachmentScanListener {
       final Message message,
       final Channel channel,
       final long deliveryTag,
-      final CorrelationId correlationId,
-      final TraceParent traceParent)
+      final CorrelationId correlationId)
       throws IOException {
     final AttachmentScanRequest request;
     try {
@@ -100,7 +101,7 @@ public class AttachmentScanListener {
       UploadId.of(request.uploadId());
     } catch (final RuntimeException | IOException cause) {
       LOGGER.warn(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.PERMANENT_BUSINESS),
+          LogFields.failure(ErrorCode.ATTACHMENT_SCAN_MESSAGE_UNREADABLE),
           "Attachment scan message is unreadable, sending it to the dead-letter queue",
           cause);
       settler.deadLetter(message, channel, deliveryTag, cause);
@@ -112,13 +113,9 @@ public class AttachmentScanListener {
           .scan(TenantId.of(request.tenantId()), UploadId.of(request.uploadId()))
           .doOnNext(AttachmentScanListener::logVerdict)
           .contextWrite(
-              traceParent == null
-                  ? Context.of(CorrelationId.CONTEXT_KEY, correlationId.value())
-                  : Context.of(
-                      CorrelationId.CONTEXT_KEY,
-                      correlationId.value(),
-                      TraceParent.CONTEXT_KEY,
-                      traceParent.value()))
+              ReactorObservations.with(
+                  Context.of(CorrelationId.CONTEXT_KEY, correlationId.value()),
+                  observationRegistry.getCurrentObservation()))
           .block();
     } catch (final RuntimeException cause) {
       failure = cause;
@@ -150,7 +147,7 @@ public class AttachmentScanListener {
           .block();
     } catch (final RuntimeException failure) {
       LOGGER.error(
-          LogFields.fields(LogFields.FAILURE_CATEGORY, FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+          LogFields.failure(ErrorCode.ATTACHMENT_UPLOAD_NOT_FAILED),
           "Attachment upload could not be failed after exhausting the scan attempts",
           failure);
     }

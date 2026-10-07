@@ -27,6 +27,7 @@ import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +41,8 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class SendNotificationServiceTest {
+
+  private final NotificationMetricsPort metricsPort = Mockito.mock(NotificationMetricsPort.class);
 
   private final ChannelCatalogPort channelCatalogPort = Mockito.mock(ChannelCatalogPort.class);
   private final NotificationRepository notificationRepository =
@@ -58,7 +61,11 @@ class SendNotificationServiceTest {
   void setUp() {
     service =
         new SendNotificationService(
-            channelCatalogPort, notificationRepository, eventPublisherPort, attachmentResolver);
+            channelCatalogPort,
+            notificationRepository,
+            eventPublisherPort,
+            attachmentResolver,
+            metricsPort);
     when(attachmentResolver.resolve(any(), any())).thenReturn(Mono.just(List.of()));
   }
 
@@ -220,7 +227,7 @@ class SendNotificationServiceTest {
         NullPointerException.class,
         () ->
             new SendNotificationService(
-                null, notificationRepository, eventPublisherPort, attachmentResolver));
+                null, notificationRepository, eventPublisherPort, attachmentResolver, metricsPort));
   }
 
   @Test
@@ -229,7 +236,7 @@ class SendNotificationServiceTest {
         NullPointerException.class,
         () ->
             new SendNotificationService(
-                channelCatalogPort, null, eventPublisherPort, attachmentResolver));
+                channelCatalogPort, null, eventPublisherPort, attachmentResolver, metricsPort));
   }
 
   @Test
@@ -238,7 +245,7 @@ class SendNotificationServiceTest {
         NullPointerException.class,
         () ->
             new SendNotificationService(
-                channelCatalogPort, notificationRepository, null, attachmentResolver));
+                channelCatalogPort, notificationRepository, null, attachmentResolver, metricsPort));
   }
 
   @Test
@@ -247,7 +254,7 @@ class SendNotificationServiceTest {
         NullPointerException.class,
         () ->
             new SendNotificationService(
-                channelCatalogPort, notificationRepository, eventPublisherPort, null));
+                channelCatalogPort, notificationRepository, eventPublisherPort, null, metricsPort));
   }
 
   private static final String ATTACHMENTS_SCHEMA =
@@ -521,5 +528,84 @@ class SendNotificationServiceTest {
     verify(eventPublisherPort).publish(events.capture());
     assertEquals(correlationId, events.getValue().getFirst().correlationId());
     assertEquals(TENANT_ID, events.getValue().getFirst().tenantId());
+  }
+
+  @Test
+  void anAcceptedNotificationCountsOnceForItsChannel() {
+    when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID))
+        .thenReturn(Mono.just(activeRoute()));
+    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
+        .thenReturn(Mono.empty());
+    when(notificationRepository.save(any(Notification.class)))
+        .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.send(command())).expectNextCount(1).verifyComplete();
+
+    verify(metricsPort, Mockito.times(1)).notificationAccepted(CHANNEL_TYPE);
+  }
+
+  @Test
+  void anIdempotentReacceptanceDoesNotCount() {
+    final Notification existing = existingNotification();
+    when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID))
+        .thenReturn(Mono.just(activeRoute()));
+    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
+        .thenReturn(Mono.just(existing));
+
+    StepVerifier.create(service.send(command())).expectNextCount(1).verifyComplete();
+
+    Mockito.verifyNoInteractions(metricsPort);
+  }
+
+  @Test
+  void aLostIdempotencyRaceDoesNotCount() {
+    final Notification existing = existingNotification();
+    when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID))
+        .thenReturn(Mono.just(activeRoute()));
+    when(notificationRepository.findByTenantAndExternalId(TENANT_ID, EXTERNAL_ID))
+        .thenReturn(Mono.empty(), Mono.just(existing));
+    when(notificationRepository.save(any(Notification.class)))
+        .thenReturn(Mono.error(new NotificationAlreadyAcceptedException(TENANT_ID, EXTERNAL_ID)));
+
+    StepVerifier.create(service.send(command())).expectNextCount(1).verifyComplete();
+
+    Mockito.verifyNoInteractions(metricsPort);
+  }
+
+  @Test
+  void aRejectedNotificationDoesNotCount() {
+    when(channelCatalogPort.findActiveRoute(CHANNEL_TYPE, TENANT_ID)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.send(command()))
+        .expectError(ChannelNotAvailableException.class)
+        .verify();
+
+    Mockito.verifyNoInteractions(metricsPort);
+  }
+
+  @Test
+  void constructorRejectsNullMetricsPort() {
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            new SendNotificationService(
+                channelCatalogPort,
+                notificationRepository,
+                eventPublisherPort,
+                attachmentResolver,
+                null));
+  }
+
+  private static Notification existingNotification() {
+    return Notification.accept(
+        new NotificationRouting(
+            TENANT_ID,
+            EXTERNAL_ID,
+            CHANNEL_TYPE,
+            RecipientId.of("recipient-1"),
+            Recipient.of("alice@example.com")),
+        new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
   }
 }

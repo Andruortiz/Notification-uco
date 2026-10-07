@@ -5,6 +5,7 @@ import co.edu.uco.notification.core.domain.valueobject.UploadId;
 import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyProperties;
 import co.edu.uco.notification.infrastructure.config.CorrelationContext;
+import co.edu.uco.notification.infrastructure.config.ReactorObservations;
 import co.edu.uco.notification.utils.Preconditions;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -39,20 +40,24 @@ public class AttachmentScanRequestRabbitPublisher implements AttachmentScanReque
         context ->
             Mono.<Void>fromRunnable(
                     () ->
-                        rabbitTemplate.convertAndSend(
-                            topology.exchange(),
-                            topology.routingKey(),
-                            toJson(new AttachmentScanRequest(tenantId.value(), uploadId.value())),
-                            message -> {
-                              message
-                                  .getMessageProperties()
-                                  .setMessageId(UUID.randomUUID().toString());
-                              CorrelationContext.stamp(
-                                  message.getMessageProperties(),
-                                  CorrelationContext.from(context),
-                                  CorrelationContext.traceFrom(context));
-                              return message;
-                            }))
+                        ReactorObservations.run(
+                            context,
+                            () ->
+                                rabbitTemplate.convertAndSend(
+                                    topology.exchange(),
+                                    topology.routingKey(),
+                                    toJson(
+                                        new AttachmentScanRequest(
+                                            tenantId.value(), uploadId.value())),
+                                    message -> {
+                                      message
+                                          .getMessageProperties()
+                                          .setMessageId(UUID.randomUUID().toString());
+                                      CorrelationContext.stamp(
+                                          message.getMessageProperties(),
+                                          CorrelationContext.from(context));
+                                      return message;
+                                    })))
                 .subscribeOn(Schedulers.boundedElastic()));
   }
 

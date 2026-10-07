@@ -4,7 +4,7 @@ import co.edu.uco.notification.core.domain.configuration.ConfigurationChangeOutc
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.List;
 import java.util.UUID;
@@ -106,11 +106,10 @@ public class ConfigurationEventLogger {
     if (unavailable.compareAndSet(false, true)) {
       try (LogContext ignored = open(correlationId)) {
         LOGGER.warn(
-            LogFields.fields(
+            LogFields.failure(
+                ErrorCode.PARAMETERS_UNAVAILABLE,
                 "event",
                 PARAMETERS_UNAVAILABLE,
-                LogFields.FAILURE_CATEGORY,
-                FailureCategory.RECOVERABLE_INFRASTRUCTURE,
                 "errorType",
                 error == null ? "unknown" : error.getClass().getSimpleName()),
             "Parameters component unavailable");

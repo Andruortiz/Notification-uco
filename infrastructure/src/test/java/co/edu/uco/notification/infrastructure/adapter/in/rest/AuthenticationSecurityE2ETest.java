@@ -1,6 +1,5 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import ch.qos.logback.classic.Logger;
@@ -140,15 +139,18 @@ class AuthenticationSecurityE2ETest {
   }
 
   @Test
-  void aRouteThatOnlySharesAPrefixWithTheActuatorRequiresAuthentication() {
-    webTestClient.get().uri("/actuatorX").exchange().expectStatus().isUnauthorized();
-
-    webTestClient
-        .get()
-        .uri("/actuator/health")
-        .exchange()
-        .expectStatus()
-        .value(status -> assertNotEquals(401, status.intValue()));
+  void actuatorRoutesOnTheMainPortRequireAuthenticationAndServeNothing() {
+    for (final String path :
+        List.of("/actuatorX", "/actuator/health", "/actuator/prometheus", "/actuator/env")) {
+      webTestClient.get().uri(path).exchange().expectStatus().isUnauthorized();
+      webTestClient
+          .get()
+          .uri(path)
+          .header("Authorization", TestTokens.bearer("tenant-a"))
+          .exchange()
+          .expectStatus()
+          .isNotFound();
+    }
   }
 
   @Test

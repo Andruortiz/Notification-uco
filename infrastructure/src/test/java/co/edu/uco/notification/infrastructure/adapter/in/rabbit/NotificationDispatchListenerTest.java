@@ -26,8 +26,8 @@ import co.edu.uco.notification.core.usecase.ConfigurationHolder;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.TraceParent;
 import com.rabbitmq.client.Channel;
+import io.micrometer.observation.ObservationRegistry;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -48,8 +48,6 @@ import reactor.core.publisher.Mono;
 
 class NotificationDispatchListenerTest {
 
-  private static final String TRACEPARENT =
-      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
   private static final long TAG = 5L;
 
   private final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
@@ -83,7 +81,8 @@ class NotificationDispatchListenerTest {
 
   private NotificationDispatchListener listenerFor(
       final DispatchNotificationUseCase useCase, final ConfigurationHolder holder) {
-    return new NotificationDispatchListener(useCase, rabbitTemplate, recoverer, properties, holder);
+    return new NotificationDispatchListener(
+        useCase, rabbitTemplate, recoverer, properties, holder, ObservationRegistry.NOOP);
   }
 
   private static ConfigurationSnapshot snapshotWith(final long version, final long maxAttempts) {
@@ -99,14 +98,10 @@ class NotificationDispatchListenerTest {
     return new ConfigurationHolder(snapshotWith(0, maxAttempts));
   }
 
-  private static Message message(
-      final String body, final String correlationHeader, final String traceparentHeader) {
+  private static Message message(final String body, final String correlationHeader) {
     final MessageProperties properties = new MessageProperties();
     if (correlationHeader != null) {
       properties.setHeader(CorrelationId.AMQP_HEADER, correlationHeader);
-    }
-    if (traceparentHeader != null) {
-      properties.setHeader(TraceParent.HEADER, traceparentHeader);
     }
     return new Message(body.getBytes(StandardCharsets.UTF_8), properties);
   }
@@ -114,10 +109,8 @@ class NotificationDispatchListenerTest {
   private record Observed(
       String contextCorrelationId,
       String contextNotificationId,
-      String contextTraceparent,
       String mdcCorrelationId,
-      String mdcNotificationId,
-      String mdcTraceparent) {}
+      String mdcNotificationId) {}
 
   private static DispatchNotificationUseCase observing(
       final NotificationId id, final AtomicReference<Observed> observed) {
@@ -130,10 +123,8 @@ class NotificationDispatchListenerTest {
                       new Observed(
                           context.getOrDefault(LogFields.CORRELATION_ID, null),
                           context.getOrDefault(LogFields.NOTIFICATION_ID, null),
-                          context.getOrDefault(LogFields.TRACE_PARENT, null),
                           MDC.get(LogFields.CORRELATION_ID),
-                          MDC.get(LogFields.NOTIFICATION_ID),
-                          MDC.get(LogFields.TRACE_PARENT)));
+                          MDC.get(LogFields.NOTIFICATION_ID)));
                   return Mono.empty();
                 }));
     return useCase;
@@ -145,7 +136,7 @@ class NotificationDispatchListenerTest {
     final NotificationId id = NotificationId.newId();
     when(useCase.dispatch(eq(id))).thenReturn(Mono.empty());
 
-    listenerFor(useCase, 3).onMessage(message(id.value(), "corr-1", null), channel, TAG);
+    listenerFor(useCase, 3).onMessage(message(id.value(), "corr-1"), channel, TAG);
 
     verify(useCase).dispatch(id);
     verify(channel).basicAck(TAG, false);
@@ -166,7 +157,7 @@ class NotificationDispatchListenerTest {
         .when(channel)
         .basicAck(TAG, false);
 
-    listenerFor(useCase, 3).onMessage(message(id.value(), null, null), channel, TAG);
+    listenerFor(useCase, 3).onMessage(message(id.value(), null), channel, TAG);
 
     assertTrue(persistedAtAckTime.get());
     verify(channel).basicAck(TAG, false);
@@ -178,7 +169,7 @@ class NotificationDispatchListenerTest {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
     final NotificationId id = NotificationId.newId();
     when(useCase.dispatch(eq(id))).thenReturn(Mono.error(new NotificationNotFoundException(id)));
-    final Message original = message(id.value(), "corr-x", null);
+    final Message original = message(id.value(), "corr-x");
 
     listenerFor(useCase, 3).onMessage(original, channel, TAG);
 
@@ -205,7 +196,7 @@ class NotificationDispatchListenerTest {
     final NotificationId id = NotificationId.newId();
     final NotificationNotFoundException failure = new NotificationNotFoundException(id);
     when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
-    final Message original = message(id.value(), null, null);
+    final Message original = message(id.value(), null);
     original.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 2);
 
     listenerFor(useCase, 3).onMessage(original, channel, TAG);
@@ -222,7 +213,7 @@ class NotificationDispatchListenerTest {
     final DispatchResultNotPersistedException failure =
         new DispatchResultNotPersistedException(id, new IllegalStateException("mongo down"));
     when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
-    final Message original = message(id.value(), null, null);
+    final Message original = message(id.value(), null);
 
     listenerFor(useCase, 3).onMessage(original, channel, TAG);
 
@@ -234,7 +225,7 @@ class NotificationDispatchListenerTest {
   @Test
   void aBlankBodyGoesStraightToTheDeadLetterQueueWithoutCallingTheUseCase() throws IOException {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
-    final Message original = message("  ", null, null);
+    final Message original = message("  ", null);
 
     listenerFor(useCase, 3).onMessage(original, channel, TAG);
 
@@ -253,7 +244,7 @@ class NotificationDispatchListenerTest {
         .when(rabbitTemplate)
         .waitForConfirmsOrDie(anyLong());
 
-    listenerFor(useCase, 3).onMessage(message(id.value(), null, null), channel, TAG);
+    listenerFor(useCase, 3).onMessage(message(id.value(), null), channel, TAG);
 
     verify(channel).basicNack(TAG, false, false);
     verify(channel, never()).basicAck(anyLong(), anyBoolean());
@@ -266,15 +257,13 @@ class NotificationDispatchListenerTest {
     final AtomicReference<Observed> observed = new AtomicReference<>();
 
     listenerFor(observing(id, observed), 3)
-        .onMessage(message(id.value(), "corr-header", TRACEPARENT), channel, TAG);
+        .onMessage(message(id.value(), "corr-header"), channel, TAG);
 
     final Observed seen = observed.get();
     assertEquals("corr-header", seen.contextCorrelationId());
     assertEquals(id.value(), seen.contextNotificationId());
-    assertEquals(TRACEPARENT, seen.contextTraceparent());
     assertEquals("corr-header", seen.mdcCorrelationId());
     assertEquals(id.value(), seen.mdcNotificationId());
-    assertEquals(TRACEPARENT, seen.mdcTraceparent());
   }
 
   @Test
@@ -282,8 +271,7 @@ class NotificationDispatchListenerTest {
     final NotificationId id = NotificationId.newId();
     final AtomicReference<Observed> observed = new AtomicReference<>();
 
-    listenerFor(observing(id, observed), 3)
-        .onMessage(message(id.value(), null, null), channel, TAG);
+    listenerFor(observing(id, observed), 3).onMessage(message(id.value(), null), channel, TAG);
 
     assertNotNull(observed.get().contextCorrelationId());
     assertTrue(
@@ -292,7 +280,6 @@ class NotificationDispatchListenerTest {
             .contextCorrelationId()
             .startsWith(NotificationDispatchListener.LEGACY_PREFIX));
     assertEquals(observed.get().contextCorrelationId(), observed.get().mdcCorrelationId());
-    assertNull(observed.get().contextTraceparent());
   }
 
   @Test
@@ -301,11 +288,9 @@ class NotificationDispatchListenerTest {
     final AtomicReference<Observed> observed = new AtomicReference<>();
 
     listenerFor(observing(id, observed), 3)
-        .onMessage(message(id.value(), "bad id\nforged", "garbage"), channel, TAG);
+        .onMessage(message(id.value(), "bad id\nforged"), channel, TAG);
 
     assertTrue(observed.get().contextCorrelationId().startsWith("legacy-"));
-    assertNull(observed.get().contextTraceparent());
-    assertNull(observed.get().mdcTraceparent());
   }
 
   @Test
@@ -314,16 +299,15 @@ class NotificationDispatchListenerTest {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
     when(useCase.dispatch(eq(id))).thenReturn(Mono.error(new NotificationNotFoundException(id)));
 
-    listenerFor(useCase, 3).onMessage(message(id.value(), "corr-x", null), channel, TAG);
+    listenerFor(useCase, 3).onMessage(message(id.value(), "corr-x"), channel, TAG);
 
     assertNull(MDC.get(LogFields.CORRELATION_ID));
     assertNull(MDC.get(LogFields.NOTIFICATION_ID));
-    assertNull(MDC.get(LogFields.TRACE_PARENT));
 
     final AtomicReference<Observed> observed = new AtomicReference<>();
     final NotificationId other = NotificationId.newId();
     listenerFor(observing(other, observed), 3)
-        .onMessage(message(other.value(), "corr-y", TRACEPARENT), channel, TAG);
+        .onMessage(message(other.value(), "corr-y"), channel, TAG);
     assertNull(MDC.get(LogFields.CORRELATION_ID));
   }
 
@@ -333,7 +317,12 @@ class NotificationDispatchListenerTest {
         NullPointerException.class,
         () ->
             new NotificationDispatchListener(
-                null, rabbitTemplate, recoverer, properties, holderWith(3)));
+                null,
+                rabbitTemplate,
+                recoverer,
+                properties,
+                holderWith(3),
+                ObservationRegistry.NOOP));
   }
 
   @Test
@@ -346,7 +335,8 @@ class NotificationDispatchListenerTest {
                 rabbitTemplate,
                 recoverer,
                 properties,
-                null));
+                null,
+                ObservationRegistry.NOOP));
   }
 
   @Test
@@ -357,7 +347,7 @@ class NotificationDispatchListenerTest {
     when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
     final ConfigurationHolder holder = holderWith(3);
     final NotificationDispatchListener listener = listenerFor(useCase, holder);
-    final Message atThree = message(id.value(), null, null);
+    final Message atThree = message(id.value(), null);
     atThree.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 2);
 
     listener.onMessage(atThree, channel, TAG);
@@ -366,7 +356,7 @@ class NotificationDispatchListenerTest {
     verify(rabbitTemplate, never()).send(any(String.class), any(String.class), any(Message.class));
 
     holder.replace(snapshotWith(1, 5));
-    final Message nextMessage = message(id.value(), null, null);
+    final Message nextMessage = message(id.value(), null);
     nextMessage.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 2);
 
     listener.onMessage(nextMessage, channel, TAG + 1);
@@ -397,7 +387,7 @@ class NotificationDispatchListenerTest {
                   holder.replace(snapshotWith(1, 5));
                   return Mono.error(failure);
                 }));
-    final Message inProgress = message(id.value(), null, null);
+    final Message inProgress = message(id.value(), null);
     inProgress.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 2);
 
     listenerFor(useCase, holder).onMessage(inProgress, channel, TAG);
@@ -414,7 +404,7 @@ class NotificationDispatchListenerTest {
     when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
     final ConfigurationHolder holder = holderWith(5);
     final NotificationDispatchListener listener = listenerFor(useCase, holder);
-    final Message first = message(id.value(), null, null);
+    final Message first = message(id.value(), null);
     first.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 1);
 
     listener.onMessage(first, channel, TAG);
@@ -422,7 +412,7 @@ class NotificationDispatchListenerTest {
     verify(recoverer, never()).recover(any(), any());
 
     holder.replace(snapshotWith(1, 2));
-    final Message second = message(id.value(), null, null);
+    final Message second = message(id.value(), null);
     second.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 1);
 
     listener.onMessage(second, channel, TAG + 1);

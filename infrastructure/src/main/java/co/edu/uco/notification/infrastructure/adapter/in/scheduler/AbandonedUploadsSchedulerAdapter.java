@@ -3,7 +3,7 @@ package co.edu.uco.notification.infrastructure.adapter.in.scheduler;
 import co.edu.uco.notification.core.port.in.ExpireAbandonedUploadsUseCase;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -41,8 +41,7 @@ public class AbandonedUploadsSchedulerAdapter {
         .onErrorResume(
             error -> {
               LOGGER.warn(
-                  LogFields.fields(
-                      LogFields.FAILURE_CATEGORY, FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+                  LogFields.failure(ErrorCode.ABANDONED_UPLOADS_SWEEP_FAILED),
                   "Abandoned uploads sweep failed",
                   error);
               return Mono.empty();

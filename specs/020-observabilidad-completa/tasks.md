@@ -178,7 +178,9 @@
 
 ## Phase 6: Cierre
 
-- [ ] T047 Verificación final de la historia: `./mvnw -B -ntp verify` completo (en segundo plano), cobertura ≥80 % líneas y ≥70 % ramas, Spotless y SpotBugs en verde, `HexagonalArchitectureTest` y `ModularityTests` en verde; ejecutar `quickstart.md` contra el servicio y reportar tareas sin marcar, desviaciones y las dos pruebas de DLQ si se excluyeron
+- [x] T047 Verificación final de la historia: `./mvnw -B -ntp verify` completo (en segundo plano), cobertura ≥80 % líneas y ≥70 % ramas, Spotless y SpotBugs en verde, `HexagonalArchitectureTest` y `ModularityTests` en verde; ejecutar `quickstart.md` contra el servicio y reportar tareas sin marcar, desviaciones y las dos pruebas de DLQ si se excluyeron
+  - Resultado 2026-10-07: el CI del PR #63 pasó en verde el job `Test` (`./mvnw test` completo, con `HexagonalArchitectureTest` y `ModularityTests`, sin excluir ninguna prueba de DLQ) y el job `Code Quality` (Spotless, SpotBugs y los umbrales de cobertura con los datos de ese `Test`), además de SonarCloud, CodeQL y Trivy. El `verify` local no quedó en verde por el entorno: cinco clases (`NotificationControllerSearchE2ETest`, `CorsConfigTest`, `CorsConfigCustomOriginTest`, `DeadLetterQueueE2ETest`, `RabbitRetryConfigCustomAttemptsTest`) no cargan contexto porque el RabbitMQ fijo de `localhost:5673` rechaza las credenciales de prueba, y `TracingResilienceE2ETest` falló una vez por carga de la máquina y pasó al repetirla sola; por eso el porcentaje de cobertura no se leyó en local y se da por cumplido por el job `Code Quality`.
+  - Desviaciones: el primer CI falló en `ErrorCodeE2ETest` (el log se emite después de guardar el estado) y en `DispatchIdempotencyE2ETest` (de la 017: el fallo de encolado inyectado lo podía consumir otra notificación huérfana); se corrigieron en `3e2be62`. No quedan tareas sin marcar en este archivo. El quickstart se ejecutó completo; el resultado y dos observaciones están en `quickstart.md`.
 
 ---
 

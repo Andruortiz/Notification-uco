@@ -129,9 +129,14 @@ verificación siguiente.
 
 | Proveedor | Fuente consultada | Fecha | Resultado |
 |---|---|---|---|
-| Brevo | por completar | por completar | por completar |
-| Twilio | por completar | por completar | por completar |
-| FCM | por completar | por completar | por completar |
+| Brevo | developers.brevo.com/reference/sendtransacemail (campos `tags`, `headers`, `params`) y developers.brevo.com/docs/transactional-webhooks (campo `tags` en los eventos) | 2026-10-07 | Soportado mediante `tags`: arreglo de cadenas, no visible para el destinatario, devuelto en los eventos de los webhooks transaccionales. `headers` se descarta porque viaja en el correo y `params` porque solo sirve para variables de plantilla. La documentación no fija límite de longitud ni de caracteres del tag |
+| Twilio | www.twilio.com/docs/messaging/api/message-resource (parámetros de creación de Message) | 2026-10-07 | No soportado por el proveedor: la creación de un Message no tiene campo de metadatos ni de referencia de cliente; el único enlace con el sistema propio es el `sid` devuelto, y `StatusCallback` obliga a poner el id en la URL |
+| FCM | firebase.google.com/docs/reference/fcm/rest/v1/projects.messages y referencia de `FcmOptions` del Admin SDK | 2026-10-07 | No soportado como identificador por mensaje: `data` es carga útil entregada a la app del usuario y `analytics_label` agrupa mensajes en las analíticas, no identifica uno. Evidencia incompleta: las páginas consultadas no mostraron el texto de `data` ni los límites de `analytics_label`, así que esta fila se basa en el propósito documentado de los campos, no en una cita |
+
+Resultado de la verificación (2026-10-07): solo Brevo admite un identificador de correlación útil y no visible
+para el destinatario (`tags`). Twilio y FCM quedan como "no soportado por el proveedor" con la evidencia de la
+tabla anterior. Como solo Brevo lo admite, no se abre excepción del Principio VII; el reenvío se implementa
+únicamente en el adaptador de Brevo y las pruebas de Twilio y FCM afirman que la solicitud saliente no lleva el id.
 
 El valor se toma de `Notification.correlationId` (persistido), no del MDC, para que un reencolado desde
 el planificador reenvíe el mismo identificador.

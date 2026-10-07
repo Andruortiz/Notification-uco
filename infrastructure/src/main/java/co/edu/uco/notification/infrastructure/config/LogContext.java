@@ -3,7 +3,6 @@ package co.edu.uco.notification.infrastructure.config;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.TraceParent;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.slf4j.MDC;
@@ -32,13 +31,6 @@ public final class LogContext implements AutoCloseable {
 
   public static LogContext of(final DomainEvent event) {
     return open(event.correlationId(), event.tenantId().value(), event.notificationId().value());
-  }
-
-  public LogContext withTraceParent(final TraceParent traceParent) {
-    if (traceParent != null) {
-      set(LogFields.TRACE_PARENT, traceParent.value());
-    }
-    return this;
   }
 
   private void set(final String key, final String value) {

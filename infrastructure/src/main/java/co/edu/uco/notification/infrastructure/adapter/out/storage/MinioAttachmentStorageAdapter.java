@@ -8,7 +8,7 @@ import co.edu.uco.notification.core.port.out.PresignedUpload;
 import co.edu.uco.notification.core.port.out.StoredObjectInfo;
 import co.edu.uco.notification.infrastructure.config.AttachmentProperties;
 import co.edu.uco.notification.infrastructure.config.LogFields;
-import co.edu.uco.notification.utils.FailureCategory;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import io.minio.BucketExistsArgs;
 import io.minio.CopyObjectArgs;
@@ -215,11 +215,7 @@ public class MinioAttachmentStorageAdapter implements AttachmentStoragePort {
         .doOnError(
             error ->
                 LOGGER.warn(
-                    LogFields.fields(
-                        "objectKey",
-                        key,
-                        LogFields.FAILURE_CATEGORY,
-                        FailureCategory.RECOVERABLE_INFRASTRUCTURE),
+                    LogFields.failure(ErrorCode.ATTACHMENT_OBJECT_DELETE_FAILED, "objectKey", key),
                     "Attachment object could not be deleted",
                     error));
   }

@@ -6,7 +6,8 @@
             <includeMdcKeyName>correlationId</includeMdcKeyName>
             <includeMdcKeyName>tenantId</includeMdcKeyName>
             <includeMdcKeyName>notificationId</includeMdcKeyName>
-            <includeMdcKeyName>traceparent</includeMdcKeyName>
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>spanId</includeMdcKeyName>
             <throwableConverter class="co.edu.uco.notification.infrastructure.config.SanitizingThrowableConverter">
                 <maxDepthPerThrowable>30</maxDepthPerThrowable>
                 <rootCauseFirst>true</rootCauseFirst>

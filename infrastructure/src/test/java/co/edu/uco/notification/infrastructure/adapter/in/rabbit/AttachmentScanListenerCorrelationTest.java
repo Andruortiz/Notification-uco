@@ -21,9 +21,9 @@ import co.edu.uco.notification.infrastructure.config.AttachmentProperties;
 import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyProperties;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.CorrelationId;
-import co.edu.uco.notification.utils.TraceParent;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
+import io.micrometer.observation.ObservationRegistry;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
@@ -41,8 +41,6 @@ import reactor.core.publisher.Mono;
 
 class AttachmentScanListenerCorrelationTest {
 
-  private static final String TRACEPARENT =
-      "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
   private static final TenantId TENANT = TenantId.of("tenant-1");
 
   private final ScanAttachmentUploadUseCase scanUseCase = mock(ScanAttachmentUploadUseCase.class);
@@ -61,7 +59,8 @@ class AttachmentScanListenerCorrelationTest {
               new AttachmentProperties.Scan(Duration.ofSeconds(5), Duration.ofSeconds(5), 1, 2),
               null,
               null,
-              null));
+              null),
+          ObservationRegistry.NOOP);
 
   @BeforeEach
   void runPublicationsInsideInvoke() {
@@ -84,51 +83,44 @@ class AttachmentScanListenerCorrelationTest {
   }
 
   @Test
-  void theHeaderIdAndTraceparentReachTheContextAndTheMdcAndTheMessageIsAcked() throws Exception {
+  void theHeaderIdReachesTheContextAndTheMdcAndTheMessageIsAcked() throws Exception {
     final UploadId uploadId = UploadId.newId();
     final AtomicReference<String> contextId = new AtomicReference<>();
-    final AtomicReference<String> contextTrace = new AtomicReference<>();
     final AtomicReference<String> mdcId = new AtomicReference<>();
     when(scanUseCase.scan(eq(TENANT), eq(uploadId)))
         .thenReturn(
             Mono.deferContextual(
                 context -> {
                   contextId.set(context.getOrDefault(CorrelationId.CONTEXT_KEY, null));
-                  contextTrace.set(context.getOrDefault(TraceParent.CONTEXT_KEY, null));
                   mdcId.set(MDC.get(LogFields.CORRELATION_ID));
                   return Mono.empty();
                 }));
     final MessageProperties props = new MessageProperties();
     props.setHeader(CorrelationId.AMQP_HEADER, "corr-scan");
-    props.setHeader(TraceParent.HEADER, TRACEPARENT);
 
     listener.onMessage(messageWith(uploadId, props), channel, 7L);
 
     assertEquals("corr-scan", contextId.get());
-    assertEquals(TRACEPARENT, contextTrace.get());
     assertEquals("corr-scan", mdcId.get());
     verify(channel).basicAck(7L, false);
     assertNull(MDC.get(LogFields.CORRELATION_ID));
   }
 
   @Test
-  void aMissingHeaderFallsBackToALegacyIdAndNoTraceparent() throws Exception {
+  void aMissingHeaderFallsBackToALegacyId() throws Exception {
     final UploadId uploadId = UploadId.newId();
     final AtomicReference<String> contextId = new AtomicReference<>();
-    final AtomicReference<String> contextTrace = new AtomicReference<>();
     when(scanUseCase.scan(eq(TENANT), eq(uploadId)))
         .thenReturn(
             Mono.deferContextual(
                 context -> {
                   contextId.set(context.getOrDefault(CorrelationId.CONTEXT_KEY, null));
-                  contextTrace.set(context.getOrDefault(TraceParent.CONTEXT_KEY, null));
                   return Mono.empty();
                 }));
 
     listener.onMessage(messageWith(uploadId, new MessageProperties()), channel, 8L);
 
     assertTrue(contextId.get().startsWith(NotificationDispatchListener.LEGACY_PREFIX));
-    assertNull(contextTrace.get());
     verify(channel).basicAck(8L, false);
   }
 

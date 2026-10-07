@@ -100,7 +100,8 @@ class LogCorrelationE2ETest {
     encoder.addIncludeMdcKeyName("correlationId");
     encoder.addIncludeMdcKeyName("tenantId");
     encoder.addIncludeMdcKeyName("notificationId");
-    encoder.addIncludeMdcKeyName("traceparent");
+    encoder.addIncludeMdcKeyName("traceId");
+    encoder.addIncludeMdcKeyName("spanId");
     final SanitizingThrowableConverter converter = new SanitizingThrowableConverter();
     converter.setContext(context);
     converter.start();

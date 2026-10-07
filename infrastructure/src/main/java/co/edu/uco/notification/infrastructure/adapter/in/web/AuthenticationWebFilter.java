@@ -9,12 +9,14 @@ import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.CorrelationId;
+import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationContext;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpHeaders;
@@ -38,8 +40,9 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String SUBSCRIBE_PATH = "/notifications:subscribe";
   private static final String TICKET_PARAM = "ticket";
+  private static final String ACTUATOR_PATH = "/actuator";
   private static final List<String> EXEMPT_PATHS =
-      List.of("/actuator", "/v3/api-docs", "/swagger-ui", "/swagger-ui.html", "/openapi");
+      List.of("/v3/api-docs", "/swagger-ui", "/swagger-ui.html", "/openapi");
 
   private final TokenValidationPort tokenValidationPort;
   private final SubscriptionTicketPort subscriptionTicketPort;
@@ -166,11 +169,23 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
         .contextWrite(context -> context.put(LogFields.TENANT_ID, principal.tenantId().value()));
   }
 
+  private static boolean isManagementContext(final ServerWebExchange exchange) {
+    final ApplicationContext context = exchange.getApplicationContext();
+    return context != null && context.getParent() != null;
+  }
+
+  private static boolean isActuatorPath(final String path) {
+    return path.equals(ACTUATOR_PATH) || path.startsWith(ACTUATOR_PATH + "/");
+  }
+
   private boolean isExempt(final ServerWebExchange exchange) {
     if (exchange.getRequest().getMethod() == HttpMethod.OPTIONS) {
       return true;
     }
     final String path = exchange.getRequest().getPath().value();
+    if (isManagementContext(exchange) && isActuatorPath(path)) {
+      return true;
+    }
     return EXEMPT_PATHS.stream()
         .anyMatch(exempt -> path.equals(exempt) || path.startsWith(exempt + "/"));
   }
@@ -188,26 +203,35 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
 
   private Mono<Void> reject(
       final ServerWebExchange exchange, final String tenantId, final RejectionReason reason) {
-    logRejection(exchange, tenantId, reason);
-    return writeJson(exchange, HttpStatus.UNAUTHORIZED, "missing or invalid bearer token");
+    logRejection(exchange, tenantId, reason, ErrorCode.AUTHENTICATION_REQUIRED);
+    return writeJson(
+        exchange,
+        HttpStatus.UNAUTHORIZED,
+        ErrorCode.AUTHENTICATION_REQUIRED,
+        "missing or invalid bearer token");
   }
 
   private Mono<Void> rejectForbidden(final ServerWebExchange exchange, final String tenantId) {
-    logRejection(exchange, tenantId, RejectionReason.INSUFFICIENT_ROLE);
+    logRejection(
+        exchange, tenantId, RejectionReason.INSUFFICIENT_ROLE, ErrorCode.INSUFFICIENT_ROLE);
     return writeJson(
         exchange,
         HttpStatus.FORBIDDEN,
+        ErrorCode.INSUFFICIENT_ROLE,
         "role does not satisfy the minimum role required for this operation");
   }
 
   private static void logRejection(
-      final ServerWebExchange exchange, final String tenantId, final RejectionReason reason) {
+      final ServerWebExchange exchange,
+      final String tenantId,
+      final RejectionReason reason,
+      final ErrorCode code) {
     try (LogContext ignored =
         LogContext.open(
             CorrelationId.fromOrNull(correlationIdOf(exchange)),
             tenantId == null ? null : LogSanitizer.safe(tenantId),
             null)) {
-      LOGGER.warn(LogFields.fields("reason", reason), "Request rejected by authentication");
+      LOGGER.warn(LogFields.failure(code, "reason", reason), "Request rejected by authentication");
     }
   }
 
@@ -222,14 +246,23 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
   }
 
   private static Mono<Void> writeJson(
-      final ServerWebExchange exchange, final HttpStatus status, final String message) {
+      final ServerWebExchange exchange,
+      final HttpStatus status,
+      final ErrorCode code,
+      final String message) {
     final ServerHttpResponse response = exchange.getResponse();
     response.setStatusCode(status);
     response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
     final String correlationId = correlationIdOf(exchange);
     response.getHeaders().set(CorrelationId.HEADER, correlationId);
     final byte[] bytes =
-        ("{\"message\":\"" + message + "\",\"correlationId\":\"" + correlationId + "\"}")
+        ("{\"code\":\""
+                + code.format()
+                + "\",\"message\":\""
+                + message
+                + "\",\"correlationId\":\""
+                + correlationId
+                + "\"}")
             .getBytes(StandardCharsets.UTF_8);
     final DataBuffer buffer = response.bufferFactory().wrap(bytes);
     return response.writeWith(Mono.just(buffer));

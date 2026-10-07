@@ -1,6 +1,7 @@
 package co.edu.uco.notification.core.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -42,13 +43,16 @@ import co.edu.uco.notification.core.exception.ProviderNotAvailableException;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import co.edu.uco.notification.utils.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.logging.Level;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -61,6 +65,8 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class DispatchNotificationServiceTest {
+
+  private final NotificationMetricsPort metricsPort = Mockito.mock(NotificationMetricsPort.class);
 
   private final NotificationRepository notificationRepository =
       Mockito.mock(NotificationRepository.class);
@@ -86,7 +92,8 @@ class DispatchNotificationServiceTest {
             channelCatalogPort,
             senderRegistry,
             eventPublisherPort,
-            retryPolicy);
+            retryPolicy,
+            metricsPort);
   }
 
   private static Notification pendingNotification() {
@@ -284,7 +291,8 @@ class DispatchNotificationServiceTest {
             channelCatalogPort,
             new NotificationSenderRegistry(List.of(otherSender, notificationSenderPort)),
             eventPublisherPort,
-            retryPolicy);
+            retryPolicy,
+            metricsPort);
     final Notification notification = pendingNotification();
     notification.pullEvents();
     stubHappyPathUpTo(notification);
@@ -309,7 +317,8 @@ class DispatchNotificationServiceTest {
             channelCatalogPort,
             new NotificationSenderRegistry(List.of(otherSender)),
             eventPublisherPort,
-            retryPolicy);
+            retryPolicy,
+            metricsPort);
     final Notification notification = pendingNotification();
     notification.pullEvents();
     when(notificationRepository.reserveForDispatch(notification.notificationId()))
@@ -341,7 +350,12 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                null, channelCatalogPort, senderRegistry, eventPublisherPort, retryPolicy));
+                null,
+                channelCatalogPort,
+                senderRegistry,
+                eventPublisherPort,
+                retryPolicy,
+                metricsPort));
   }
 
   @Test
@@ -350,7 +364,12 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                notificationRepository, null, senderRegistry, eventPublisherPort, retryPolicy));
+                notificationRepository,
+                null,
+                senderRegistry,
+                eventPublisherPort,
+                retryPolicy,
+                metricsPort));
   }
 
   @Test
@@ -359,7 +378,12 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                notificationRepository, channelCatalogPort, null, eventPublisherPort, retryPolicy));
+                notificationRepository,
+                channelCatalogPort,
+                null,
+                eventPublisherPort,
+                retryPolicy,
+                metricsPort));
   }
 
   @Test
@@ -368,7 +392,12 @@ class DispatchNotificationServiceTest {
         NullPointerException.class,
         () ->
             new DispatchNotificationService(
-                notificationRepository, channelCatalogPort, senderRegistry, null, retryPolicy));
+                notificationRepository,
+                channelCatalogPort,
+                senderRegistry,
+                null,
+                retryPolicy,
+                metricsPort));
   }
 
   @Test
@@ -381,7 +410,8 @@ class DispatchNotificationServiceTest {
                 channelCatalogPort,
                 senderRegistry,
                 eventPublisherPort,
-                null));
+                null,
+                metricsPort));
   }
 
   private static Notification pendingNotificationWithAttachment() {
@@ -670,5 +700,203 @@ class DispatchNotificationServiceTest {
 
     verify(notificationSenderPort).send(notification);
     assertEquals(NotificationStatus.DELIVERED, notification.status());
+  }
+
+  @Test
+  void aFailedReservationReleaseIsReportedWithItsErrorCodeAndNoCategoryText() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationRepository.releaseReservation(notification.notificationId()))
+        .thenReturn(Mono.error(new IllegalStateException("mongo down")));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.error(new ProviderDisabledException(ProviderId.of("brevo"), "disabled")));
+
+    try (LogCapture logs = new LogCapture(DispatchNotificationService.class)) {
+      StepVerifier.create(service.dispatch(notification.notificationId()))
+          .expectError(ProviderDisabledException.class)
+          .verify();
+
+      assertEquals(1, logs.records(Level.SEVERE, "DISPATCH_RESERVATION_NOT_RELEASED").size());
+      final String message = logs.records().get(0).getMessage();
+      assertTrue(
+          message.contains("errorCode=" + ErrorCode.DISPATCH_RESERVATION_NOT_RELEASED.format()));
+      assertFalse(message.contains("category="));
+    }
+  }
+
+  @Test
+  void eventsThatCouldNotBePublishedAreReportedWithTheirErrorCodeAndNoCategoryText() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(eventPublisherPort.publish(any()))
+        .thenReturn(Mono.error(new IllegalStateException("broker down")));
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    try (LogCapture logs = new LogCapture(DispatchNotificationService.class)) {
+      StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+      assertEquals(1, logs.records(Level.SEVERE, "DISPATCH_EVENTS_NOT_PUBLISHED").size());
+      final String message = logs.records().get(0).getMessage();
+      assertTrue(message.contains("errorCode=" + ErrorCode.DISPATCH_EVENTS_NOT_PUBLISHED.format()));
+      assertFalse(message.contains("category="));
+    }
+  }
+
+  @Test
+  void anAcceptedAttemptCountsOnceAndMeasuresTheProviderCall() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(metricsPort)
+        .dispatchAttempted(ChannelType.of("EMAIL"), ProviderId.of("brevo"), AttemptResult.ACCEPTED);
+    final ArgumentCaptor<java.time.Duration> duration =
+        ArgumentCaptor.forClass(java.time.Duration.class);
+    verify(metricsPort)
+        .providerCalled(
+            Mockito.eq(ProviderId.of("brevo")),
+            Mockito.eq(AttemptResult.ACCEPTED),
+            duration.capture());
+    assertFalse(duration.getValue().isNegative());
+    verify(metricsPort, never()).errorRecorded(any());
+    verify(metricsPort, never()).errorRecorded(any(), any(), any());
+  }
+
+  @Test
+  void aRecoverableAttemptIsCountedWithItsResultAndDuration() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(metricsPort)
+        .dispatchAttempted(
+            ChannelType.of("EMAIL"), ProviderId.of("brevo"), AttemptResult.RECOVERABLE_FAILURE);
+    verify(metricsPort)
+        .providerCalled(
+            Mockito.eq(ProviderId.of("brevo")),
+            Mockito.eq(AttemptResult.RECOVERABLE_FAILURE),
+            any(java.time.Duration.class));
+  }
+
+  @Test
+  void aRejectionBeforeCallingTheProviderCountsFailedWithoutDuration() {
+    final Notification notification = pendingNotificationWithAttachment();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.supportsAttachments()).thenReturn(false);
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(metricsPort)
+        .dispatchAttempted(
+            ChannelType.of("EMAIL"), ProviderId.of("brevo"), AttemptResult.PERMANENT_FAILURE);
+    verify(metricsPort, never()).providerCalled(any(), any(), any());
+  }
+
+  @Test
+  void aDisabledProviderCountsFailedWithoutDuration() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationRepository.releaseReservation(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.error(new ProviderDisabledException(ProviderId.of("brevo"), "disabled")));
+
+    StepVerifier.create(service.dispatch(notification.notificationId()))
+        .expectError(ProviderDisabledException.class)
+        .verify();
+
+    verify(metricsPort)
+        .dispatchAttempted(
+            ChannelType.of("EMAIL"), ProviderId.of("brevo"), AttemptResult.PERMANENT_FAILURE);
+    verify(metricsPort, never()).providerCalled(any(), any(), any());
+  }
+
+  @Test
+  void aRedeliveryThatIsNotReservedCountsNoAttempt() {
+    final Notification notification = notificationInStatus(NotificationStatus.DELIVERED);
+    stubNotReserved(notification);
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    Mockito.verifyNoInteractions(metricsPort);
+  }
+
+  @Test
+  void aChannelWithoutAnActiveRouteCountsNoAttempt() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    when(notificationRepository.reserveForDispatch(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
+    when(channelCatalogPort.findActiveRoute(notification.channelType(), notification.tenantId()))
+        .thenReturn(Mono.empty());
+    when(notificationRepository.releaseReservation(notification.notificationId()))
+        .thenReturn(Mono.just(notification));
+
+    StepVerifier.create(service.dispatch(notification.notificationId()))
+        .expectError(ChannelNotAvailableException.class)
+        .verify();
+
+    Mockito.verifyNoInteractions(metricsPort);
+  }
+
+  @Test
+  void eventsThatCouldNotBePublishedCountAnErrorWithChannelAndProvider() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(eventPublisherPort.publish(any()))
+        .thenReturn(Mono.error(new IllegalStateException("broker down")));
+    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    verify(metricsPort)
+        .errorRecorded(
+            ErrorCode.DISPATCH_EVENTS_NOT_PUBLISHED,
+            ChannelType.of("EMAIL"),
+            ProviderId.of("brevo"));
+  }
+
+  @Test
+  void aFailedReservationReleaseCountsAnErrorWithTheChannelOnly() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationRepository.releaseReservation(notification.notificationId()))
+        .thenReturn(Mono.error(new IllegalStateException("mongo down")));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.error(new ProviderDisabledException(ProviderId.of("brevo"), "disabled")));
+
+    StepVerifier.create(service.dispatch(notification.notificationId()))
+        .expectError(ProviderDisabledException.class)
+        .verify();
+
+    verify(metricsPort)
+        .errorRecorded(ErrorCode.DISPATCH_RESERVATION_NOT_RELEASED, ChannelType.of("EMAIL"), null);
+  }
+
+  @Test
+  void constructorRejectsNullMetricsPort() {
+    assertThrows(
+        NullPointerException.class,
+        () ->
+            new DispatchNotificationService(
+                notificationRepository,
+                channelCatalogPort,
+                senderRegistry,
+                eventPublisherPort,
+                retryPolicy,
+                null));
   }
 }

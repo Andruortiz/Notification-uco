@@ -8,6 +8,7 @@ import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.infrastructure.config.BrevoProviderProperties;
+import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.List;
 import java.util.Map;
@@ -98,7 +99,7 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
         .onErrorResume(
             error -> {
               final AttemptResult result = BrevoResponseClassifier.classifyError(error);
-              logOutcome(notification, result, error);
+              logFailure(notification, result, error);
               return Mono.just(result);
             });
   }
@@ -111,24 +112,36 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
         .header("api-key", properties.apiKey())
         .bodyValue(request)
         .exchangeToMono(
-            response ->
-                Mono.just(BrevoResponseClassifier.classifyStatus(response.statusCode().value())))
-        .doOnNext(result -> logOutcome(notification, result, null))
+            response -> {
+              final int status = response.statusCode().value();
+              return response
+                  .bodyToMono(BrevoApiResponse.class)
+                  .onErrorReturn(BrevoApiResponse.EMPTY)
+                  .defaultIfEmpty(BrevoApiResponse.EMPTY)
+                  .map(body -> classifyAndLog(notification, status, body));
+            })
         .onErrorResume(
             error -> {
               final AttemptResult result = BrevoResponseClassifier.classifyError(error);
-              logOutcome(notification, result, error);
+              logFailure(notification, result, error);
               return Mono.just(result);
             });
   }
 
-  private void logOutcome(
-      final Notification notification, final AttemptResult result, final Throwable error) {
-    if (error == null) {
-      ProviderLogs.dispatchedWithoutDetails(LOGGER, notification, PROVIDER_ID, result);
+  private static AttemptResult classifyAndLog(
+      final Notification notification, final int status, final BrevoApiResponse body) {
+    final AttemptResult result = BrevoResponseClassifier.classifyStatus(status);
+    if (result == AttemptResult.ACCEPTED) {
+      ProviderLogs.dispatched(LOGGER, notification, PROVIDER_ID, result, status, body.messageId());
     } else {
-      ProviderLogs.dispatchFailed(LOGGER, notification, PROVIDER_ID, result, error);
+      ProviderLogs.dispatchedWithoutDetails(LOGGER, notification, PROVIDER_ID, result);
     }
+    return result;
+  }
+
+  private void logFailure(
+      final Notification notification, final AttemptResult result, final Throwable error) {
+    ProviderLogs.dispatchFailed(LOGGER, notification, PROVIDER_ID, result, error);
   }
 
   private BrevoEmailRequest toRequest(
@@ -147,7 +160,18 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
             .map(file -> new BrevoEmailRequest.Attachment(file.fileName(), file.contentBase64()))
             .toList();
     return new BrevoEmailRequest(
-        sender, to, subject, notification.content().body(), headers, attachment);
+        sender,
+        to,
+        subject,
+        notification.content().body(),
+        headers,
+        attachment,
+        correlationTags(notification));
+  }
+
+  private static List<String> correlationTags(final Notification notification) {
+    final CorrelationId correlationId = notification.correlationId();
+    return correlationId == null ? null : List.of(correlationId.value());
   }
 
   private static String blankToNull(final String value) {

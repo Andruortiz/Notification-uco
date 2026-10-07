@@ -90,13 +90,14 @@ class StructuredLogLayoutTest {
   }
 
   @Test
-  void traceparentInTheMdcIsEmittedAsItsOwnField() throws Exception {
-    final String traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
-    MDC.put("traceparent", traceparent);
+  void traceIdAndSpanIdInTheMdcAreEmittedAsTheirOwnFields() throws Exception {
+    MDC.put("traceId", "4bf92f3577b34da6a3ce929d0e0e4736");
+    MDC.put("spanId", "00f067aa0ba902b7");
 
     context.getLogger("test.layout").info("with trace");
 
-    assertEquals(traceparent, flushedLines().get(0).get("traceparent").asText());
+    assertEquals("4bf92f3577b34da6a3ce929d0e0e4736", flushedLines().get(0).get("traceId").asText());
+    assertEquals("00f067aa0ba902b7", flushedLines().get(0).get("spanId").asText());
   }
 
   @Test

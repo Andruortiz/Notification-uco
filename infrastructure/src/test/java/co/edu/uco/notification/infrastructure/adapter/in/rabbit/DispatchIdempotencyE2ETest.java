@@ -35,6 +35,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -114,7 +115,7 @@ class DispatchIdempotencyE2ETest {
   static final class SaveFailureSwitch {
 
     final AtomicBoolean failSaves = new AtomicBoolean(false);
-    final AtomicInteger enqueueFailures = new AtomicInteger(0);
+    final Set<String> enqueueFailuresFor = ConcurrentHashMap.newKeySet();
   }
 
   static final class FlakyNotificationRepository implements NotificationRepository {
@@ -190,7 +191,7 @@ class DispatchIdempotencyE2ETest {
 
     @Override
     public Mono<Void> enqueueForDispatch(final Notification notification) {
-      return failureSwitch.enqueueFailures.getAndUpdate(count -> Math.max(0, count - 1)) > 0
+      return failureSwitch.enqueueFailuresFor.remove(notification.notificationId().value())
           ? Mono.error(new IllegalStateException("broker down"))
           : delegate.enqueueForDispatch(notification);
     }
@@ -241,7 +242,7 @@ class DispatchIdempotencyE2ETest {
   @BeforeEach
   void setUp() throws InterruptedException {
     failureSwitch.failSaves.set(false);
-    failureSwitch.enqueueFailures.set(0);
+    failureSwitch.enqueueFailuresFor.clear();
     awaitRoute();
     while (rabbitTemplate.receive(topology.dlq().queue(), 100) != null) {
       Thread.onSpinWait();
@@ -396,7 +397,7 @@ class DispatchIdempotencyE2ETest {
                 .set("pendingSince", Instant.now().minusSeconds(120)),
             co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationDocument.class)
         .block();
-    failureSwitch.enqueueFailures.set(1);
+    failureSwitch.enqueueFailuresFor.add(orphan.notificationId().value());
 
     requeueUseCase.requeuePending().block();
 

@@ -208,7 +208,9 @@ estado y comprobar que expone el mismo valor.
 - **FR-013**: La consulta de estado de una notificación MUST exponer el identificador de correlación.
 - **FR-014**: El identificador MUST aislarse entre solicitudes concurrentes: nunca una entrada de una
   solicitud lleva el identificador de otra.
-- **FR-016**: El servicio MUST aceptar, conservar y reenviar la cabecera `traceparent` (REST de
+- **FR-016** (SUSTITUIDO por la spec 020, FR-015 a FR-017, el 2026-10-05: ahora el servicio interpreta,
+  genera y propaga `traceparent` con Micrometer Tracing; `traceId` y `correlationId` tienen propósitos
+  distintos): El servicio MUST aceptar, conservar y reenviar la cabecera `traceparent` (REST de
   entrada, contexto de log, cabecera de mensajería) sin interpretarla ni generarla; un valor que no
   cumpla el formato W3C se descarta.
 - **FR-017**: Los eventos de una notificación MUST llevar el identificador de correlación persistido

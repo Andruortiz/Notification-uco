@@ -27,7 +27,7 @@ WORKDIR /app
 COPY --from=build /workspace/infrastructure/target/infrastructure-*.jar app.jar
 
 USER app
-EXPOSE 8060
+EXPOSE 8060 8061
 
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError"
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]

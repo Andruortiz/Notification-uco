@@ -2,6 +2,7 @@ package co.edu.uco.notification.core.usecase;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -31,8 +32,10 @@ import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
+import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.CorrelationId;
+import co.edu.uco.notification.utils.ErrorCode;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -46,6 +49,8 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class RequeuePendingNotificationsServiceTest {
+
+  private final NotificationMetricsPort metricsPort = Mockito.mock(NotificationMetricsPort.class);
 
   private final NotificationRepository notificationRepository =
       Mockito.mock(NotificationRepository.class);
@@ -62,7 +67,8 @@ class RequeuePendingNotificationsServiceTest {
           retryPolicy,
           Duration.ofSeconds(60),
           Duration.ofMinutes(10),
-          BATCH_SIZE);
+          BATCH_SIZE,
+          metricsPort);
 
   @BeforeEach
   void stubEmptyByDefault() {
@@ -228,7 +234,8 @@ class RequeuePendingNotificationsServiceTest {
             retryPolicy,
             Duration.ofSeconds(60),
             Duration.ofMinutes(10),
-            2);
+            2,
+            metricsPort);
     final List<Notification> due = new ArrayList<>();
     for (int i = 0; i < 5; i++) {
       final Notification notification =
@@ -430,5 +437,133 @@ class RequeuePendingNotificationsServiceTest {
         new NotificationMetadata(
             Instant.now().minusSeconds(1800), 3L, Instant.now().minusSeconds(1700), null, 1),
         List.of());
+  }
+
+  @Test
+  void aFailedRequeueIsReportedWithItsErrorCode() {
+    final Notification broken =
+        recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.just(broken));
+    when(notificationRepository.save(broken))
+        .thenReturn(Mono.error(new IllegalStateException("mongo down")));
+
+    assertReported("REQUEUE_FAILED", ErrorCode.REQUEUE_FAILED);
+  }
+
+  @Test
+  void aFailedEnqueueIsReportedWithItsErrorCode() {
+    final Notification failing = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
+    when(notificationRepository.claimForRequeue(any(), anyInt())).thenReturn(Flux.just(failing));
+    when(eventPublisherPort.enqueueForDispatch(failing))
+        .thenReturn(Mono.error(new IllegalStateException("broker down")));
+
+    assertReported("ENQUEUE_FAILED", ErrorCode.ENQUEUE_FAILED);
+  }
+
+  @Test
+  void aFailedPassIsReportedWithItsErrorCode() {
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.error(new IllegalStateException("mongo down")));
+
+    assertReported("REQUEUE_RECOVERABLE_PASS_FAILED", ErrorCode.REQUEUE_PASS_FAILED);
+  }
+
+  @Test
+  void aReleasedStuckNotificationIsReportedWithItsErrorCode() {
+    when(notificationRepository.claimStuckInProcess(any(), anyInt()))
+        .thenReturn(Flux.just(stuckInProcessNotification()));
+
+    assertReported(
+        "DISPATCH_STUCK_IN_PROCESS_RELEASED", ErrorCode.DISPATCH_STUCK_IN_PROCESS_RELEASED);
+  }
+
+  private void assertReported(final String marker, final ErrorCode code) {
+    try (LogCapture logs = new LogCapture(RequeuePendingNotificationsService.class)) {
+      StepVerifier.create(service.requeuePending()).verifyComplete();
+
+      final List<java.util.logging.LogRecord> matching =
+          logs.records().stream().filter(r -> r.getMessage().contains(marker)).toList();
+      assertEquals(1, matching.size());
+      assertTrue(matching.get(0).getMessage().contains("errorCode=" + code.format()));
+      assertFalse(matching.get(0).getMessage().contains("category="));
+    }
+  }
+
+  @Test
+  void aFailedRequeueCountsOneErrorWithItsCode() {
+    final Notification broken =
+        recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.just(broken));
+    when(notificationRepository.save(broken))
+        .thenReturn(Mono.error(new IllegalStateException("mongo down")));
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(metricsPort, times(1)).errorRecorded(ErrorCode.REQUEUE_FAILED);
+    verify(metricsPort, times(1)).errorRecorded(any());
+  }
+
+  @Test
+  void aFailedEnqueueCountsOneErrorWithItsCode() {
+    final Notification failing = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
+    when(notificationRepository.claimForRequeue(any(), anyInt())).thenReturn(Flux.just(failing));
+    when(eventPublisherPort.enqueueForDispatch(failing))
+        .thenReturn(Mono.error(new IllegalStateException("broker down")));
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(metricsPort, times(1)).errorRecorded(ErrorCode.ENQUEUE_FAILED);
+  }
+
+  @Test
+  void aFailedPassCountsOneErrorWithItsCode() {
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.error(new IllegalStateException("mongo down")));
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(metricsPort, times(1)).errorRecorded(ErrorCode.REQUEUE_PASS_FAILED);
+  }
+
+  @Test
+  void aReleasedStuckNotificationCountsOneErrorWithItsCode() {
+    when(notificationRepository.claimStuckInProcess(any(), anyInt()))
+        .thenReturn(Flux.just(stuckInProcessNotification()));
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    verify(metricsPort, times(1)).errorRecorded(ErrorCode.DISPATCH_STUCK_IN_PROCESS_RELEASED);
+  }
+
+  @Test
+  void aCleanPassCountsNoError() {
+    final Notification dueNotification =
+        recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.just(dueNotification));
+    when(notificationRepository.save(dueNotification)).thenReturn(Mono.just(dueNotification));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(dueNotification)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    Mockito.verifyNoInteractions(metricsPort);
+  }
+
+  @Test
+  void constructorRejectsNullMetricsPort() {
+    org.junit.jupiter.api.Assertions.assertThrows(
+        NullPointerException.class,
+        () ->
+            new RequeuePendingNotificationsService(
+                notificationRepository,
+                eventPublisherPort,
+                retryPolicy,
+                Duration.ofSeconds(60),
+                Duration.ofMinutes(10),
+                BATCH_SIZE,
+                null));
   }
 }

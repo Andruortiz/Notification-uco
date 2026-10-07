@@ -10,12 +10,14 @@ public record BrevoEmailRequest(
     String subject,
     String textContent,
     Map<String, String> headers,
-    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Attachment> attachment) {
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<Attachment> attachment,
+    @JsonInclude(JsonInclude.Include.NON_EMPTY) List<String> tags) {
 
   public BrevoEmailRequest {
     to = to == null ? null : List.copyOf(to);
     headers = headers == null ? null : Map.copyOf(headers);
     attachment = attachment == null ? null : List.copyOf(attachment);
+    tags = tags == null ? null : List.copyOf(tags);
   }
 
   public BrevoEmailRequest(
@@ -24,7 +26,7 @@ public record BrevoEmailRequest(
       final String subject,
       final String textContent,
       final Map<String, String> headers) {
-    this(sender, to, subject, textContent, headers, null);
+    this(sender, to, subject, textContent, headers, null, null);
   }
 
   @Override
@@ -41,6 +43,12 @@ public record BrevoEmailRequest(
   @JsonInclude(JsonInclude.Include.NON_EMPTY)
   public List<Attachment> attachment() {
     return attachment == null ? null : List.copyOf(attachment);
+  }
+
+  @Override
+  @JsonInclude(JsonInclude.Include.NON_EMPTY)
+  public List<String> tags() {
+    return tags == null ? null : List.copyOf(tags);
   }
 
   @JsonInclude(JsonInclude.Include.NON_NULL)

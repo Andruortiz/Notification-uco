@@ -6,7 +6,9 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente
+**Estado**: Aceptado
+
+**Aprobación**: aceptado por el usuario el 2026-10-08 ("acepto, arranca"); lo registra la sesión principal bajo su instrucción directa y explícita.
 
 **Versión del plan**: 1
 
@@ -31,13 +33,13 @@ confirmó Q1 a Q5 y la elección del archivo compose adicional (Q6) el 2026-10-0
 
 - Q1: alertas solo como reglas de Prometheus en `observability/alerts.yml`, sin Alertmanager ni destino
   externo. Umbral aprobado: más de 5 % de despachos `failed` durante 5 minutos. Excepción del Principio VII
-  por el destino de las alertas: dueño y fecha PENDIENTES de que los fije el usuario.
+  por el destino de las alertas: dueño equipo de desarrollo del componente, fecha 2026-11-12.
 - Q2: `--storage.tsdb.retention.time=31d`, volumen nombrado.
 - Q3: `ObservabilityDashboardE2ETest` con verificación de existencia contra `/actuator/prometheus`,
   evaluación contra un Prometheus real en Testcontainers y control positivo, más
   `ComposeObservabilityContractTest`.
 - Q4: panel de aceptadas por minuto y por réplica con línea en 500; la prueba de carga queda fuera como
-  excepción del Principio VII: dueño y fecha PENDIENTES de que los fije el usuario.
+  excepción del Principio VII: dueño equipo de desarrollo del componente, fecha 2026-11-05.
 - Q5: `prom/prometheus:v3.5.1` y `grafana/grafana:12.2.0`.
 - Q6: Prometheus y Grafana en `docker-compose.observability.yml` (sin perfil). Credenciales en el `.env`
   como `${GRAFANA_ADMIN_USER:?mensaje}` y `${GRAFANA_ADMIN_PASSWORD:?mensaje}`, sin valor por defecto, que
@@ -80,7 +82,7 @@ justificación)
 | III. Sin comentarios | Código de pruebas sin comentarios; la explicación vive en spec, plan y README. Los YAML no llevan comentarios de justificación. |
 | IV. Calidad | Prueba E2E bloqueante `ObservabilityDashboardE2ETest` (tarea propia), con control positivo y afirmación de `Duration` para el raspado; `verify` completo con cobertura y SpotBugs. Las pruebas de contrato del compose no necesitan Docker. |
 | V. Commits | Una línea, español sin tildes. |
-| VI. Aprobación | El Estado del plan es `Pendiente`; no se generan tareas ni se implementa hasta que el usuario lo cambie. |
+| VI. Aprobación | El usuario aceptó el plan el 2026-10-08; el Estado del plan es `Aceptado`, por lo que se generan tareas y luego se implementa. |
 | VII. Sin atajos | Lo que el tablero no demuestra se registra como excepción con dueño y fecha (FR-013): prueba de carga de RNF-03, histórico mensual de RNF-01 si Q2 no se acepta, destino de alertas si Q1 lo difiere. Dueño y fecha: a definir por el usuario (no se inventan). |
 | IX. Observabilidad | Cierra el consumo de las métricas de RNF-10. |
 | Secretos | Sin credenciales en el repo; `${VAR:?}` desde el `.env` (ignorado por git), sin valor por defecto; `.env.example` las deja vacías. |
@@ -217,7 +219,7 @@ cada panel de RNF y qué no (research R6), cómo parar y borrar volúmenes.
 8. **Compatibilidad del JSON con Grafana 12.2**: no verificada hasta cargar el tablero en la implementación.
 9. **Docker apagado en este equipo al escribir el plan**: nada de lo anterior sobre comportamiento en vivo
    se ha ejecutado salvo lo marcado como verificado en la research.
-10. **Dueño y fecha de las excepciones** (prueba de carga de RNF-03 y destino de alertas): PENDIENTES de que los fije el usuario; no se inventan.
+10. **Dueño y fecha de las excepciones** (prueba de carga de RNF-03 y destino de alertas): fijados por el usuario el 2026-10-08: dueño equipo de desarrollo del componente; prueba de carga de RNF-03 el 2026-11-05; destino de las alertas el 2026-11-12.
 
 ## Complexity Tracking
 

@@ -30,5 +30,5 @@
 
 ## Notes
 
-- Q1 a Q6 CONFIRMADAS el 2026-10-08. Pendientes de que el usuario fije: dueño y fecha de las excepciones del Principio VII (prueba de carga de RNF-03 y destino de alertas).
-- El plan sigue en Estado Pendiente hasta que el usuario lo cambie.
+- Q1 a Q6 CONFIRMADAS el 2026-10-08. Excepciones del Principio VII con dueño (equipo de desarrollo del componente) y fechas 2026-11-05 (prueba de carga de RNF-03) y 2026-11-12 (destino de alertas), fijados por el usuario.
+- Plan aceptado por el usuario el 2026-10-08.

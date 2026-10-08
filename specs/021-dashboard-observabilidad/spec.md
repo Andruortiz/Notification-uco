@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-08
 
-**Status**: Clarificaciones Q1 a Q5 confirmadas por el usuario el 2026-10-08; plan pendiente de aprobación
+**Status**: Clarificaciones Q1 a Q5 confirmadas por el usuario el 2026-10-08; plan aceptado por el usuario el 2026-10-08
 
 **Input**: User description: "Dashboard de observabilidad con Prometheus y Grafana para la demo y para
 demostrar los RNF. La spec 020 ya expone /actuator/prometheus en el puerto de gestión 8061 (solo health y
@@ -33,7 +33,7 @@ Decisiones CONFIRMADAS por el usuario el 2026-10-08, tal como se propusieron.
   alerta de Prometheus versionadas (`observability/alerts.yml`), visibles en la interfaz de Prometheus y en
   el tablero, sin Alertmanager ni destino externo. El umbral propuesto (más de 5 % de despachos `failed`
   en 5 minutos) fue aprobado con la confirmación. El envío a un destino queda como excepción del
-  Principio VII; dueño y fecha: PENDIENTES de que los fije el usuario.
+  Principio VII; dueño: equipo de desarrollo del componente; fecha: 2026-11-12.
 - Q2 (CONFIRMADA 2026-10-08): retención de Prometheus de 31 días, configuración versionada en el compose,
   con volumen persistente.
 - Q3 (CONFIRMADA 2026-10-08): el gate E2E es `ObservabilityDashboardE2ETest`, que genera tráfico para todas
@@ -42,7 +42,7 @@ Decisiones CONFIRMADAS por el usuario el 2026-10-08, tal como se propusieron.
   con control positivo; más una prueba de contrato del compose.
 - Q4 (CONFIRMADA 2026-10-08): RNF-03 se muestra como panel de aceptadas por minuto y por réplica con línea
   de umbral en 500; la prueba de carga que lo demuestra queda fuera de esta historia como excepción del
-  Principio VII; dueño y fecha: PENDIENTES de que los fije el usuario.
+  Principio VII; dueño: equipo de desarrollo del componente; fecha: 2026-11-05.
 - Q5 (CONFIRMADA 2026-10-08): imágenes `prom/prometheus:v3.5.1` y `grafana/grafana:12.2.0`, con etiqueta
   fija. La compatibilidad del tablero con esa versión de Grafana se verifica en la implementación.
 - Q6 (CONFIRMADA 2026-10-08): despliegue con un archivo compose adicional
@@ -52,6 +52,13 @@ Decisiones CONFIRMADAS por el usuario el 2026-10-08, tal como se propusieron.
   docker-compose.observability.yml`, o `COMPOSE_FILE` en el `.env`). Verificado con `docker compose
   config` el 2026-10-08: sin el archivo adicional no se exige la variable; con el archivo y la variable
   ausente falla con el mensaje.
+
+### Excepciones del Principio VII (aceptadas por el usuario el 2026-10-08)
+
+| Pendiente | Dueño | Fecha |
+|---|---|---|
+| Prueba de carga que demuestre RNF-03 (>= 500 notificaciones por minuto por réplica) | equipo de desarrollo del componente | 2026-11-05 |
+| Destino externo de las alertas (Alertmanager y canal de notificación) | equipo de desarrollo del componente | 2026-11-12 |
 
 ## User Scenarios & Testing *(mandatory)*
 

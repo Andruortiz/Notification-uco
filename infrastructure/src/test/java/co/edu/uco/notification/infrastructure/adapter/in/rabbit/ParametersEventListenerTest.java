@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -210,8 +211,9 @@ class ParametersEventListenerTest {
   void aFailedRepublicationRejectsTheMessageWithoutRequeueSoTheBrokerDeadLetters()
       throws IOException {
     when(useCase.receive(any())).thenReturn(Mono.error(new IllegalStateException("boom")));
-    when(rabbitTemplate.invoke(any()))
-        .thenThrow(new org.springframework.amqp.AmqpException("broker down"));
+    doThrow(new org.springframework.amqp.AmqpException("broker down"))
+        .when(rabbitTemplate)
+        .invoke(any());
 
     listener.onMessage(message("{\"version\":2,\"values\":{}}", null), channel, TAG);
 

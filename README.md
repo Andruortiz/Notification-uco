@@ -65,6 +65,11 @@ que empezaron.
 - **Observabilidad:** eventos `CONFIG_APPLIED`, `CONFIG_REJECTED`, `CONFIG_IGNORED`, `PARAMETERS_UNAVAILABLE`
   y `PARAMETERS_RECOVERED` con identificador de correlacion `param-...`, y la metrica
   `notification.configuration.version` con la etiqueta `source`.
+- **Suscripcion por evento (contrato supuesto):** con `NOTIFICATION_PARAMETERS_EVENTS_EXCHANGE`, `..._ROUTING_KEY` y
+  `..._QUEUE` definidas, el servicio consume de una cola propia mensajes `{"version": n, "values": {...}}` del
+  exchange de Parametros con ack manual y DLQ (`<cola>.dlq`); el sondeo HTTP se conserva como reconciliacion.
+  Sin exchange configurado no existe cola ni listener. El contrato esta en
+  `specs/022-suscripcion-parametros/contracts/parametros-evento-supuesto.md` y se ajusta antes del 2026-11-15.
 
 ## Autenticacion
 

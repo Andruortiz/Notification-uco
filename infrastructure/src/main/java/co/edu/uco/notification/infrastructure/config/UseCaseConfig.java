@@ -75,16 +75,20 @@ public class UseCaseConfig {
   }
 
   @Bean
-  SynchronizeConfigurationUseCase synchronizeConfigurationUseCase(
-      final ParametersSourcePort parametersSourcePort,
+  ReceivePublishedConfigurationUseCase receivePublishedConfigurationUseCase(
       final ApplyConfigurationChangeUseCase applyConfigurationChangeUseCase,
       final LastKnownConfigurationPort lastKnownConfigurationPort,
       final ConfigurationHolder configurationHolder) {
+    return new ReceivePublishedConfigurationService(
+        applyConfigurationChangeUseCase, lastKnownConfigurationPort, configurationHolder);
+  }
+
+  @Bean
+  SynchronizeConfigurationUseCase synchronizeConfigurationUseCase(
+      final ParametersSourcePort parametersSourcePort,
+      final ReceivePublishedConfigurationUseCase receivePublishedConfigurationUseCase) {
     return new SynchronizeConfigurationService(
-        parametersSourcePort,
-        applyConfigurationChangeUseCase,
-        lastKnownConfigurationPort,
-        configurationHolder);
+        parametersSourcePort, receivePublishedConfigurationUseCase);
   }
 
   @Bean

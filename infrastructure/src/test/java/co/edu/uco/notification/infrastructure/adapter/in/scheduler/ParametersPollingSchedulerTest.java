@@ -26,6 +26,7 @@ import co.edu.uco.notification.core.port.out.LastKnownConfigurationPort;
 import co.edu.uco.notification.core.port.out.ParametersSourcePort;
 import co.edu.uco.notification.core.usecase.ApplyConfigurationChangeService;
 import co.edu.uco.notification.core.usecase.ConfigurationHolder;
+import co.edu.uco.notification.core.usecase.ReceivePublishedConfigurationService;
 import co.edu.uco.notification.core.usecase.SynchronizeConfigurationService;
 import co.edu.uco.notification.infrastructure.adapter.out.parameters.NoParametersSource;
 import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersConfig;
@@ -105,10 +106,11 @@ class ParametersPollingSchedulerTest {
     final SynchronizeConfigurationService service =
         new SynchronizeConfigurationService(
             source,
-            new ApplyConfigurationChangeService(
-                holder, new ConfigurationValidator(registry), fixed(), Clock.systemUTC()),
-            lastKnown,
-            holder);
+            new ReceivePublishedConfigurationService(
+                new ApplyConfigurationChangeService(
+                    holder, new ConfigurationValidator(registry), fixed(), Clock.systemUTC()),
+                lastKnown,
+                holder));
     final ParametersPollingScheduler scheduler =
         new ParametersPollingScheduler(service, new ConfigurationEventLogger());
 
@@ -150,23 +152,25 @@ class ParametersPollingSchedulerTest {
     final SynchronizeConfigurationService service =
         new SynchronizeConfigurationService(
             new NoParametersSource(),
-            new ApplyConfigurationChangeService(
-                holder, new ConfigurationValidator(registry), fixed(), Clock.systemUTC()),
-            new LastKnownConfigurationPort() {
-              @Override
-              public Mono<co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot>
-                  load() {
-                return Mono.empty();
-              }
+            new ReceivePublishedConfigurationService(
+                new ApplyConfigurationChangeService(
+                    holder, new ConfigurationValidator(registry), fixed(), Clock.systemUTC()),
+                new LastKnownConfigurationPort() {
+                  @Override
+                  public Mono<
+                          co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot>
+                      load() {
+                    return Mono.empty();
+                  }
 
-              @Override
-              public Mono<Boolean> saveIfNewer(
-                  final co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot
-                      snapshot) {
-                return Mono.just(true);
-              }
-            },
-            holder);
+                  @Override
+                  public Mono<Boolean> saveIfNewer(
+                      final co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot
+                          snapshot) {
+                    return Mono.just(true);
+                  }
+                },
+                holder));
 
     StepVerifier.create(service.synchronize()).verifyComplete();
     assertEquals(0, holder.snapshot().version());

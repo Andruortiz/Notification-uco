@@ -26,18 +26,18 @@ eventos de log), sin tocar el núcleo de reglas y sin quitar el sondeo.
 
 ### Session 2026-10-08
 
-Las cinco decisiones abiertas se llevan a `/speckit-clarify` con recomendación. Hasta que el usuario las
-confirme, este documento aplica la recomendación como supuesto provisional (ver Assumptions, S-E1 a S-E5).
+Las cinco decisiones abiertas quedaron CONFIRMADAS el 2026-10-08, cuando el usuario aprobó el plan que las
+contiene, con la recomendación propuesta (ver Assumptions, S-E1 a S-E5).
 
-- Q1: ¿El evento trae los valores o solo avisa y se consulta por HTTP? -> Recomendación: trae los valores
+- Q1: ¿El evento trae los valores o solo avisa y se consulta por HTTP? -> CONFIRMADA: trae los valores
   (`{version, values}`, misma forma que la respuesta HTTP) y se aplican directamente.
-- Q2: ¿Mismo broker RabbitMQ del servicio o uno distinto de Parámetros? -> Recomendación: el mismo broker
+- Q2: ¿Mismo broker RabbitMQ del servicio o uno distinto de Parámetros? -> CONFIRMADA: el mismo broker
   que ya usa el servicio, con cola propia.
-- Q3: ¿Mensaje ilegible u obsoleto: DLQ o descartar con evento? -> Recomendación: ilegible a DLQ; bien formado
+- Q3: ¿Mensaje ilegible u obsoleto: DLQ o descartar con evento? -> CONFIRMADA: ilegible a DLQ; bien formado
   pero rechazado por validación u obsoleto se confirma (ack) y queda como evento de log.
-- Q4: ¿Qué pasa con el sondeo cuando la suscripción está activa? -> Recomendación: se conserva igual, mismo
+- Q4: ¿Qué pasa con el sondeo cuando la suscripción está activa? -> CONFIRMADA: se conserva igual, mismo
   intervalo, como reconciliación y respaldo.
-- Q5: ¿El listener exige autenticación o firma del mensaje? -> Recomendación: no en esta entrega; se apoya en el
+- Q5: ¿El listener exige autenticación o firma del mensaje? -> CONFIRMADA: no en esta entrega; se apoya en el
   control de acceso del broker y se registra como excepción con dueño y fecha.
 
 ## User Scenarios & Testing *(mandatory)*

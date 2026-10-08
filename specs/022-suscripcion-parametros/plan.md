@@ -6,7 +6,7 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente
+**Estado**: Aceptado (2026-10-08; aprobado por el usuario en el chat)
 
 **Versión del plan**: 1
 
@@ -75,12 +75,12 @@ nunca el flujo web; ack manual; el arranque no espera al broker; credenciales si
 
 Reevaluación tras el diseño: sin violaciones; no hay tabla de complejidad.
 
-## Decisiones propuestas y preguntas abiertas para el usuario
+## Decisiones del usuario sobre las preguntas abiertas
 
-Detalle y alternativas en [research.md](./research.md) (D2, D4, D6, D7, D9). Cada una lleva recomendación; ninguna
-está confirmada por el usuario.
+Detalle y alternativas en [research.md](./research.md) (D2, D4, D6, D7, D9). El usuario aprobó el plan que
+contiene estas cinco decisiones el 2026-10-08: quedan CONFIRMADAS tal como se recomendaron.
 
-| # | Pregunta | Recomendación |
+| # | Pregunta | Decisión (CONFIRMADA) |
 |---|---|---|
 | Q1 | ¿El evento trae los valores o solo avisa? | Trae los valores y se aplican directamente (funciona sin fuente HTTP; latencia de segundos). Variante: solo avisar y llamar `synchronize()` |
 | Q2 | ¿Mismo broker o el de Parámetros? | El mismo broker del servicio, con cola y DLQ propias |

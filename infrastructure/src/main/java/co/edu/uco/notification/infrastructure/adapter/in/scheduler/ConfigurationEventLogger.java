@@ -24,6 +24,8 @@ public class ConfigurationEventLogger {
   public static final String PARAMETERS_UNAVAILABLE = "PARAMETERS_UNAVAILABLE";
   public static final String PARAMETERS_RECOVERED = "PARAMETERS_RECOVERED";
   public static final String CORRELATION_PREFIX = "param-";
+  public static final String TRANSPORT_POLL = "poll";
+  public static final String TRANSPORT_EVENT = "event";
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ConfigurationEventLogger.class);
 
@@ -41,15 +43,22 @@ public class ConfigurationEventLogger {
           final String correlationId =
               context.getOrDefault(CorrelationId.CONTEXT_KEY, newCorrelationId());
           return cycle
-              .doOnNext(outcome -> logOutcome(outcome, correlationId))
+              .doOnNext(outcome -> logOutcome(outcome, correlationId, TRANSPORT_POLL))
               .doOnError(error -> logFailure(error, correlationId));
         });
   }
 
   public void logOutcome(final ConfigurationChangeOutcome outcome, final String correlationId) {
+    logOutcome(outcome, correlationId, TRANSPORT_POLL);
+  }
+
+  public void logOutcome(
+      final ConfigurationChangeOutcome outcome,
+      final String correlationId,
+      final String transport) {
     Preconditions.requireNonNull(outcome, "outcome must not be null");
     try (LogContext ignored = open(correlationId)) {
-      if (unavailable.compareAndSet(true, false)) {
+      if (TRANSPORT_POLL.equals(transport) && unavailable.compareAndSet(true, false)) {
         LOGGER.info(
             LogFields.fields("event", PARAMETERS_RECOVERED), "Parameters component recovered");
       }
@@ -60,6 +69,8 @@ public class ConfigurationEventLogger {
               LogFields.fields(
                   "event",
                   CONFIG_APPLIED,
+                  "transport",
+                  transport,
                   "previousVersion",
                   outcome.previousVersion(),
                   "newVersion",
@@ -76,6 +87,8 @@ public class ConfigurationEventLogger {
               LogFields.fields(
                   "event",
                   CONFIG_REJECTED,
+                  "transport",
+                  transport,
                   "currentVersion",
                   outcome.previousVersion(),
                   "keys",
@@ -91,6 +104,8 @@ public class ConfigurationEventLogger {
                 LogFields.fields(
                     "event",
                     CONFIG_IGNORED,
+                    "transport",
+                    transport,
                     "currentVersion",
                     outcome.previousVersion(),
                     "reason",

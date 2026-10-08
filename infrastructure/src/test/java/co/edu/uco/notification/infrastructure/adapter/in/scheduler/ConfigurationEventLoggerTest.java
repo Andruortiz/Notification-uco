@@ -201,4 +201,31 @@ class ConfigurationEventLoggerTest {
     lines().forEach(line -> assertFalse(line.contains(CREDENTIAL)));
     lines().forEach(line -> assertFalse(line.contains("parametros.interno")));
   }
+
+  @Test
+  void theTransportIsPollByDefaultAndEventWhenTheEventAdapterReportsIt() {
+    eventLogger.logOutcome(
+        ConfigurationChangeOutcome.applied(Set.of("a"), Set.of(), 1, 2), CORRELATION);
+    eventLogger.logOutcome(
+        ConfigurationChangeOutcome.applied(Set.of("a"), Set.of(), 2, 3),
+        CORRELATION,
+        ConfigurationEventLogger.TRANSPORT_EVENT);
+
+    assertTrue(lines().get(0).contains("transport=poll"));
+    assertTrue(lines().get(1).contains("transport=event"));
+  }
+
+  @Test
+  void anEventOutcomeDoesNotDeclareTheHttpSourceRecoveredButAPollOutcomeDoes() {
+    eventLogger.logFailure(new ParametersUnavailableException("down"), CORRELATION);
+
+    eventLogger.logOutcome(
+        ConfigurationChangeOutcome.ignoredStale(5, 4),
+        CORRELATION,
+        ConfigurationEventLogger.TRANSPORT_EVENT);
+    assertEquals(0, count("PARAMETERS_RECOVERED"));
+
+    eventLogger.logOutcome(ConfigurationChangeOutcome.ignoredStale(5, 4), CORRELATION);
+    assertEquals(1, count("PARAMETERS_RECOVERED"));
+  }
 }

@@ -112,6 +112,23 @@ El servicio expone la gestion en un puerto aparte del de la API: la API sigue en
 - Metricas de negocio: `notification_accepted_total`, `notification_attempts_total`, `notification_dispatched_total`, `notification_provider_duration_seconds` y `notification_errors_total`, con etiquetas de cardinalidad cerrada (`channel`, `provider`, `result`, `errorCode`, `failureCategory`); nunca `tenantId`, `notificationId`, `correlationId` ni datos del destinatario.
 - El `docker-compose.yml` solo levanta las dependencias; el servicio corre con `./mvnw -pl infrastructure spring-boot:run` o con el `Dockerfile`, que declara `EXPOSE 8060 8061`.
 
+## Tablero de observabilidad
+
+Prometheus y Grafana viven en `docker-compose.observability.yml`, aparte de `docker-compose.yml`, para que `docker compose up -d mongodb rabbitmq` no exija credenciales de Grafana. El servicio corre fuera de Docker (`./mvnw -pl infrastructure spring-boot:run`); Prometheus lo raspa en `host.docker.internal:8061` cada 15 segundos y conserva 31 dias en el volumen `prometheus-data`.
+
+1. Define en el `.env` (sin valor por defecto, el arranque falla si faltan) `GRAFANA_ADMIN_USER` y `GRAFANA_ADMIN_PASSWORD`. Opcionales: `GRAFANA_PORT` (3000) y `PROMETHEUS_PORT` (9090).
+2. Levanta el stack: `docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d`. Para no repetir `-f`, define en el `.env` `COMPOSE_PATH_SEPARATOR=,` y `COMPOSE_FILE=docker-compose.yml,docker-compose.observability.yml`; en Windows el separador por defecto es `;`, asi que sin `COMPOSE_PATH_SEPARATOR` los dos puntos no funcionan.
+3. Abre `http://localhost:3000`, entra con las credenciales del `.env` y busca el tablero "Notification Service". Prometheus queda en `http://localhost:9090` (reglas en la pestana Alerts). Ambos escuchan solo en `127.0.0.1`; el 8061 del servicio no se publica.
+4. Para parar y borrar los datos: `docker compose -f docker-compose.yml -f docker-compose.observability.yml down -v`.
+
+Que demuestra cada panel de RNF y que no:
+
+- RNF-02: percentil 95 de `POST /notifications` con 202 frente a 0,2 s. El percentil se interpola entre cubos fijos del histograma, es una aproximacion.
+- RNF-03: aceptadas e intentos por minuto y por replica frente a 500. Muestra el ritmo observado, no la capacidad sostenida: la prueba de carga que la demuestra esta pendiente (dueno: equipo de desarrollo del componente, fecha 2026-11-05).
+- RNF-01: fraccion de raspados exitosos (`up`) en la ventana elegida frente al 99,5 %. Mide si el raspado funciono, no la disponibilidad percibida por los clientes; la lectura mensual necesita una ventana de 30 dias.
+- RNF-10: las filas de negocio y tecnicas leen las series del endpoint de metricas; una prueba automatizada (`ObservabilityDashboardE2ETest`) verifica que cada metrica y etiqueta del tablero y de las reglas existe y que cada consulta es valida en un Prometheus real.
+- Alertas: `observability/alerts.yml` define `NotificationDispatchFailedHigh` (mas de 5 % de despachos fallidos en 5 minutos) y `NotificationServiceDown`. Se evaluan en Prometheus sin Alertmanager; el destino externo esta pendiente (dueno: equipo de desarrollo del componente, fecha 2026-11-12).
+
 ## Azure Key Vault
 
 Las variables de entorno del servicio (`MONGO_PASSWORD`, `BREVO_API_KEY`, `AUTH_JWT_HS256_SECRET`, etc.)

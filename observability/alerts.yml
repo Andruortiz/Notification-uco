@@ -1,0 +1,17 @@
+groups:
+  - name: notification-service
+    rules:
+      - alert: NotificationDispatchFailedHigh
+        expr: sum(increase(notification_dispatched_total{result="failed"}[5m])) / clamp_min(sum(increase(notification_dispatched_total[5m])), 1) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Mas del 5 % de los despachos de los ultimos 5 minutos terminaron en fallo permanente
+      - alert: NotificationServiceDown
+        expr: up{job="notification-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Prometheus no puede raspar el servicio de notificaciones

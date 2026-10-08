@@ -188,6 +188,17 @@ Sección "Tablero de observabilidad": definir `GRAFANA_ADMIN_USER` y `GRAFANA_AD
 `COMPOSE_PATH_SEPARATOR=,`, imprescindible en Windows), abrir `http://localhost:3000`, supuesto de servicio fuera de Docker, qué demuestra
 cada panel de RNF y qué no (research R6), cómo parar y borrar volúmenes.
 
+## Desviaciones registradas durante la implementación
+
+- El tablero se monta en `/etc/grafana/dashboards` (no en `/var/lib/grafana/dashboards`) para no anidar el
+  montaje dentro del volumen `grafana-data`.
+- La E2E monta `prometheus.yml` y `alerts.yml` con `withFileSystemBind` y no con `withCopyFileToContainer`:
+  la copia falla con `NoSuchMethodError` de `commons-lang3` (`SystemProperties.getUserName`) por un choque de
+  versiones entre `commons-compress` de Testcontainers 1.19.8 y el `commons-lang3` resuelto; no se tocó el `pom.xml`.
+- `notification_errors_total` solo se incrementa por fallos de infraestructura; la E2E lo siembra por el
+  `NotificationMetricsPort` real (research R2).
+- Se añadieron paneles de RabbitMQ (publicados/consumidos/rechazados) y CPU tras la captura real.
+
 ## Estrategia de pruebas
 
 | Nivel | Prueba | Afirma |

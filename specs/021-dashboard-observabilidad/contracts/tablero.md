@@ -1,6 +1,6 @@
 # Contrato del tablero: paneles, consultas y umbrales (021)
 
-Las consultas son PROVISIONALES hasta la captura real del paso 1 de la implementación (research R2).
+Las consultas se ajustaron tras la captura real del 2026-10-08 (research R2) y las verifica `ObservabilityDashboardE2ETest`. `job` e `instance` los añade Prometheus.
 `$__rate_interval`, `$__range` e `$instance` son variables de Grafana; la prueba E2E las sustituye
 (`$instance` por `.*`). Datasource con UID fijo `prometheus`. Job de raspado: `notification-service`.
 
@@ -25,6 +25,8 @@ Las consultas son PROVISIONALES hasta la captura real del paso 1 de la implement
 | Técnico | Rendimiento HTTP por uri y estado | `sum by (uri, status) (rate(http_server_requests_seconds_count{job="notification-service"}[$__rate_interval]))` | n/a |
 | Técnico | Tasa de error 5xx | `sum(rate(http_server_requests_seconds_count{job="notification-service",status=~"5.."}[$__rate_interval])) / sum(rate(http_server_requests_seconds_count{job="notification-service"}[$__rate_interval]))` | n/a |
 | Técnico | Duración media del consumo de RabbitMQ | `sum(rate(spring_rabbit_listener_seconds_sum[$__rate_interval])) / sum(rate(spring_rabbit_listener_seconds_count[$__rate_interval]))` | n/a |
+| Técnico | Mensajes de RabbitMQ por segundo | `sum(rate(rabbitmq_published_total[$__rate_interval]))`, `rabbitmq_consumed_total`, `rabbitmq_rejected_total` | n/a |
+| Técnico | Uso de CPU | `process_cpu_usage{job="notification-service"}`, `system_cpu_usage{job="notification-service"}` | n/a |
 | Técnico | Memoria heap usada | `sum by (instance) (jvm_memory_used_bytes{job="notification-service",area="heap"})` | n/a |
 | Técnico | Hilos vivos | `jvm_threads_live_threads{job="notification-service"}` | n/a |
 

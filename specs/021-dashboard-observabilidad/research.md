@@ -25,20 +25,28 @@ Hallazgos:
 4. Las etiquetas `errorCode` y `failureCategory` llevan mayúsculas (camelCase); Prometheus las conserva tal
    cual.
 
-## R2 — Métricas técnicas
+## R2 — Métricas técnicas (captura real, 2026-10-08)
 
-- `http.server.requests` tiene histograma (`application.yml`): `http_server_requests_seconds_bucket`, con
-  etiquetas estándar `uri` (plantilla), `method`, `status`, `outcome`. `POST /notifications` responde 202
-  (`NotificationController`, línea 76) y `MetricsE2ETest` ya afirma `uri="/notifications"`.
-- Listener de RabbitMQ: la observación de Spring AMQP 3.1.7 se llama `spring.rabbit.listener` (verificado en
-  el `.class` de `RabbitListenerObservation` del jar 3.1.7 en `~/.m2`), o sea `spring_rabbit_listener_seconds_*`.
-  `application.yml` activa el histograma para `spring.rabbitmq.listener`, nombre que NO coincide: es
-  probable que no haya `_bucket` del listener. Hasta confirmarlo con una captura real, el tablero usa solo
-  `_count`, `_sum` y `_max` del listener (duración media), no percentiles. NO VERIFICADO con una captura
-  en vivo (Docker apagado al momento de escribir esto); la primera tarea de la implementación la obtiene.
-- Métricas del cliente RabbitMQ (`rabbitmq_*`): NO VERIFICADAS; no se usan hasta capturarlas.
-- JVM: `jvm_memory_used_bytes`, `jvm_threads_live_threads` ya las afirma `MetricsE2ETest`;
-  `process_cpu_usage` y `system_cpu_usage`: NO VERIFICADAS con captura (las autoconfigura Boot).
+Capturado de `/actuator/prometheus` de un servicio arrancado por una prueba E2E con Mongo y RabbitMQ en
+Testcontainers, tras tráfico de dos tenants (entregadas, recuperables, fallidas) y una consulta 404.
+
+- `http_server_requests_seconds_{bucket,count,sum,max}` con etiquetas `error`, `exception`, `method`,
+  `outcome`, `status`, `uri` (plantilla). `POST /notifications` aparece con `status="202"`.
+- Listener de RabbitMQ: `spring_rabbit_listener_seconds_{count,sum,max}` y `spring_rabbit_listener_active_seconds_*`
+  con etiqueta `spring_rabbit_listener_id`; NO hay `_bucket` (confirma que el histograma configurado como
+  `spring.rabbitmq.listener` no surte efecto: la observación se llama `spring.rabbit.listener`). El tablero usa
+  la duración media.
+- Cliente RabbitMQ (etiqueta `name="rabbit"`): `rabbitmq_published_total`, `rabbitmq_consumed_total`,
+  `rabbitmq_acknowledged_total`, `rabbitmq_rejected_total`, `rabbitmq_failed_to_publish_total`,
+  `rabbitmq_unrouted_published_total`, `rabbitmq_connections`, `rabbitmq_channels`.
+- JVM y proceso: `jvm_memory_used_bytes`, `jvm_threads_live_threads`, `process_cpu_usage`,
+  `system_cpu_usage`, todos presentes.
+- `notification_configuration_version` lleva la etiqueta `source` (`DEFAULTS`, `LAST_KNOWN`, `PARAMETERS`).
+- El raspado no contiene las etiquetas `job` ni `instance`: las añade Prometheus.
+- `notification_errors_total` NO apareció tras despachos fallidos: el contador solo se incrementa por fallos de
+  infraestructura (`DispatchNotificationService` y `RequeuePendingNotificationsService`), no por resultados
+  `failed` del proveedor. Ningún flujo E2E existente lo provoca; la prueba de la 021 lo siembra llamando al
+  `NotificationMetricsPort` real (adaptador Micrometer) con dos códigos.
 
 ## R3 — Compose: credenciales requeridas (verificado con `docker compose config`, 2026-10-08)
 
@@ -63,8 +71,7 @@ DECIDIDA por el usuario el 2026-10-08: C. Verificado con `docker compose config`
   archivo llamado `a.yml:o.yml` y falla. Hay que fijar `COMPOSE_PATH_SEPARATOR=,` y separar con coma, que
   se verificó que funciona. El README lo documenta.
 
-No verificado: el archivo real `docker-compose.observability.yml` (aún no existe), el arranque con el
-demonio de Docker (apagado) y que Grafana acepte las credenciales del entorno.
+Verificado después con el archivo real y Docker en marcha: `config` sin variables falla con el mensaje, el compose base resuelve sin ellas, y el stack arranca con las variables definidas (ver tasks T007 y T009).
 
 ## R4 — Imágenes (verificado con `docker manifest inspect`)
 

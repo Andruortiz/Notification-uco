@@ -14,7 +14,7 @@
 
 ## Requirement Completeness
 
-- [x] Sin marcadores `[NEEDS CLARIFICATION]`; las cinco decisiones abiertas están en Clarifications como PENDIENTES con recomendación
+- [x] Sin marcadores `[NEEDS CLARIFICATION]`; Q1 a Q6 CONFIRMADAS por el usuario el 2026-10-08 (Clarifications)
 - [x] Requisitos verificables
 - [x] Criterios de éxito medibles
 - [x] Escenarios de aceptación definidos
@@ -30,5 +30,5 @@
 
 ## Notes
 
-- Q1 a Q5 están PENDIENTES de respuesta del usuario; el plan queda en estado Pendiente y marca como PROVISIONAL todo lo que depende de ellas.
-- FR-014 depende de Q1; FR-010 depende de Q3; la lectura de RNF-03 depende de Q4.
+- Q1 a Q6 CONFIRMADAS el 2026-10-08. Pendientes de que el usuario fije: dueño y fecha de las excepciones del Principio VII (prueba de carga de RNF-03 y destino de alertas).
+- El plan sigue en Estado Pendiente hasta que el usuario lo cambie.

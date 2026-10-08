@@ -31,14 +31,14 @@ Las consultas son PROVISIONALES hasta la captura real del paso 1 de la implement
 Variable de plantilla: `instance` = `label_values(up{job="notification-service"}, instance)`, selección
 múltiple, valor por defecto todas.
 
-## Reglas de alerta (PROVISIONAL, Q1)
+## Reglas de alerta (Q1, umbral aprobado por el usuario)
 
 | Regla | Expresión | Para |
 |---|---|---|
 | `NotificationDispatchFailedHigh` | `sum(increase(notification_dispatched_total{result="failed"}[5m])) / clamp_min(sum(increase(notification_dispatched_total[5m])), 1) > 0.05` | 5m |
 | `NotificationServiceDown` | `up{job="notification-service"} == 0` | 1m |
 
-El umbral 5 % es una propuesta del autor, no un valor del usuario ni de la constitución.
+El umbral de 5 % en 5 minutos fue propuesto por el autor y aprobado por el usuario el 2026-10-08.
 
 ## Prohibido
 

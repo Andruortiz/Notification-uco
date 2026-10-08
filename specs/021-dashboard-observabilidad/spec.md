@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-08
 
-**Status**: Borrador; preguntas abiertas pendientes de respuesta del usuario (ver Clarifications)
+**Status**: Clarificaciones Q1 a Q5 confirmadas por el usuario el 2026-10-08; plan pendiente de aprobación
 
 **Input**: User description: "Dashboard de observabilidad con Prometheus y Grafana para la demo y para
 demostrar los RNF. La spec 020 ya expone /actuator/prometheus en el puerto de gestión 8061 (solo health y
@@ -27,29 +27,31 @@ no hay tablero y las métricas solo se pueden leer a mano.
 
 ### Session 2026-10-08
 
-Preguntas abiertas: el autor no puede preguntar a mitad de ejecución; se devuelven al usuario con una
-recomendación. Hasta que respondan, el plan las trata como PROVISIONALES (marcadas así) y se ajusta
-una vez confirmadas.
+Decisiones CONFIRMADAS por el usuario el 2026-10-08, tal como se propusieron.
 
-- Q1 (PENDIENTE): alertas por notificaciones FAILED. Recomendación: dentro de alcance solo como reglas de
-  alerta de Prometheus versionadas (`observability/alerts.yml`), evaluadas y visibles en la pestaña de
-  alertas de Prometheus y en el panel de Grafana, sin destino externo (sin Alertmanager ni correo/chat),
-  porque no hay canal de notificación definido y añadirlo sería una solución a medias (Principio VII). El
-  envío a un destino queda como excepción documentada con dueño y fecha.
-- Q2 (PENDIENTE): retención de Prometheus. Recomendación: 31 días, el mínimo que permite mostrar el
-  ventana mensual de RNF-01; es configuración versionada del compose, con volumen persistente.
-- Q3 (PENDIENTE): forma del gate E2E. Recomendación: prueba E2E del servicio completo que (a) genera
-  tráfico que produce todas las series de negocio, (b) lee el JSON del dashboard y las reglas, (c) verifica
-  que cada nombre de métrica y cada nombre de etiqueta usados existen en la respuesta real de
-  `/actuator/prometheus`, y (d) evalúa cada consulta contra un Prometheus real en contenedor que raspa el
-  servicio de la prueba, para detectar consultas inválidas.
-- Q4 (PENDIENTE): medición de RNF-03 sin prueba de carga. Recomendación: panel de tasa por minuto y por
-  réplica con línea de umbral fija en 500; declarar en la spec que la prueba de carga que demuestra el
-  umbral queda fuera de esta historia, registrada como excepción del Principio VII con dueño y fecha
-  (fecha y dueño los fija el usuario).
-- Q5 (PENDIENTE): imágenes. Recomendación: `prom/prometheus:v3.5.1` y `grafana/grafana:12.2.0`, ambas
-  con etiqueta fija (existencia de las etiquetas verificada con `docker manifest inspect` el 2026-10-08;
-  la compatibilidad con el dashboard se verifica en la implementación).
+- Q1 (CONFIRMADA 2026-10-08): alertas por notificaciones FAILED dentro de alcance solo como reglas de
+  alerta de Prometheus versionadas (`observability/alerts.yml`), visibles en la interfaz de Prometheus y en
+  el tablero, sin Alertmanager ni destino externo. El umbral propuesto (más de 5 % de despachos `failed`
+  en 5 minutos) fue aprobado con la confirmación. El envío a un destino queda como excepción del
+  Principio VII; dueño y fecha: PENDIENTES de que los fije el usuario.
+- Q2 (CONFIRMADA 2026-10-08): retención de Prometheus de 31 días, configuración versionada en el compose,
+  con volumen persistente.
+- Q3 (CONFIRMADA 2026-10-08): el gate E2E es `ObservabilityDashboardE2ETest`, que genera tráfico para todas
+  las series, verifica que cada métrica y etiqueta del tablero y de las reglas existe en
+  `/actuator/prometheus` y evalúa cada consulta contra un Prometheus real en contenedor (Testcontainers),
+  con control positivo; más una prueba de contrato del compose.
+- Q4 (CONFIRMADA 2026-10-08): RNF-03 se muestra como panel de aceptadas por minuto y por réplica con línea
+  de umbral en 500; la prueba de carga que lo demuestra queda fuera de esta historia como excepción del
+  Principio VII; dueño y fecha: PENDIENTES de que los fije el usuario.
+- Q5 (CONFIRMADA 2026-10-08): imágenes `prom/prometheus:v3.5.1` y `grafana/grafana:12.2.0`, con etiqueta
+  fija. La compatibilidad del tablero con esa versión de Grafana se verifica en la implementación.
+- Q6 (CONFIRMADA 2026-10-08): despliegue con un archivo compose adicional
+  `docker-compose.observability.yml` en lugar de un perfil. Las credenciales de Grafana van en el `.env`
+  como `${GRAFANA_ADMIN_USER:?mensaje}` y `${GRAFANA_ADMIN_PASSWORD:?mensaje}`, sin valor por defecto, y
+  solo se exigen cuando se incluye ese archivo (`-f docker-compose.yml -f
+  docker-compose.observability.yml`, o `COMPOSE_FILE` en el `.env`). Verificado con `docker compose
+  config` el 2026-10-08: sin el archivo adicional no se exige la variable; con el archivo y la variable
+  ausente falla con el mensaje.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -62,20 +64,20 @@ tablero ya cargado, con datos del servicio, sin importar ni configurar nada a ma
 **Why this priority**: sin esto no hay demo ni evidencia; todo lo demás cuelga de que el tablero exista y
 reciba datos.
 
-**Independent Test**: con el servicio arriba y credenciales definidas, levantar el perfil de
+**Independent Test**: con el servicio arriba y credenciales definidas, levantar el stack de
 observabilidad, enviar notificaciones y comprobar que Prometheus marca el servicio como accesible y que el
 tablero muestra series en sus paneles.
 
 **Acceptance Scenarios**:
 
 1. **Given** las dependencias locales arriba y credenciales de Grafana definidas por el usuario, **When** se
-   levanta el perfil de observabilidad, **Then** Prometheus y Grafana arrancan, Prometheus raspa el puerto
+   levanta el stack de observabilidad con el archivo compose adicional, **Then** Prometheus y Grafana arrancan, Prometheus raspa el puerto
    de gestión del servicio y Grafana tiene la fuente de datos y el tablero ya aprovisionados.
 2. **Given** el stack arriba y el servicio procesando notificaciones, **When** el presentador abre el
    tablero, **Then** ve al menos un valor en cada panel de negocio y técnico en menos de 30 segundos tras
    el primer ciclo de raspado.
-3. **Given** que no se definieron las credenciales de Grafana, **When** se intenta levantar el perfil de
-   observabilidad, **Then** el arranque falla con un mensaje que indica qué falta definir, y levantar solo
+3. **Given** que no se definieron las credenciales de Grafana, **When** se intenta levantar el stack de
+   observabilidad con el archivo compose adicional, **Then** el arranque falla con el mensaje de la variable ausente, y levantar solo
    `mongodb` y `rabbitmq` sigue funcionando sin definirlas.
 4. **Given** el stack arriba, **When** se inspecciona qué puertos se publican, **Then** el puerto de
    gestión 8061 del servicio no se publica en el compose y las interfaces de Prometheus y Grafana solo
@@ -145,7 +147,7 @@ y comprobar que pasa.
 El equipo ve en Prometheus y en el tablero cuándo la tasa de notificaciones que terminan en FAILED supera
 un umbral.
 
-**Why this priority**: valor operativo adicional; su alcance depende de la respuesta a Q1, por eso no es
+**Why this priority**: valor operativo adicional; su alcance quedó fijado por Q1 (solo reglas de Prometheus), por eso no es
 parte del MVP.
 
 **Independent Test**: provocar despachos fallidos con el proveedor simulado y comprobar que la regla pasa a
@@ -182,12 +184,12 @@ estado activo y desaparece al cesar.
   del servicio en el anfitrión, con intervalo de raspado y retención versionados.
 - **FR-002**: El repositorio MUST incluir la fuente de datos de Grafana y el tablero como archivos
   versionados que Grafana aprovisiona al arrancar, sin pasos manuales.
-- **FR-003**: El `docker-compose.yml` MUST añadir Prometheus y Grafana bajo un perfil `observability`, con
-  imágenes de etiqueta fija (nunca `latest`), de modo que levantar los servicios existentes sin el perfil
-  no cambie.
+- **FR-003**: Un archivo compose adicional `docker-compose.observability.yml` MUST definir Prometheus y
+  Grafana con imágenes de etiqueta fija (nunca `latest`); `docker-compose.yml` no cambia, de modo que
+  levantar los servicios existentes sin el archivo adicional se comporta como hoy.
 - **FR-004**: Las credenciales de Grafana MUST no tener valor por defecto en el repositorio, MUST
-  inyectarse desde el entorno del usuario, y su ausencia MUST impedir arrancar Grafana con un mensaje claro
-  sin impedir arrancar el resto de servicios.
+  inyectarse desde el `.env` del usuario con `${VAR:?mensaje}`, y su ausencia MUST impedir arrancar el
+  stack de observabilidad con un mensaje claro sin impedir arrancar el resto de servicios.
 - **FR-005**: El puerto de gestión 8061 del servicio MUST NOT publicarse desde el compose; las interfaces
   de Prometheus y Grafana MUST escuchar solo en el equipo local.
 - **FR-006**: El tablero MUST mostrar las métricas de negocio `notification_accepted_total`,
@@ -203,17 +205,16 @@ estado activo y desaparece al cesar.
   `tenantId`, `notificationId`, `correlationId`, ni datos del destinatario o del contenido.
 - **FR-010**: Una prueba E2E bloqueante en `verify` MUST comprobar que cada métrica y cada etiqueta
   referenciada por el tablero y las reglas existe en la salida real de `/actuator/prometheus` tras generar
-  tráfico que produce todas las series, y que ninguna referencia nombres prohibidos por FR-009 (forma
-  exacta sujeta a Q3).
+  tráfico que produce todas las series, y que ninguna referencia nombres prohibidos por FR-009 (forma fijada por Q3).
 - **FR-011**: La misma prueba MUST incluir un control positivo que demuestre que una referencia inexistente
   la hace fallar.
-- **FR-012**: El README MUST documentar cómo definir las credenciales, levantar el perfil, abrir el
+- **FR-012**: El README MUST documentar cómo definir las credenciales, levantar el stack con el archivo adicional (`-f` o `COMPOSE_FILE`), abrir el
   tablero, el supuesto de que el servicio corre fuera de Docker y la lectura de cada panel de RNF, incluida
-  la limitación de RNF-03 (sujeto a Q4) y de RNF-01.
+  la limitación de RNF-03 (Q4) y de RNF-01.
 - **FR-013**: Lo que el tablero no puede demostrar (prueba de carga de RNF-03, histórico mensual de RNF-01,
   destino de las alertas) MUST quedar registrado como excepción del Principio VII con dueño y fecha, no
   como un panel que aparente demostrarlo.
-- **FR-014**: (sujeto a Q1) Reglas de alerta de Prometheus versionadas para despachos con resultado
+- **FR-014**: (Q1) Reglas de alerta de Prometheus versionadas para despachos con resultado
   `failed`, evaluadas por Prometheus y visibles en su interfaz.
 - **FR-015**: Los datos de Prometheus y Grafana MUST persistir en volúmenes nombrados que sobreviven a
   reiniciar los contenedores.
@@ -224,7 +225,7 @@ estado activo y desaparece al cesar.
 - **Fuente de datos aprovisionada**: conexión de Grafana a Prometheus con identificador estable.
 - **Tablero**: conjunto versionado de paneles y consultas; cada panel referencia métricas del servicio por
   nombre y etiqueta.
-- **Regla de alerta** (sujeta a Q1): condición sobre una métrica de negocio con ventana y umbral.
+- **Regla de alerta** (Q1): condición sobre una métrica de negocio con ventana y umbral.
 
 ## Success Criteria *(mandatory)*
 
@@ -239,7 +240,8 @@ estado activo y desaparece al cesar.
 - **SC-004**: Cada uno de los RNF-01, RNF-02, RNF-03 y RNF-10 tiene un panel con su umbral visible, y el
   README explica qué demuestra y qué no.
 - **SC-005**: Levantar `mongodb` y `rabbitmq` sin definir credenciales de Grafana sigue funcionando
-  (verificado con la configuración del compose, no a mano).
+  y, con el archivo adicional, la variable ausente falla con su mensaje (verificado con la configuración
+  del compose, no a mano).
 - **SC-006**: Ninguna imagen del compose nueva usa `latest`; verificado automáticamente.
 
 ## Assumptions
@@ -251,6 +253,6 @@ estado activo y desaparece al cesar.
 - No se añaden métricas nuevas al servicio ni se modifica el contrato de la 020; si el tablero necesita una
   métrica que no existe, se registra como brecha en lugar de inventarse.
 - La prueba de carga que demuestre RNF-03 y un Alertmanager con destino externo no forman parte de esta
-  historia (ver Q1 y Q4); quedan como excepciones documentadas.
+  historia (Q1 y Q4); quedan como excepciones documentadas.
 - El esquema de autenticación del servicio no cambia: el endpoint de gestión no tiene autenticación y se
   protege por red (decisión de la 020).

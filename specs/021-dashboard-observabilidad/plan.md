@@ -23,24 +23,26 @@
 
 La 020 expone las métricas pero nadie las consume. La 021 añade, sin tocar el código del servicio, un
 Prometheus que raspa el puerto de gestión, un Grafana con la fuente de datos y un tablero aprovisionados
-desde archivos versionados, ambos en el `docker-compose.yml` bajo el perfil `observability`, y una puerta
-E2E que impide que el tablero referencie series inexistentes o datos prohibidos. Q1 a Q5 de la spec siguen
-PENDIENTES; todo lo que depende de ellas lleva la marca PROVISIONAL y se ajusta tras la respuesta.
+desde archivos versionados, ambos en un archivo compose adicional `docker-compose.observability.yml`, y una
+puerta E2E que impide que el tablero referencie series inexistentes o datos prohibidos. El usuario
+confirmó Q1 a Q5 y la elección del archivo compose adicional (Q6) el 2026-10-08.
 
-## Decisiones (todas PROVISIONALES salvo que se indique)
+## Decisiones confirmadas (usuario, 2026-10-08)
 
-- Q1 PROVISIONAL: reglas de alerta de Prometheus versionadas, sin Alertmanager ni destino externo; el
-  destino queda como excepción del Principio VII.
-- Q2 PROVISIONAL: `--storage.tsdb.retention.time=31d`, volumen nombrado.
-- Q3 PROVISIONAL: dos mecanismos de la research R7: verificación de existencia contra `/actuator/prometheus` y
-  evaluación contra un Prometheus real en contenedor, más prueba de contrato del compose.
-- Q4 PROVISIONAL: panel por minuto y por réplica con línea en 500; la prueba de carga queda fuera y se
-  registra como excepción con dueño y fecha que fija el usuario.
-- Q5 PROVISIONAL: `prom/prometheus:v3.5.1`, `grafana/grafana:12.2.0`.
-- Credenciales de Grafana por secretos de Docker desde `secrets/grafana_admin_user` y
-  `secrets/grafana_admin_password` (gitignored) con `GF_SECURITY_ADMIN_*__FILE`: la alternativa `${VAR:?}`
-  rompería `docker compose up mongodb rabbitmq` (research R3, verificado). Esto se aparta del patrón
-  `${VAR:?}` del resto del compose y se justifica aquí; requiere confirmación del usuario.
+- Q1: alertas solo como reglas de Prometheus en `observability/alerts.yml`, sin Alertmanager ni destino
+  externo. Umbral aprobado: más de 5 % de despachos `failed` durante 5 minutos. Excepción del Principio VII
+  por el destino de las alertas: dueño y fecha PENDIENTES de que los fije el usuario.
+- Q2: `--storage.tsdb.retention.time=31d`, volumen nombrado.
+- Q3: `ObservabilityDashboardE2ETest` con verificación de existencia contra `/actuator/prometheus`,
+  evaluación contra un Prometheus real en Testcontainers y control positivo, más
+  `ComposeObservabilityContractTest`.
+- Q4: panel de aceptadas por minuto y por réplica con línea en 500; la prueba de carga queda fuera como
+  excepción del Principio VII: dueño y fecha PENDIENTES de que los fije el usuario.
+- Q5: `prom/prometheus:v3.5.1` y `grafana/grafana:12.2.0`.
+- Q6: Prometheus y Grafana en `docker-compose.observability.yml` (sin perfil). Credenciales en el `.env`
+  como `${GRAFANA_ADMIN_USER:?mensaje}` y `${GRAFANA_ADMIN_PASSWORD:?mensaje}`, sin valor por defecto, que
+  solo se exigen al incluir ese archivo (`-f docker-compose.yml -f docker-compose.observability.yml` o
+  `COMPOSE_FILE` con `COMPOSE_PATH_SEPARATOR=,`). Verificado con `docker compose config` (research R3).
 
 ## Technical Context
 
@@ -81,10 +83,10 @@ justificación)
 | VI. Aprobación | El Estado del plan es `Pendiente`; no se generan tareas ni se implementa hasta que el usuario lo cambie. |
 | VII. Sin atajos | Lo que el tablero no demuestra se registra como excepción con dueño y fecha (FR-013): prueba de carga de RNF-03, histórico mensual de RNF-01 si Q2 no se acepta, destino de alertas si Q1 lo difiere. Dueño y fecha: a definir por el usuario (no se inventan). |
 | IX. Observabilidad | Cierra el consumo de las métricas de RNF-10. |
-| Secretos | Sin credenciales en el repo; archivos en `secrets/` ignorados por git; el README documenta cómo crearlos. |
+| Secretos | Sin credenciales en el repo; `${VAR:?}` desde el `.env` (ignorado por git), sin valor por defecto; `.env.example` las deja vacías. |
 | RabbitMQ ack/DLQ | No aplica; sin cambios en consumidores. |
 
-Resultado: sin violaciones. Desviación declarada: credenciales por archivo en lugar de `${VAR:?}`.
+Resultado: sin violaciones.
 
 ## Project Structure
 
@@ -105,14 +107,14 @@ specs/021-dashboard-observabilidad/
 ```text
 observability/
 ├── prometheus.yml                         (scrape host.docker.internal:8061, /actuator/prometheus)
-├── alerts.yml                             (PROVISIONAL, Q1)
+├── alerts.yml                             (Q1)
 └── grafana/
     ├── provisioning/datasources/prometheus.yml
     ├── provisioning/dashboards/dashboards.yml
     └── dashboards/notification-service.json
 
-docker-compose.yml                         (servicios prometheus y grafana, perfil observability, volúmenes, secretos)
-.env.example                               (PROMETHEUS_PORT y GRAFANA_PORT opcionales; sin credenciales)
+docker-compose.observability.yml           (servicios prometheus y grafana, volúmenes, credenciales con ${VAR:?})
+.env.example                               (GRAFANA_ADMIN_USER y GRAFANA_ADMIN_PASSWORD vacías, puertos opcionales, COMPOSE_FILE comentado)
 README.md                                  (sección "Tablero de observabilidad")
 
 infrastructure/src/test/java/co/edu/uco/notification/infrastructure/
@@ -134,7 +136,7 @@ artefactos de entorno y no de ningún módulo Maven; las pruebas viven en `infra
 
 - `prometheus.yml`: `scrape_interval: 15s`, un job `notification-service`, `metrics_path:
   /actuator/prometheus`, objetivo `host.docker.internal:8061`, `rule_files: [/etc/prometheus/alerts.yml]`.
-- Servicio compose: imagen fija, `profiles: [observability]`, puerto `127.0.0.1:${PROMETHEUS_PORT:-9090}:9090`,
+- Servicio compose (en el archivo adicional): imagen fija, puerto `127.0.0.1:${PROMETHEUS_PORT:-9090}:9090`,
   `extra_hosts: host.docker.internal:host-gateway`, comando con `--config.file`, retención y
   `--storage.tsdb.path`, montajes de solo lectura de la configuración, volumen `prometheus-data`,
   `restart: unless-stopped`.
@@ -144,13 +146,13 @@ artefactos de entorno y no de ningún módulo Maven; las pruebas viven en `infra
 - Aprovisionamiento: fuente de datos `uid: prometheus`, URL `http://prometheus:9090`, `isDefault: true`,
   `editable: false`; proveedor de tableros apuntando a `/var/lib/grafana/dashboards` (montaje de solo
   lectura de `observability/grafana/dashboards`).
-- Servicio compose: imagen fija, perfil, `127.0.0.1:${GRAFANA_PORT:-3000}:3000`, `depends_on: prometheus`,
-  `GF_SECURITY_ADMIN_USER__FILE` y `GF_SECURITY_ADMIN_PASSWORD__FILE` hacia `/run/secrets/...`, sin
+- Servicio compose (en el archivo adicional): imagen fija, `127.0.0.1:${GRAFANA_PORT:-3000}:3000`, `depends_on: prometheus`,
+  `GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:?mensaje}` y `GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?mensaje}`, sin
   registro anónimo ni de usuarios, sin analítica, volumen `grafana-data`.
 - Tablero según `contracts/tablero.md`; se escribe como JSON de Grafana versionado (con `uid` estable, `schemaVersion`
   de la imagen elegida y sin `id`), no exportado a mano de una instancia viva sin revisar.
 
-### 3. Puerta E2E (Q3, PROVISIONAL)
+### 3. Puerta E2E (Q3)
 
 `ObservabilityDashboardE2ETest` (`@SpringBootTest(RANDOM_PORT)`, Mongo y RabbitMQ con Testcontainers, remitente
 sonda como `MetricsE2ETest`):
@@ -171,15 +173,17 @@ sonda como `MetricsE2ETest`):
    etiqueta de tenant) y la prueba afirma que ninguna serie del raspado contiene los identificadores de tenant
    ni el destinatario centinela.
 
-`ComposeObservabilityContractTest` (sin Docker, SnakeYAML): imágenes nuevas con etiqueta distinta de
-`latest` y presente; servicios con `profiles: [observability]`; ningún `ports` con 8061; puertos de
-Prometheus y Grafana con prefijo `127.0.0.1`; sin credenciales de Grafana en `environment` con valor
-literal ni por defecto; los servicios existentes no tienen perfil nuevo (SC-005, SC-006).
+`ComposeObservabilityContractTest` (sin Docker, SnakeYAML, lee ambos archivos): imágenes nuevas con etiqueta
+distinta de `latest` y presente; `prometheus` y `grafana` solo en el archivo adicional y ausentes de
+`docker-compose.yml`, que no menciona `GRAFANA_*` (SC-005); credenciales de Grafana como `${VAR:?` sin `:-`
+ni valor literal; ningún `ports` con 8061; puertos de Prometheus y Grafana con prefijo `127.0.0.1`
+(SC-006).
 
 ### 4. README
 
-Sección "Tablero de observabilidad": crear los dos archivos de `secrets/`, `docker compose --profile
-observability up -d`, abrir `http://localhost:3000`, supuesto de servicio fuera de Docker, qué demuestra
+Sección "Tablero de observabilidad": definir `GRAFANA_ADMIN_USER` y `GRAFANA_ADMIN_PASSWORD` en el `.env`,
+`docker compose -f docker-compose.yml -f docker-compose.observability.yml up -d` (o `COMPOSE_FILE` con
+`COMPOSE_PATH_SEPARATOR=,`, imprescindible en Windows), abrir `http://localhost:3000`, supuesto de servicio fuera de Docker, qué demuestra
 cada panel de RNF y qué no (research R6), cómo parar y borrar volúmenes.
 
 ## Estrategia de pruebas
@@ -190,12 +194,14 @@ cada panel de RNF y qué no (research R6), cómo parar y borrar volúmenes.
 | Contrato | `ComposeObservabilityContractTest` | SC-005, SC-006, FR-003, FR-005 |
 | E2E | `ObservabilityDashboardE2ETest` | FR-010, FR-011, SC-002, SC-003; raspado <= 2 s con `Duration`; dos tenants |
 | Arquitectura | `HexagonalArchitectureTest`, `ModularityTests` | Siguen en verde |
-| Manual documentado | arranque real del perfil en la máquina del autor, con captura de la salida | SC-001 y escenarios de Story 1; no sustituye a lo automatizado |
+| Manual documentado | arranque real del stack en la máquina del autor, con captura de la salida | SC-001 y escenarios de Story 1; no sustituye a lo automatizado |
 
 ## Riesgos y brechas
 
-1. **`${VAR:?}` en servicio con perfil rompe el arranque de todo** (verificado): se usa archivo de secretos;
-   falta confirmar con `up` real el mensaje de error y los permisos del archivo en Linux.
+1. **`${VAR:?}` en servicio con perfil rompe el arranque de todo** (verificado): se usa un archivo compose
+   adicional (Q6). Verificado con `docker compose config` que sin el archivo no se exige la variable y que
+   con el archivo y la variable ausente falla con el mensaje; NO verificado con `up` real (Docker apagado).
+   `COMPOSE_FILE` en Windows exige `COMPOSE_PATH_SEPARATOR=,` (verificado).
 2. **Nombre del listener de Rabbit**: `application.yml` activa el histograma para `spring.rabbitmq.listener`
    pero la observación se llama `spring.rabbit.listener` (jar de Spring AMQP 3.1.7); probablemente es
    una configuración sin efecto. Fuera de alcance de la 021; se reporta para la Bitácora. El tablero usa
@@ -211,8 +217,8 @@ cada panel de RNF y qué no (research R6), cómo parar y borrar volúmenes.
 8. **Compatibilidad del JSON con Grafana 12.2**: no verificada hasta cargar el tablero en la implementación.
 9. **Docker apagado en este equipo al escribir el plan**: nada de lo anterior sobre comportamiento en vivo
    se ha ejecutado salvo lo marcado como verificado en la research.
-10. **Dueño y fecha de las excepciones**: no los conozco; se piden al usuario.
+10. **Dueño y fecha de las excepciones** (prueba de carga de RNF-03 y destino de alertas): PENDIENTES de que los fije el usuario; no se inventan.
 
 ## Complexity Tracking
 
-Sin violaciones. Desviación a confirmar: secretos por archivo en lugar de `${VAR:?}` (ver Decisiones).
+Sin violaciones. Se conserva `${VAR:?}` del resto del compose, pero en un archivo adicional para no exigirlo a quien no usa Grafana (Q6).

@@ -40,26 +40,35 @@ Hallazgos:
 - JVM: `jvm_memory_used_bytes`, `jvm_threads_live_threads` ya las afirma `MetricsE2ETest`;
   `process_cpu_usage` y `system_cpu_usage`: NO VERIFICADAS con captura (las autoconfigura Boot).
 
-## R3 — Compose: credenciales requeridas y perfiles (verificado con `docker compose config`)
+## R3 — Compose: credenciales requeridas (verificado con `docker compose config`, 2026-10-08)
 
 Un `${GRAFANA_ADMIN_PASSWORD:?mensaje}` dentro de un servicio con `profiles: [observability]` NO se
 omite al levantar sin el perfil: Compose interpola todo el archivo y falla con "required variable ... is
 missing a value", lo que rompería `docker compose up -d mongodb rabbitmq` para quien no use Grafana.
-Alternativas:
 
 | Opción | Pros | Contras |
 |---|---|---|
-| A. `${VAR:?}` en el compose con perfil | Coherente con el resto del archivo | Rompe el arranque de todo lo demás: descartada |
-| B. Secretos de Docker desde archivos en `secrets/` (ya ignorado por git) + `GF_SECURITY_ADMIN_USER__FILE` y `GF_SECURITY_ADMIN_PASSWORD__FILE` | Sin valor por defecto; `compose config` sin perfil funciona (verificado); el secreto no entra al entorno del contenedor | Mensaje de error de archivo faltante menos claro: se documenta y se verifica en la implementación |
-| C. Archivo `docker-compose.observability.yml` aparte con `${VAR:?}` | Mensaje claro | Se aparta del pedido "bajo un perfil"; dos archivos |
+| A. `${VAR:?}` en el compose con perfil | Coherente con el resto del archivo | Rompe el arranque de todo lo demás: descartada (verificado) |
+| B. Secretos de Docker desde archivos en `secrets/` | Sin valor por defecto | Descartada por el usuario |
+| C. Archivo `docker-compose.observability.yml` aparte con `${VAR:?}` en el `.env` | Mensaje claro; la variable solo se exige si se incluye el archivo | Dos archivos; hay que pasar `-f` o `COMPOSE_FILE` |
 
-Recomendada: B. Pendiente de verificar en la implementación que `up` con el perfil y el archivo ausente falla
-con un error comprensible y que Grafana lee el archivo (permisos en Linux).
+DECIDIDA por el usuario el 2026-10-08: C. Verificado con `docker compose config` sobre archivos de prueba
+(el CLI de compose interpola sin necesitar el demonio):
+
+- (a) solo `docker-compose.yml`: no exige la variable y la configuración se resuelve.
+- (b) con el archivo adicional y la variable ausente: falla con `required variable GRAFANA_ADMIN_PASSWORD is
+  missing a value: GRAFANA_ADMIN_PASSWORD is not set, define it in .env`.
+- (c) con las variables definidas: se resuelve.
+- (d) `COMPOSE_FILE` en el `.env`: en Windows el separador por defecto es `;`, no `:`; con `:` Compose busca un
+  archivo llamado `a.yml:o.yml` y falla. Hay que fijar `COMPOSE_PATH_SEPARATOR=,` y separar con coma, que
+  se verificó que funciona. El README lo documenta.
+
+No verificado: el archivo real `docker-compose.observability.yml` (aún no existe), el arranque con el
+demonio de Docker (apagado) y que Grafana acepte las credenciales del entorno.
 
 ## R4 — Imágenes (verificado con `docker manifest inspect`)
 
-Existen `prom/prometheus:v3.5.0`, `v3.5.1`, `v3.6.0` y `grafana/grafana:12.0.0`, `12.0.2`, `12.2.0`. Propuesta
-sujeta a Q5: `prom/prometheus:v3.5.1` y `grafana/grafana:12.2.0`. La compatibilidad del JSON del tablero
+Existen `prom/prometheus:v3.5.0`, `v3.5.1`, `v3.6.0` y `grafana/grafana:12.0.0`, `12.0.2`, `12.2.0`. Confirmadas por el usuario el 2026-10-08 (Q5): `prom/prometheus:v3.5.1` y `grafana/grafana:12.2.0`. La compatibilidad del JSON del tablero
 con esa versión de Grafana se comprueba cargándolo en la implementación (no verificado).
 
 ## R5 — Alcance del anfitrión
@@ -94,5 +103,5 @@ con esa versión de Grafana se comprueba cargándolo en la implementación (no v
 3. Variables de Grafana (`$__rate_interval`, `$instance`, `$__range`) se sustituyen por valores fijos antes
    de evaluar; la sustitución es parte de la prueba.
 4. Control positivo: un tablero sintético con una métrica inexistente tiene que hacer fallar el verificador.
-5. Se separa en una prueba de contrato del compose (sin Docker): imágenes con etiqueta fija, perfil
-   presente, 8061 no publicado, sin credenciales con valor por defecto.
+5. Se separa en una prueba de contrato del compose (sin Docker): imágenes con etiqueta fija, archivo adicional
+   con las credenciales como `${VAR:?}`, 8061 no publicado, sin credenciales con valor por defecto.

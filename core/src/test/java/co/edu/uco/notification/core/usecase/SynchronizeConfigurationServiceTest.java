@@ -58,10 +58,11 @@ class SynchronizeConfigurationServiceTest {
   private final SynchronizeConfigurationService service =
       new SynchronizeConfigurationService(
           source,
-          new ApplyConfigurationChangeService(
-              holder, new ConfigurationValidator(registry), fixed(), CLOCK),
-          lastKnown,
-          holder);
+          new ReceivePublishedConfigurationService(
+              new ApplyConfigurationChangeService(
+                  holder, new ConfigurationValidator(registry), fixed(), CLOCK),
+              lastKnown,
+              holder));
 
   @Test
   void anAppliedStateIsPersistedWithTheVersionNowInForce() {

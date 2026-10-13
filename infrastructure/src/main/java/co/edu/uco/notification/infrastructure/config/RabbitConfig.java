@@ -61,7 +61,9 @@ public class RabbitConfig {
 
   @Bean
   AnonymousQueue notificationUpdatesQueue() {
-    return new AnonymousQueue();
+    final AnonymousQueue queue = new AnonymousQueue();
+    queue.setLeaderLocator(null);
+    return queue;
   }
 
   @Bean

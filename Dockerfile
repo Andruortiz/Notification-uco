@@ -21,6 +21,15 @@ RUN ./mvnw -B -ntp package -pl infrastructure -am -DskipTests \
 
 FROM eclipse-temurin:21-jre AS runtime
 
+ARG VERSION=dev
+ARG REVISION=unknown
+ARG SOURCE_URL=unknown
+
+LABEL org.opencontainers.image.title="notification-uco" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}" \
+      org.opencontainers.image.source="${SOURCE_URL}"
+
 RUN groupadd --system app && useradd --system --gid app --no-create-home app
 WORKDIR /app
 

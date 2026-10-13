@@ -1,0 +1,8 @@
+.git
+.idea
+**/target
+.env
+secrets
+.specify
+.claude
+specs

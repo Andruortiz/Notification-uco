@@ -1,0 +1,165 @@
+server:
+  port: ${APP_PORT:8060}
+
+spring:
+  application:
+    name: notification-service
+  codec:
+    max-in-memory-size: 8MB
+  data:
+    mongodb:
+      uri: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:localhost}:${MONGO_PORT:27018}/${MONGO_DATABASE:notification}?authSource=admin
+      auto-index-creation: true
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5673}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    publisher-confirm-type: correlated
+    template:
+      observation-enabled: true
+    listener:
+      simple:
+        observation-enabled: true
+  reactor:
+    context-propagation: auto
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8061}
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        spring.rabbitmq.listener: true
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      probes:
+        enabled: true
+      show-components: always
+      group:
+        readiness:
+          include: readinessState,mongo,rabbit
+        liveness:
+          include: livenessState
+
+springdoc:
+  swagger-ui:
+    url: /openapi/api-notificaciones.yaml
+
+notification:
+  auth:
+    # local: JWT firmado con un secreto compartido, obligatorio y de al menos 32 bytes (perfil local para desarrollo). platform: tokens de la plataforma central
+    # de seguridad, validados con su clave publica (ver README, "Autenticacion").
+    mode: ${NOTIFICATION_AUTH_MODE:local}
+    platform:
+      public-key: ${AUTH_PLATFORM_PUBLIC_KEY:}
+      issuer: ${AUTH_PLATFORM_ISSUER:}
+      audience: ${AUTH_PLATFORM_AUDIENCE:}
+      subject-claim: ${AUTH_PLATFORM_SUBJECT_CLAIM:sub}
+      tenant-claim: ${AUTH_PLATFORM_TENANT_CLAIM:tenantId}
+      role-claim: ${AUTH_PLATFORM_ROLE_CLAIM:role}
+      clock-skew-seconds: ${AUTH_PLATFORM_CLOCK_SKEW_SECONDS:30}
+    jwt:
+      hs256-secret: ${AUTH_JWT_HS256_SECRET:}
+      ttl-minutes: ${AUTH_JWT_TTL_MINUTES:720}
+    subscription-ticket:
+      ttl-seconds: ${AUTH_SUBSCRIPTION_TICKET_TTL_SECONDS:30}
+  scheduler:
+    requeue-interval-ms: ${NOTIFICATION_REQUEUE_INTERVAL_MS:30000}
+    pending-orphan-threshold-ms: ${NOTIFICATION_PENDING_ORPHAN_THRESHOLD_MS:60000}
+    in-process-timeout-ms: ${NOTIFICATION_IN_PROCESS_TIMEOUT_MS:600000}
+    batch-size: ${NOTIFICATION_REQUEUE_BATCH_SIZE:100}
+  parameters:
+    base-url: ${NOTIFICATION_PARAMETERS_BASE_URL:}
+    poll-interval-ms: ${NOTIFICATION_PARAMETERS_POLL_INTERVAL_MS:30000}
+    timeout-ms: ${NOTIFICATION_PARAMETERS_TIMEOUT_MS:5000}
+    connect-timeout-ms: ${NOTIFICATION_PARAMETERS_CONNECT_TIMEOUT_MS:2000}
+    last-known-load-timeout-ms: ${NOTIFICATION_PARAMETERS_LAST_KNOWN_LOAD_TIMEOUT_MS:5000}
+  catalog:
+    refresh-interval-ms: ${NOTIFICATION_CATALOG_REFRESH_INTERVAL_MS:30000}
+    channels:
+      EMAIL:
+        providers: ${NOTIFICATION_EMAIL_PROVIDERS:simulated,brevo}
+        content-schema: '{"type":"object","properties":{"attachments":{"type":"array","maxItems":5,"items":{"type":"object","properties":{"sizeBytes":{"type":"integer","maximum":4000000}}}},"attachmentsTotalBytes":{"type":"integer","maximum":4000000}}}'
+      SMS:
+        providers: ${NOTIFICATION_SMS_PROVIDERS:simulated,twilio}
+        content-schema: '{"type":"object","required":["body"],"properties":{"body":{"type":"string","maxLength":160}}}'
+      PUSH:
+        providers: ${NOTIFICATION_PUSH_PROVIDERS:simulated,fcm}
+        content-schema: '{"type":"object","required":["body"],"properties":{"subject":{"maxLength":100},"body":{"type":"string","maxLength":900}}}'
+  provider:
+    simulated:
+      result: ${SIMULATED_PROVIDER_RESULT:ACCEPTED}
+    brevo:
+      api-key: ${BREVO_API_KEY:}
+      sender-email: ${BREVO_SENDER_EMAIL:}
+      sender-name: ${BREVO_SENDER_NAME:}
+      base-url: ${BREVO_BASE_URL:https://api.brevo.com}
+      timeout-ms: ${BREVO_TIMEOUT_MS:10000}
+      connect-timeout-ms: ${BREVO_CONNECT_TIMEOUT_MS:5000}
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID:}
+      auth-token: ${TWILIO_AUTH_TOKEN:}
+      from-number: ${TWILIO_FROM_NUMBER:}
+      base-url: ${TWILIO_BASE_URL:https://api.twilio.com}
+      timeout-ms: ${TWILIO_TIMEOUT_MS:10000}
+      connect-timeout-ms: ${TWILIO_CONNECT_TIMEOUT_MS:5000}
+    fcm:
+      credentials-json: ${FCM_CREDENTIALS_JSON:}
+      credentials-file: ${FCM_CREDENTIALS_FILE:}
+      base-url: ${FCM_BASE_URL:https://fcm.googleapis.com}
+      token-url: ${FCM_TOKEN_URL:https://oauth2.googleapis.com/token}
+      timeout-ms: ${FCM_TIMEOUT_MS:10000}
+      connect-timeout-ms: ${FCM_CONNECT_TIMEOUT_MS:5000}
+  rabbit:
+    dispatch:
+      exchange: notification.dispatch.exchange
+      routing-key: notification.dispatch
+      queue: notification.dispatch.queue
+      max-attempts: ${NOTIFICATION_DISPATCH_MAX_ATTEMPTS:3}
+    dlq:
+      exchange: notification.dispatch.dlq.exchange
+      routing-key: notification.dispatch.dlq
+      queue: notification.dispatch.dlq.queue
+    events-exchange: notification.events.exchange
+    attachment-scan:
+      exchange: notification.attachment.scan.exchange
+      routing-key: notification.attachment.scan
+      queue: notification.attachment.scan.queue
+      dlq-exchange: notification.attachment.scan.dlq.exchange
+      dlq-routing-key: notification.attachment.scan.dlq
+      dlq-queue: notification.attachment.scan.dlq.queue
+  cors:
+    allowed-origins: ${NOTIFICATION_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  attachments:
+    scan:
+      timeout: ${NOTIFICATION_ATTACHMENTS_SCAN_TIMEOUT:10s}
+      clean-verdict-ttl: 24h
+      consumer-concurrency: ${NOTIFICATION_ATTACHMENTS_SCAN_CONCURRENCY:2}
+      max-attempts: ${NOTIFICATION_ATTACHMENTS_SCAN_MAX_ATTEMPTS:3}
+    upload:
+      expiration: ${NOTIFICATION_ATTACHMENTS_UPLOAD_EXPIRATION:15m}
+    sweeper:
+      interval-ms: ${NOTIFICATION_ATTACHMENTS_SWEEPER_INTERVAL_MS:60000}
+      scan-deadline: ${NOTIFICATION_ATTACHMENTS_SWEEPER_SCAN_DEADLINE:1h}
+      batch-size: ${NOTIFICATION_ATTACHMENTS_SWEEPER_BATCH_SIZE:100}
+    storage:
+      bucket: ${MINIO_BUCKET:notification-attachments}
+      endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+      public-endpoint: ${MINIO_PUBLIC_ENDPOINT:http://localhost:9000}
+      access-key: ${MINIO_ACCESS_KEY:}
+      secret-key: ${MINIO_SECRET_KEY:}
+    clamav:
+      host: ${CLAMAV_HOST:localhost}
+      port: ${CLAMAV_PORT:3310}
+      max-concurrent-scans: ${CLAMAV_MAX_CONCURRENT_SCANS:4}

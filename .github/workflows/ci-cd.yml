@@ -1,0 +1,243 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+    tags: ["v*"]
+
+jobs:
+  build:
+    name: "Build"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: ${{ github.ref_type == 'tag' && 0 || 1 }}
+
+      - name: Exigir que el tag salga de main
+        if: github.ref_type == 'tag'
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+            echo "::error::El tag $GITHUB_REF_NAME apunta a un commit que no esta en main; un release solo se corta desde main."
+            exit 1
+          }
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Compilar
+        run: ./mvnw -B -ntp clean compile
+
+  test:
+    name: "Test"
+    needs: build
+    runs-on: ubuntu-latest
+    services:
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5673:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RABBITMQ_USERNAME: guest
+      RABBITMQ_PASSWORD: guest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Pruebas (unitarias, integracion, E2E con Testcontainers)
+        run: ./mvnw -B -ntp test
+
+      - name: Subir clases compiladas y datos de cobertura
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: build-output
+          path: |
+            **/target/classes/**
+            **/target/test-classes/**
+            **/target/*.exec
+            **/target/site/jacoco/**
+          retention-days: 1
+          if-no-files-found: error
+
+  security:
+    name: "Seguridad (Sonar + Trivy)"
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Descargar clases compiladas y datos de cobertura del job Test
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: build-output
+
+      - name: Analisis de codigo (SonarCloud)
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          ./mvnw -B -ntp org.sonarsource.scanner.maven:sonar-maven-plugin:sonar
+          -Dsonar.projectKey=${{ vars.SONAR_PROJECT_KEY }}
+          -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }}
+          -Dsonar.host.url=https://sonarcloud.io
+
+      - name: Escaneo de dependencias (Trivy)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Publicar hallazgos de Trivy en GitHub Security
+        if: always()
+        uses: github/codeql-action/upload-sarif@7999b86c43a865dc79d8923397f35af22de63401 # v4
+        with:
+          sarif_file: trivy-results.sarif
+
+  quality:
+    name: "Code Quality"
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Configurar JDK 21
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Descargar clases compiladas y datos de cobertura del job Test
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: build-output
+
+      - name: Puertas de calidad (Spotless, SpotBugs, cobertura)
+        run: ./mvnw -B -ntp install -DskipTests
+
+  imagen:
+    name: "Imagen Docker"
+    needs: [ security, quality ]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Definir nombre y version de la imagen
+        run: |
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "IMAGE_TAG=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+          fi
+
+      - name: Construir imagen Docker
+        run: >
+          docker build
+          --build-arg "VERSION=$IMAGE_TAG"
+          --build-arg "REVISION=$GITHUB_SHA"
+          --build-arg "SOURCE_URL=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          -t "$IMAGE:$GITHUB_SHA" .
+
+      - name: Verificar la imagen (JRE 21, usuario sin privilegios y etiquetas de version)
+        run: |
+          docker run --rm --entrypoint java "$IMAGE:$GITHUB_SHA" -version
+          test "$(docker run --rm --entrypoint id "$IMAGE:$GITHUB_SHA" -u)" != "0"
+          test "$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$IMAGE:$GITHUB_SHA")" = "$IMAGE_TAG"
+          test "$(docker inspect -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$IMAGE:$GITHUB_SHA")" = "$GITHUB_SHA"
+
+      - name: Publicar imagen en GHCR
+        if: github.event_name == 'push'
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:$IMAGE_TAG"
+          docker push "$IMAGE:$GITHUB_SHA"
+          docker push "$IMAGE:$IMAGE_TAG"
+          if [ "$GITHUB_REF_NAME" = "main" ] || { [ "$GITHUB_REF_TYPE" = "tag" ] && [[ "$IMAGE_TAG" != *-* ]]; }; then
+            docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:latest"
+            docker push "$IMAGE:latest"
+          fi
+
+  desplegar:
+    name: "Desplegar"
+    needs: imagen
+    if: github.event_name == 'push' && github.ref_type == 'branch'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'produccion' || 'desarrollo' }}
+    concurrency:
+      group: desplegar-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+
+      - name: Notificar el despliegue
+        env:
+          DEPLOY_HOOK_URL: ${{ secrets.DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$DEPLOY_HOOK_URL" ]; then
+            echo "::notice::Sin destino de despliegue: defina el secreto DEPLOY_HOOK_URL en el entorno para activarlo."
+            exit 0
+          fi
+          curl --fail --silent --show-error --max-time 30 -X POST "$DEPLOY_HOOK_URL"
+
+  release:
+    name: "Release"
+    needs: imagen
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Preparar archivos del release
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir release-assets
+          cp docker-compose.yml release-assets/compose.yaml
+          sed "s/^NOTIFICATION_VERSION=.*/NOTIFICATION_VERSION=${VERSION}/" .env.example > release-assets/.env.example
+
+      - name: Publicar el release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/compose.yaml release-assets/.env.example --title "$GITHUB_REF_NAME" --generate-notes

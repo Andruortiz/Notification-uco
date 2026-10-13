@@ -1,0 +1,290 @@
+package co.edu.uco.notification.core.domain;
+
+import co.edu.uco.notification.core.domain.event.*;
+import co.edu.uco.notification.core.domain.policy.StatusTransitionPolicy;
+import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
+import co.edu.uco.notification.utils.CorrelationId;
+import co.edu.uco.notification.utils.Preconditions;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
+
+public final class Notification {
+
+  private final NotificationId notificationId;
+  private final TenantId tenantId;
+  private final ExternalId externalId;
+  private final ChannelType channelType;
+  private final RecipientId recipientId;
+  private final Recipient recipient;
+  private final NotificationContent content;
+  private final Priority priority;
+  private final Instant acceptedAt;
+  private final DomainEventRecorder eventRecorder = new DomainEventRecorder();
+  private final List<DeliveryAttempt> deliveryAttempts = new ArrayList<>();
+
+  private NotificationStatus status;
+  private Instant pendingSince;
+  private Instant dispatchReservedAt;
+  private int currentCycle;
+  private CorrelationId correlationId;
+  private final Long version;
+
+  private Notification(
+      final NotificationId notificationId,
+      final NotificationRouting routing,
+      final NotificationDetails details,
+      final NotificationMetadata metadata) {
+    this.notificationId = notificationId;
+    this.tenantId = routing.tenantId();
+    this.externalId = routing.externalId();
+    this.channelType = routing.channelType();
+    this.recipientId = routing.recipientId();
+    this.recipient = routing.recipient();
+    this.content = details.content();
+    this.priority = details.priority();
+    this.acceptedAt = metadata.acceptedAt();
+    this.status = NotificationStatus.PENDING;
+    this.version = metadata.version();
+    this.pendingSince = metadata.pendingSince();
+    this.dispatchReservedAt = metadata.dispatchReservedAt();
+    this.currentCycle = metadata.currentCycle();
+  }
+
+  public static Notification accept(
+      final NotificationRouting routing, final NotificationDetails details) {
+    return accept(routing, details, null);
+  }
+
+  public static Notification accept(
+      final NotificationRouting routing,
+      final NotificationDetails details,
+      final CorrelationId correlationId) {
+    Preconditions.requireNonNull(routing, "routing must not be null");
+    Preconditions.requireNonNull(details, "details must not be null");
+    final Notification notification =
+        new Notification(
+            NotificationId.newId(),
+            routing,
+            details,
+            new NotificationMetadata(Instant.now(), null));
+    notification.correlationId = correlationId;
+    notification.eventRecorder.registerEvent(
+        new NotificationAccepted(
+            notification.notificationId,
+            notification.tenantId,
+            notification.correlationId,
+            notification.acceptedAt));
+    return notification;
+  }
+
+  public static Notification reconstitute(
+      final NotificationId notificationId,
+      final NotificationRouting routing,
+      final NotificationDetails details,
+      final NotificationStatus status,
+      final NotificationMetadata metadata,
+      final List<DeliveryAttempt> deliveryAttempts) {
+    return reconstitute(notificationId, routing, details, status, metadata, deliveryAttempts, null);
+  }
+
+  public static Notification reconstitute(
+      final NotificationId notificationId,
+      final NotificationRouting routing,
+      final NotificationDetails details,
+      final NotificationStatus status,
+      final NotificationMetadata metadata,
+      final List<DeliveryAttempt> deliveryAttempts,
+      final CorrelationId correlationId) {
+    Preconditions.requireNonNull(notificationId, "notificationId must not be null");
+    Preconditions.requireNonNull(routing, "routing must not be null");
+    Preconditions.requireNonNull(details, "details must not be null");
+    Preconditions.requireNonNull(status, "status must not be null");
+    Preconditions.requireNonNull(metadata, "metadata must not be null");
+    Preconditions.requireNonNull(deliveryAttempts, "deliveryAttempts must not be null");
+
+    final Notification notification = new Notification(notificationId, routing, details, metadata);
+    notification.status = status;
+    notification.correlationId = correlationId;
+    notification.deliveryAttempts.addAll(deliveryAttempts);
+    return notification;
+  }
+
+  public CorrelationId correlationId() {
+    return correlationId;
+  }
+
+  public void markQueued() {
+    transitionTo(NotificationStatus.IN_PROCESS);
+    announceQueued();
+  }
+
+  public void announceQueued() {
+    eventRecorder.registerEvent(
+        new NotificationQueued(notificationId, tenantId, correlationId, Instant.now()));
+  }
+
+  public void markDelivered(final AttemptOrigin origin, final ProviderId providerId) {
+    transitionTo(NotificationStatus.DELIVERED);
+    final Instant now = Instant.now();
+    deliveryAttempts.add(
+        DeliveryAttempt.of(now, AttemptResult.ACCEPTED, origin, providerId, currentCycle));
+    eventRecorder.registerEvent(
+        new NotificationDelivered(notificationId, tenantId, correlationId, now));
+  }
+
+  public void markRecoverable(final AttemptOrigin origin, final ProviderId providerId) {
+    transitionTo(NotificationStatus.RECOVERABLE);
+    final Instant now = Instant.now();
+    deliveryAttempts.add(
+        DeliveryAttempt.of(
+            now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId, currentCycle));
+    eventRecorder.registerEvent(
+        new NotificationRecoverable(notificationId, tenantId, correlationId, now));
+  }
+
+  public void markRetriesExhausted(final AttemptOrigin origin, final ProviderId providerId) {
+    transitionTo(NotificationStatus.FAILED);
+    final Instant now = Instant.now();
+    deliveryAttempts.add(
+        DeliveryAttempt.of(
+            now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId, currentCycle));
+    eventRecorder.registerEvent(
+        new NotificationFailed(notificationId, tenantId, correlationId, now));
+  }
+
+  public void markFailed(final AttemptOrigin origin, final ProviderId providerId) {
+    transitionTo(NotificationStatus.FAILED);
+    final Instant now = Instant.now();
+    deliveryAttempts.add(
+        DeliveryAttempt.of(now, AttemptResult.PERMANENT_FAILURE, origin, providerId, currentCycle));
+    eventRecorder.registerEvent(
+        new NotificationFailed(notificationId, tenantId, correlationId, now));
+  }
+
+  public void requeue() {
+    transitionTo(NotificationStatus.PENDING);
+    eventRecorder.registerEvent(
+        new NotificationRequeued(notificationId, tenantId, correlationId, Instant.now()));
+  }
+
+  public void retryManually() {
+    if (status != NotificationStatus.FAILED) {
+      throw new InvalidStatusTransitionException(status, NotificationStatus.PENDING);
+    }
+    transitionTo(NotificationStatus.PENDING);
+    currentCycle++;
+    eventRecorder.registerEvent(
+        new NotificationRequeued(notificationId, tenantId, correlationId, Instant.now()));
+  }
+
+  public int recoverableAttemptsInCurrentCycle() {
+    return (int)
+        deliveryAttempts.stream()
+            .filter(attempt -> attempt.cycle() == currentCycle)
+            .filter(attempt -> attempt.result() == AttemptResult.RECOVERABLE_FAILURE)
+            .count();
+  }
+
+  public void discard() {
+    transitionTo(NotificationStatus.DISCARDED);
+    eventRecorder.registerEvent(
+        new NotificationDiscarded(notificationId, tenantId, correlationId, Instant.now()));
+  }
+
+  private void transitionTo(final NotificationStatus target) {
+    if (!StatusTransitionPolicy.canTransition(status, target)) {
+      throw new InvalidStatusTransitionException(status, target);
+    }
+    status = target;
+    if (target == NotificationStatus.IN_PROCESS) {
+      dispatchReservedAt = Instant.now();
+    } else {
+      dispatchReservedAt = null;
+    }
+    if (target == NotificationStatus.PENDING) {
+      pendingSince = Instant.now();
+    }
+  }
+
+  public List<DomainEvent> pullEvents() {
+    return eventRecorder.pullEvents();
+  }
+
+  public NotificationId notificationId() {
+    return notificationId;
+  }
+
+  public TenantId tenantId() {
+    return tenantId;
+  }
+
+  public ExternalId externalId() {
+    return externalId;
+  }
+
+  public ChannelType channelType() {
+    return channelType;
+  }
+
+  public RecipientId recipientId() {
+    return recipientId;
+  }
+
+  public Recipient recipient() {
+    return recipient;
+  }
+
+  public NotificationContent content() {
+    return content;
+  }
+
+  public Priority priority() {
+    return priority;
+  }
+
+  public NotificationStatus status() {
+    return status;
+  }
+
+  public Instant acceptedAt() {
+    return acceptedAt;
+  }
+
+  public List<DeliveryAttempt> deliveryAttempts() {
+    return List.copyOf(deliveryAttempts);
+  }
+
+  public Long version() {
+    return version;
+  }
+
+  public Instant pendingSince() {
+    return pendingSince;
+  }
+
+  public Instant dispatchReservedAt() {
+    return dispatchReservedAt;
+  }
+
+  public int currentCycle() {
+    return currentCycle;
+  }
+
+  @Override
+  public boolean equals(final Object other) {
+    if (this == other) {
+      return true;
+    }
+    if (!(other instanceof Notification that)) {
+      return false;
+    }
+    return notificationId.equals(that.notificationId);
+  }
+
+  @Override
+  public int hashCode() {
+    return notificationId.hashCode();
+  }
+}

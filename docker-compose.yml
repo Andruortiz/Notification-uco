@@ -1,0 +1,82 @@
+services:
+  mongodb:
+    image: mongo:7
+    container_name: notification-mongodb
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27018}:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USERNAME:?MONGO_USERNAME is not set, define it in .env}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:?MONGO_PASSWORD is not set, define it in .env}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-notification}
+    volumes:
+      - mongodb-data:/data/db
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: notification-rabbitmq
+    restart: unless-stopped
+    ports:
+      - "${RABBITMQ_PORT:-5673}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15673}:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME:?RABBITMQ_USERNAME is not set, define it in .env}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?RABBITMQ_PASSWORD is not set, define it in .env}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+
+  minio:
+    image: pgsty/minio:RELEASE.2026-08-04T00-00-00Z
+    container_name: notification-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is not set, define it in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is not set, define it in .env}
+      # Origenes del navegador que pueden subir archivos con la URL prefirmada (PUT directo a MinIO)
+      MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_CORS_ALLOW_ORIGIN:-http://localhost:5173}
+    volumes:
+      - minio-data:/data
+
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: notification-clamav
+    restart: unless-stopped
+    ports:
+      - "${CLAMAV_PORT:-3310}:3310"
+    volumes:
+      - clamav-data:/var/lib/clamav
+
+  notification-uco:
+    image: ${NOTIFICATION_IMAGE:-ghcr.io/andruortiz/notification-uco}:${NOTIFICATION_VERSION:-develop}
+    container_name: notification-uco
+    profiles: ["app"]
+    restart: unless-stopped
+    depends_on:
+      - mongodb
+      - rabbitmq
+      - minio
+      - clamav
+    env_file:
+      - .env
+    environment:
+      APP_PORT: "8060"
+      MANAGEMENT_PORT: "8061"
+      MONGO_HOST: mongodb
+      MONGO_PORT: "27017"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: "5672"
+      MINIO_ENDPOINT: http://minio:9000
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: "3310"
+    ports:
+      - "8060:8060"
+
+volumes:
+  mongodb-data:
+  rabbitmq-data:
+  minio-data:
+  clamav-data:

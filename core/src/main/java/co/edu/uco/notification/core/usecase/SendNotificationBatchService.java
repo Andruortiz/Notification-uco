@@ -1,0 +1,123 @@
+package co.edu.uco.notification.core.usecase;
+
+import co.edu.uco.notification.core.domain.valueobject.BatchId;
+import co.edu.uco.notification.core.exception.AttachmentNotReadyException;
+import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.InvalidAttachmentException;
+import co.edu.uco.notification.core.exception.InvalidContentException;
+import co.edu.uco.notification.core.port.in.BatchAcceptedResult;
+import co.edu.uco.notification.core.port.in.BatchItemResult;
+import co.edu.uco.notification.core.port.in.BatchNotificationItem;
+import co.edu.uco.notification.core.port.in.SendNotificationBatchCommand;
+import co.edu.uco.notification.core.port.in.SendNotificationBatchUseCase;
+import co.edu.uco.notification.core.port.in.SendNotificationCommand;
+import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
+import co.edu.uco.notification.core.repository.NotificationBatchRepository;
+import co.edu.uco.notification.utils.Preconditions;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+
+public final class SendNotificationBatchService implements SendNotificationBatchUseCase {
+
+  private static final System.Logger LOGGER =
+      System.getLogger(SendNotificationBatchService.class.getName());
+  private static final int MAX_CONCURRENT_ITEMS = 16;
+
+  private final SendNotificationUseCase sendNotificationUseCase;
+  private final NotificationBatchRepository notificationBatchRepository;
+
+  public SendNotificationBatchService(
+      final SendNotificationUseCase sendNotificationUseCase,
+      final NotificationBatchRepository notificationBatchRepository) {
+    this.sendNotificationUseCase =
+        Preconditions.requireNonNull(
+            sendNotificationUseCase, "sendNotificationUseCase must not be null");
+    this.notificationBatchRepository =
+        Preconditions.requireNonNull(
+            notificationBatchRepository, "notificationBatchRepository must not be null");
+  }
+
+  @Override
+  public Mono<BatchAcceptedResult> sendBatch(final SendNotificationBatchCommand command) {
+    Preconditions.requireNonNull(command, "command must not be null");
+
+    if (command.batchId() == null) {
+      return process(command, BatchId.newId());
+    }
+    return notificationBatchRepository
+        .findByTenantAndBatchId(command.tenantId(), command.batchId())
+        .switchIfEmpty(Mono.defer(() -> process(command, command.batchId())));
+  }
+
+  private Mono<BatchAcceptedResult> process(
+      final SendNotificationBatchCommand command, final BatchId batchId) {
+    return Flux.fromIterable(command.items())
+        .flatMapSequential(item -> processItem(command, item), MAX_CONCURRENT_ITEMS)
+        .collectList()
+        .map(results -> new BatchAcceptedResult(batchId, results, true))
+        .flatMap(result -> persistBatchRecord(command, result));
+  }
+
+  private Mono<BatchAcceptedResult> persistBatchRecord(
+      final SendNotificationBatchCommand command, final BatchAcceptedResult result) {
+    return notificationBatchRepository
+        .save(result, command.tenantId())
+        .defaultIfEmpty(result)
+        .onErrorResume(
+            ex -> {
+              LOGGER.log(
+                  System.Logger.Level.ERROR,
+                  "BATCH_RECORD_NOT_PERSISTED batchId="
+                      + result.batchId().value()
+                      + " tenantId="
+                      + command.tenantId().value(),
+                  ex);
+              return Mono.just(result.withTrackingSaved(false));
+            });
+  }
+
+  private Mono<BatchItemResult> processItem(
+      final SendNotificationBatchCommand command, final BatchNotificationItem item) {
+    final SendNotificationCommand itemCommand =
+        new SendNotificationCommand(
+            command.tenantId(),
+            item.externalId(),
+            item.channelType(),
+            item.recipientId(),
+            item.recipient(),
+            item.content(),
+            item.priority(),
+            item.attachments(),
+            command.correlationId());
+
+    return sendNotificationUseCase
+        .send(itemCommand)
+        .map(
+            result ->
+                result.duplicate()
+                    ? BatchItemResult.duplicate(item.externalId(), result.notificationId())
+                    : BatchItemResult.accepted(item.externalId(), result.notificationId()))
+        .onErrorResume(
+            SendNotificationBatchService::isItemRejection,
+            ex -> Mono.just(BatchItemResult.rejected(item.externalId(), ex.getMessage())))
+        .onErrorResume(
+            Throwable.class,
+            ex -> {
+              LOGGER.log(
+                  System.Logger.Level.ERROR,
+                  "BATCH_ITEM_FAILED externalId="
+                      + item.externalId().value()
+                      + " tenantId="
+                      + command.tenantId().value(),
+                  ex);
+              return Mono.just(BatchItemResult.failed(item.externalId()));
+            });
+  }
+
+  private static boolean isItemRejection(final Throwable error) {
+    return error instanceof ChannelNotAvailableException
+        || error instanceof InvalidContentException
+        || error instanceof InvalidAttachmentException
+        || error instanceof AttachmentNotReadyException;
+  }
+}

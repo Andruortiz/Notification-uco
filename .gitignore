@@ -18,7 +18,30 @@
 *.zip
 *.tar.gz
 *.rar
+# excepcion: el jar del Maven Wrapper debe versionarse, si no ./mvnw falla en un clon nuevo (y en CI)
+!.mvn/wrapper/maven-wrapper.jar
 
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*
+
+# Maven build output
+target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Environment
+.env
+
+# Script local para emitir tokens de desarrollo: exige AUTH_JWT_HS256_SECRET y no se versiona
+token.mjs
+
+# Credenciales de prueba (claves de cuenta de servicio, etc.) - nunca versionadas
+secrets/
+
+# spec-kit / Claude Code runtime state (local-only, not part of the versioned governance artifact)
+.claude/scheduled_tasks.lock
+.claude/settings.local.json

@@ -1,0 +1,76 @@
+# Phase 1 Contract: nuevo GET /notifications:subscribe en api-notificaciones.yaml
+#
+# Este archivo NO es el contrato real del componente — es el diseño de lo que
+# /speckit-implement debe aplicar a infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml,
+# siguiendo el Principio II (el contrato se actualiza primero, antes del controller).
+#
+# Patrón recurso:accion (ya usado por /notifications:sendBatch) porque abrir un stream de
+# actualizaciones no es CRUD natural. Mismos filtros que GET /notifications (CU-05), sin
+# limit/offset -- una suscripción en vivo no pagina.
+
+paths:
+  /notifications:subscribe:
+    get:
+      tags: [Notificaciones]
+      summary: Suscribirse a actualizaciones en tiempo real
+      description: >
+        Historia "dashboard en tiempo real". Abre un stream Server-Sent Events: primero reproduce la
+        foto vigente de las notificaciones del tenant que cumplen los filtros (equivalente a repetir
+        GET /notifications sin paginar, acotado a 200 resultados), y luego continúa entregando cada
+        cambio relevante mientras la conexión permanezca abierta. Una reconexión (ej. tras una caída
+        de red) es, para el servidor, una solicitud nueva -- siempre reproduce la foto vigente antes
+        de retomar el flujo en vivo, sin necesitar ningún encabezado ni parámetro de reanudación.
+      operationId: subscribeToNotificationUpdates
+      parameters:
+        - $ref: '#/components/parameters/TenantId'
+        - name: recipientId
+          in: query
+          schema:
+            type: string
+        - name: channelType
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/NotificationStatus'
+        - name: from
+          in: query
+          description: Fecha/hora mínima de aceptación (inclusive). Mismo campo que en la búsqueda.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Fecha/hora máxima de aceptación (inclusive). Mismo campo que en la búsqueda.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: >
+            Stream Server-Sent Events. Cada evento `data` es un `NotificationLiveUpdate`. La conexión
+            permanece abierta hasta que el cliente la cierra; el servidor intercala comentarios de
+            keep-alive periódicos.
+          content:
+            text/event-stream:
+              schema:
+                $ref: '#/components/schemas/NotificationLiveUpdate'
+
+components:
+  schemas:
+    NotificationLiveUpdate:
+      type: object
+      properties:
+        action:
+          type: string
+          enum: [UPSERT, REMOVE]
+          description: >
+            UPSERT: la notificación cumple los filtros activos, el dashboard debe mostrarla/actualizarla.
+            REMOVE: dejó de cumplirlos, el dashboard debe quitarla de la vista visible.
+        notification:
+          $ref: '#/components/schemas/NotificationHistoryItem'
+      required:
+        - action
+        - notification

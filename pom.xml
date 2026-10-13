@@ -32,7 +32,7 @@
         <rabbitmq-amqp-client.version>5.34.0</rabbitmq-amqp-client.version>
         <resilience4j.version>2.3.0</resilience4j.version>
         <spring-modulith.version>1.4.13</spring-modulith.version>
-        <springdoc.version>2.8.17</springdoc.version>
+        <springdoc.version>3.1.1</springdoc.version>
         <json-schema-validator.version>1.4.0</json-schema-validator.version>
         <tika.version>3.2.3</tika.version>
         <minio.version>8.6.0</minio.version>

@@ -5,6 +5,7 @@ on:
     branches: [develop, main]
   push:
     branches: [develop, main]
+    tags: ["v*"]
 
 jobs:
   build:
@@ -166,9 +167,14 @@ jobs:
           GHCR_USER: ${{ github.actor }}
         run: |
           echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:$GITHUB_REF_NAME"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            IMAGE_TAG="${GITHUB_REF_NAME#v}"
+          else
+            IMAGE_TAG="$GITHUB_REF_NAME"
+          fi
+          docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:$IMAGE_TAG"
           docker push "$IMAGE:$GITHUB_SHA"
-          docker push "$IMAGE:$GITHUB_REF_NAME"
+          docker push "$IMAGE:$IMAGE_TAG"
           if [ "$GITHUB_REF_NAME" = "main" ]; then
             docker tag "$IMAGE:$GITHUB_SHA" "$IMAGE:latest"
             docker push "$IMAGE:latest"
@@ -177,7 +183,7 @@ jobs:
   desplegar:
     name: "Desplegar"
     needs: imagen
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref_type == 'branch'
     runs-on: ubuntu-latest
     environment: ${{ github.ref_name == 'main' && 'produccion' || 'desarrollo' }}
     concurrency:
@@ -194,3 +200,26 @@ jobs:
             exit 0
           fi
           curl --fail --silent --show-error --max-time 30 -X POST "$DEPLOY_HOOK_URL"
+
+  release:
+    name: "Release"
+    needs: imagen
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Preparar archivos del release
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir release-assets
+          cp docker-compose.yml release-assets/compose.yaml
+          sed "s/^NOTIFICATION_VERSION=.*/NOTIFICATION_VERSION=${VERSION}/" .env.example > release-assets/.env.example
+
+      - name: Publicar el release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/compose.yaml release-assets/.env.example --title "$GITHUB_REF_NAME" --generate-notes

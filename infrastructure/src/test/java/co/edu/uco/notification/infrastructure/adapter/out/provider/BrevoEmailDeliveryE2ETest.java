@@ -115,6 +115,7 @@ class BrevoEmailDeliveryE2ETest {
     capturedEvents = new LinkedBlockingQueue<>();
     rabbitAdmin = new RabbitAdmin(connectionFactory);
     final AnonymousQueue queue = new AnonymousQueue();
+    queue.setLeaderLocator(null);
     final FanoutExchange eventsExchange =
         new FanoutExchange(rabbitTopologyProperties.eventsExchange());
     final Binding binding = BindingBuilder.bind(queue).to(eventsExchange);

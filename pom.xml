@@ -29,6 +29,7 @@
         <okhttp.version>4.12.0</okhttp.version>
         <jackson-bom.version>2.21.7</jackson-bom.version>
         <bouncycastle.version>1.85</bouncycastle.version>
+        <rabbitmq-amqp-client.version>5.34.0</rabbitmq-amqp-client.version>
         <resilience4j.version>2.3.0</resilience4j.version>
         <spring-modulith.version>1.4.13</spring-modulith.version>
         <springdoc.version>2.8.17</springdoc.version>
@@ -73,6 +74,11 @@
                 <groupId>org.bouncycastle</groupId>
                 <artifactId>bcprov-jdk18on</artifactId>
                 <version>${bouncycastle.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.rabbitmq</groupId>
+                <artifactId>amqp-client</artifactId>
+                <version>${rabbitmq-amqp-client.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework.boot</groupId>

@@ -35,7 +35,7 @@
         <springdoc.version>2.8.17</springdoc.version>
         <json-schema-validator.version>1.4.0</json-schema-validator.version>
         <tika.version>3.2.3</tika.version>
-        <minio.version>8.6.0</minio.version>
+        <minio.version>9.0.3</minio.version>
         <jjwt.version>0.12.6</jjwt.version>
         <azure-sdk-bom.version>1.2.30</azure-sdk-bom.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>

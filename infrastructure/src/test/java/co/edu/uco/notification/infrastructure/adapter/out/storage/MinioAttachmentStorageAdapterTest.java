@@ -16,6 +16,7 @@ import co.edu.uco.notification.core.port.out.StoredObjectInfo;
 import co.edu.uco.notification.infrastructure.config.AttachmentProperties;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.AttachmentTestContainers;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.SampleFiles;
 import io.minio.GetBucketLifecycleArgs;
 import io.minio.MakeBucketArgs;
@@ -420,7 +421,7 @@ class MinioAttachmentStorageAdapterTest {
 
   @Test
   void aFailedDeleteIsLoggedWithItsKeyAndASuccessfulOneIsNot() {
-    final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    final ListAppender<ILoggingEvent> logs = new ConcurrentListAppender();
     logs.start();
     final Logger logger = (Logger) LoggerFactory.getLogger(MinioAttachmentStorageAdapter.class);
     logger.addAppender(logs);

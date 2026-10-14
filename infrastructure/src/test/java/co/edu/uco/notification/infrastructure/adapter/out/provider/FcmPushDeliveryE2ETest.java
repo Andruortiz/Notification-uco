@@ -19,6 +19,7 @@ import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -136,7 +137,7 @@ class FcmPushDeliveryE2ETest {
     fakeFcm.nextResponse(200, "{\"name\":\"projects/demo-project/messages/0:e2e-0001\"}");
 
     logAppender =
-        new ListAppender<>() {
+        new ConcurrentListAppender() {
           @Override
           protected void append(final ILoggingEvent event) {
             synchronized (list) {

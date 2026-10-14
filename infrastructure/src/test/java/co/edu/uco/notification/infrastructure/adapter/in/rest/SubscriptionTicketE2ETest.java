@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationDocument;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
 import java.util.List;
@@ -218,7 +219,7 @@ class SubscriptionTicketE2ETest {
   @Test
   void theClearTicketNeverAppearsInTheLogs() {
     final Logger root = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-    final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    final ListAppender<ILoggingEvent> logs = new ConcurrentListAppender();
     logs.start();
     root.addAppender(logs);
     try {

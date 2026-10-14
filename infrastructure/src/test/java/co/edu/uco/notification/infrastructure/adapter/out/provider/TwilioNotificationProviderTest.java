@@ -24,6 +24,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.TwilioProviderProperties;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import io.netty.channel.ChannelOption;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -78,7 +79,7 @@ class TwilioNotificationProviderTest {
   @BeforeEach
   void setUp() {
     fakeServer.reset();
-    logAppender = new ListAppender<>();
+    logAppender = new ConcurrentListAppender();
     logAppender.start();
     rootLogger().addAppender(logAppender);
   }

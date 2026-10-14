@@ -22,6 +22,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.infrastructure.config.BrevoProviderProperties;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.utils.CorrelationId;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -61,7 +62,7 @@ class BrevoCorrelationForwardingTest {
   @BeforeEach
   void setUp() {
     fakeServer.reset();
-    logAppender = new ListAppender<>();
+    logAppender = new ConcurrentListAppender();
     logAppender.start();
     rootLogger().addAppender(logAppender);
   }

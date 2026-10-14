@@ -25,6 +25,7 @@ import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.infrastructure.config.FcmCredentials;
 import co.edu.uco.notification.infrastructure.config.FcmProviderProperties;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
@@ -88,7 +89,7 @@ class FcmNotificationProviderTest {
     fcmServer.reset();
     authServer.nextResponse(200, "{\"access_token\":\"" + ACCESS_TOKEN + "\",\"expires_in\":3600}");
     fcmServer.nextResponse(200, "{\"name\":\"projects/demo-project/messages/0:msg-0001\"}");
-    logAppender = new ListAppender<>();
+    logAppender = new ConcurrentListAppender();
     logAppender.start();
     rootLogger().addAppender(logAppender);
   }

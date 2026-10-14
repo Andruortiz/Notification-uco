@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.infrastructure.config.BrevoProviderProperties;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
@@ -165,10 +166,9 @@ class BrevoNotificationProviderTest {
 
   @Test
   void disabledConstructionLogsExactlyOneWarningNamingProviderAndReasonWithoutTheApiKey() {
-    final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    final ListAppender<ILoggingEvent> appender = new ConcurrentListAppender();
     appender.start();
-    final Logger providerLogger =
-        (Logger) LoggerFactory.getLogger(BrevoNotificationProvider.class);
+    final Logger providerLogger = (Logger) LoggerFactory.getLogger(BrevoNotificationProvider.class);
     providerLogger.addAppender(appender);
     try {
       final BrevoProviderProperties properties =

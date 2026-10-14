@@ -39,6 +39,7 @@ import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationP
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.nio.charset.StandardCharsets;
@@ -460,7 +461,7 @@ class NotificationControllerTest {
   }
 
   private ListAppender<ILoggingEvent> captureLogs() {
-    final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    final ListAppender<ILoggingEvent> appender = new ConcurrentListAppender();
     appender.start();
     ((Logger) LoggerFactory.getLogger(NotificationController.class)).addAppender(appender);
     return appender;

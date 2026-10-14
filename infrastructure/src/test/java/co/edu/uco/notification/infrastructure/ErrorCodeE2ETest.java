@@ -17,6 +17,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.ErrorCode;
@@ -124,7 +125,7 @@ class ErrorCodeE2ETest {
             .responseTimeout(LIMIT)
             .build();
     awaitRoute();
-    logs = new ListAppender<>();
+    logs = new ConcurrentListAppender();
     logs.start();
     rootLogger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
     rootLogger.addAppender(logs);

@@ -10,6 +10,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -155,7 +156,7 @@ class AuthenticationSecurityE2ETest {
 
   @Test
   void anErrorAfterAuthenticationRespondsWithAServerErrorAndIsNotLoggedAsACredentialRejection() {
-    final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    final ListAppender<ILoggingEvent> logs = new ConcurrentListAppender();
     logs.start();
     final Logger filterLogger = (Logger) LoggerFactory.getLogger(AuthenticationWebFilter.class);
     filterLogger.addAppender(logs);

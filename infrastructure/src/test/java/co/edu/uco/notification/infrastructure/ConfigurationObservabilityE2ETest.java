@@ -16,6 +16,7 @@ import co.edu.uco.notification.core.port.in.ApplyConfigurationChangeUseCase;
 import co.edu.uco.notification.infrastructure.adapter.in.scheduler.ConfigurationEventLogger;
 import co.edu.uco.notification.infrastructure.config.ConfigurationConfig;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -94,7 +95,7 @@ class ConfigurationObservabilityE2ETest {
             .baseUrl("http://localhost:" + port)
             .responseTimeout(Duration.ofSeconds(20))
             .build();
-    logs = new ListAppender<>();
+    logs = new ConcurrentListAppender();
     logs.start();
     ((Logger) LoggerFactory.getLogger(ConfigurationEventLogger.class)).addAppender(logs);
   }

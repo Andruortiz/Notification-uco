@@ -4,13 +4,14 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import java.util.List;
 import org.slf4j.LoggerFactory;
 
 public final class LogCapture implements AutoCloseable {
 
   private final Logger logger;
-  private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+  private final ListAppender<ILoggingEvent> appender = new ConcurrentListAppender();
   private final Level previousLevel;
 
   private LogCapture(final Logger logger) {

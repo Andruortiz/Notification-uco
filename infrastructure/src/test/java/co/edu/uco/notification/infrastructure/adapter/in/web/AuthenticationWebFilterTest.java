@@ -17,6 +17,7 @@ import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenIssuer;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.time.Duration;
@@ -639,7 +640,7 @@ class AuthenticationWebFilterTest {
   }
 
   private ListAppender<ILoggingEvent> captureLogs() {
-    final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    final ListAppender<ILoggingEvent> appender = new ConcurrentListAppender();
     appender.start();
     ((Logger) LoggerFactory.getLogger(AuthenticationWebFilter.class)).addAppender(appender);
     return appender;

@@ -51,7 +51,7 @@ services:
       - clamav-data:/var/lib/clamav
 
   notification-uco:
-    image: ${NOTIFICATION_IMAGE:-ghcr.io/andruortiz/notification-uco}:${NOTIFICATION_VERSION:-develop}
+    image: ${NOTIFICATION_IMAGE:-ghcr.io/andruortiz/notification-uco}:${NOTIFICATION_VERSION:-latest}
     container_name: notification-uco
     profiles: ["app"]
     restart: unless-stopped

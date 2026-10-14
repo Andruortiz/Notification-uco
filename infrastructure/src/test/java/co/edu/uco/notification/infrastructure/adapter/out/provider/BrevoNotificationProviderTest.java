@@ -167,8 +167,9 @@ class BrevoNotificationProviderTest {
   void disabledConstructionLogsExactlyOneWarningNamingProviderAndReasonWithoutTheApiKey() {
     final ListAppender<ILoggingEvent> appender = new ListAppender<>();
     appender.start();
-    final Logger rootLogger = (Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
-    rootLogger.addAppender(appender);
+    final Logger providerLogger =
+        (Logger) LoggerFactory.getLogger(BrevoNotificationProvider.class);
+    providerLogger.addAppender(appender);
     try {
       final BrevoProviderProperties properties =
           new BrevoProviderProperties(
@@ -186,7 +187,7 @@ class BrevoNotificationProviderTest {
       assertTrue(message.contains("sender-email"));
       assertTrue(!message.contains("super-secret-key"));
     } finally {
-      rootLogger.detachAppender(appender);
+      providerLogger.detachAppender(appender);
     }
   }
 

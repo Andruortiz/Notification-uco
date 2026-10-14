@@ -12,6 +12,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.port.in.ExpireAbandonedUploadsUseCase;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,7 +29,7 @@ class AbandonedUploadsSchedulerAdapterTest {
 
   @BeforeEach
   void captureLogs() {
-    logs = new ListAppender<>();
+    logs = new ConcurrentListAppender();
     logs.start();
     ((Logger) LoggerFactory.getLogger(AbandonedUploadsSchedulerAdapter.class)).addAppender(logs);
   }

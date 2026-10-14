@@ -16,6 +16,7 @@ import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.LastKnownConfigurationDocument;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.FakeParametersSource;
 import co.edu.uco.notification.infrastructure.support.FakeParametersSourceConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
@@ -90,7 +91,7 @@ class ConfigurationSyncE2ETest {
 
   @BeforeEach
   void captureLogs() {
-    logAppender = new ListAppender<>();
+    logAppender = new ConcurrentListAppender();
     logAppender.list = new CopyOnWriteArrayList<>();
     logAppender.start();
     ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).addAppender(logAppender);

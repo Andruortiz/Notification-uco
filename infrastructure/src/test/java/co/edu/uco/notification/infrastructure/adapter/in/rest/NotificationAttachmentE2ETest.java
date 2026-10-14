@@ -22,6 +22,7 @@ import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalog
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.infrastructure.support.AttachmentTestContainers;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.RecordingAttachmentSender;
 import co.edu.uco.notification.infrastructure.support.SampleFiles;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
@@ -572,7 +573,7 @@ class NotificationAttachmentE2ETest {
             rabbitTopologyProperties.eventsExchange(),
             "",
             null));
-    final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    final ListAppender<ILoggingEvent> logs = new ConcurrentListAppender();
     logs.start();
     ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).addAppender(logs);
     try {

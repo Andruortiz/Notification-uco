@@ -10,7 +10,7 @@ import org.slf4j.LoggerFactory;
 
 public final class LogCapture implements AutoCloseable {
 
-  private final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+  private final ListAppender<ILoggingEvent> appender = new ConcurrentListAppender();
   private final Logger root;
 
   private LogCapture() {

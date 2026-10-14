@@ -11,6 +11,7 @@ import co.edu.uco.notification.core.domain.configuration.ConfigurationChangeOutc
 import co.edu.uco.notification.core.exception.ParametersUnavailableException;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.util.List;
 import java.util.Set;
@@ -32,7 +33,7 @@ class ConfigurationEventLoggerTest {
 
   @BeforeEach
   void captureLogs() {
-    logs = new ListAppender<>();
+    logs = new ConcurrentListAppender();
     logs.start();
     ((Logger) LoggerFactory.getLogger(ConfigurationEventLogger.class)).addAppender(logs);
   }

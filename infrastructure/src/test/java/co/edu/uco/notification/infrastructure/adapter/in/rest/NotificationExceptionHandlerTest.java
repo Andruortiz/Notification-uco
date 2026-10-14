@@ -28,6 +28,7 @@ import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.exception.ProviderNotAvailableException;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.FailureCategory;
 import org.junit.jupiter.api.AfterEach;
@@ -50,7 +51,7 @@ class NotificationExceptionHandlerTest {
 
   @BeforeEach
   void attachLogAppender() {
-    logs = new ListAppender<>();
+    logs = new ConcurrentListAppender();
     logs.start();
     handlerLogger = (Logger) LoggerFactory.getLogger(NotificationExceptionHandler.class);
     handlerLogger.addAppender(logs);

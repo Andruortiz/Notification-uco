@@ -33,6 +33,7 @@ import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationP
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -86,7 +87,7 @@ class AttachmentUploadControllerTest {
 
   @BeforeEach
   void captureLogs() {
-    logs = new ListAppender<>();
+    logs = new ConcurrentListAppender();
     logs.start();
     ((Logger) LoggerFactory.getLogger(AttachmentUploadController.class)).addAppender(logs);
   }

@@ -31,6 +31,7 @@ import co.edu.uco.notification.infrastructure.adapter.out.parameters.NoParameter
 import co.edu.uco.notification.infrastructure.adapter.out.parameters.ParametersConfig;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.ParametersProperties;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.time.Clock;
 import java.util.ArrayList;
@@ -190,7 +191,7 @@ class ParametersPollingSchedulerTest {
   @Test
   void unavailabilityIsLoggedOnlyOnTheTransitionAndRecoveryOnceOnTheNextSuccess() {
     final Logger eventsLogger = (Logger) LoggerFactory.getLogger(ConfigurationEventLogger.class);
-    final ListAppender<ILoggingEvent> logs = new ListAppender<>();
+    final ListAppender<ILoggingEvent> logs = new ConcurrentListAppender();
     logs.start();
     eventsLogger.addAppender(logs);
     try {

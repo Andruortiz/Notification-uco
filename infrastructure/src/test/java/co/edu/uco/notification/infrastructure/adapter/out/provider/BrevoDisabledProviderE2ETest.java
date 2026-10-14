@@ -16,6 +16,7 @@ import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -85,7 +86,7 @@ class BrevoDisabledProviderE2ETest {
             .baseUrl("http://localhost:" + port)
             .responseTimeout(Duration.ofSeconds(20))
             .build();
-    logAppender = new ListAppender<>();
+    logAppender = new ConcurrentListAppender();
     logAppender.list = new CopyOnWriteArrayList<>();
     logAppender.start();
     ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).addAppender(logAppender);

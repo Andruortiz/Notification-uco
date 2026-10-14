@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.config.LogLines;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
 import java.time.Instant;
@@ -251,7 +252,7 @@ class AuthenticationInterinaE2ETest {
   }
 
   private ListAppender<ILoggingEvent> captureLogs() {
-    final ListAppender<ILoggingEvent> appender = new ListAppender<>();
+    final ListAppender<ILoggingEvent> appender = new ConcurrentListAppender();
     appender.start();
     ((Logger) LoggerFactory.getLogger(AuthenticationWebFilter.class)).addAppender(appender);
     return appender;

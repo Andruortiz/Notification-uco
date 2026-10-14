@@ -19,6 +19,7 @@ import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
+import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -129,7 +130,7 @@ class TwilioSmsDeliveryE2ETest {
     fakeTwilio.reset();
     fakeTwilio.nextResponse(201, "{\"sid\":\"SM00000000000000000000000000000001\"}");
 
-    logAppender = new ListAppender<>();
+    logAppender = new ConcurrentListAppender();
     logAppender.list = new CopyOnWriteArrayList<>();
     logAppender.start();
     rootLogger().addAppender(logAppender);

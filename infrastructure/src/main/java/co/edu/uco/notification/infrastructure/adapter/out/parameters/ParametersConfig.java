@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.out.parameters;
 
 import co.edu.uco.notification.core.port.out.ParametersSourcePort;
+import co.edu.uco.notification.infrastructure.config.ParametersEventsProperties;
 import co.edu.uco.notification.infrastructure.config.ParametersProperties;
 import io.netty.channel.ChannelOption;
 import java.time.Duration;
@@ -12,7 +13,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 
 @Configuration
-@EnableConfigurationProperties(ParametersProperties.class)
+@EnableConfigurationProperties({ParametersProperties.class, ParametersEventsProperties.class})
 public class ParametersConfig {
 
   @Bean

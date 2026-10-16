@@ -107,6 +107,14 @@ Si el token trae varios roles, gana el de mayor privilegio; si ninguno es valido
 
 **Pendiente de acordar con el equipo de seguridad:** los nombres reales de los claims, la tabla de roles, el emisor y la audiencia, y como se garantiza que la peticion llega a traves del PEP (red privada, mTLS o firma). Esos valores se ajustan por configuracion.
 
+## Credenciales de GitHub Packages (starter del PEP)
+
+El starter `security-pep-integration-spring-boot-starter` se publica en GitHub Packages (`https://maven.pkg.github.com/seguridad-uco/securitybaseline`), que exige autenticacion incluso para leer. El repositorio y la dependencia estan declarados en `infrastructure/pom.xml` con el identificador de servidor `github`.
+
+- **Local:** en `~/.m2/settings.xml` declara un `<server>` con `<id>github</id>`, tu usuario de GitHub y un token con permiso `read:packages`.
+- **CI:** los workflows leen los secretos del repositorio `GITHUB_PACKAGES_USER` y `GITHUB_PACKAGES_TOKEN` (token con `read:packages` sobre el paquete) y `actions/setup-java` genera el `settings.xml` con `server-id: github`.
+- **Imagen Docker:** el `Dockerfile` recibe las mismas credenciales como secretos de BuildKit y no las deja en ninguna capa: `docker build --secret id=github_packages_user,env=GITHUB_PACKAGES_USER --secret id=github_packages_token,env=GITHUB_PACKAGES_TOKEN -t notification-service .`
+
 ## Metricas y puerto de gestion
 
 El servicio expone la gestion en un puerto aparte del de la API: la API sigue en el 8060 y el puerto de gestion es `MANAGEMENT_PORT` (por defecto 8061). El 8061 no se publica fuera del cluster; las sondas de Kubernetes y el scrape de Prometheus lo consultan por la red interna.

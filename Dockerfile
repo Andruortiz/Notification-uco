@@ -1,4 +1,3 @@
-
 FROM eclipse-temurin:25-jdk AS build
 WORKDIR /workspace
 
@@ -9,14 +8,24 @@ COPY core/pom.xml core/pom.xml
 COPY infrastructure/pom.xml infrastructure/pom.xml
 
 RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
-RUN ./mvnw -B -ntp -q dependency:go-offline -pl infrastructure -am || true
+RUN --mount=type=secret,id=github_packages_user \
+    --mount=type=secret,id=github_packages_token \
+    printf '<settings><servers><server><id>github</id><username>%s</username><password>%s</password></server></servers></settings>' \
+      "$(cat /run/secrets/github_packages_user)" "$(cat /run/secrets/github_packages_token)" > /tmp/settings.xml \
+    && ./mvnw -s /tmp/settings.xml -B -ntp -q dependency:go-offline -pl infrastructure -am || true; \
+    rm -f /tmp/settings.xml
 
 COPY utils utils
 COPY core core
 COPY infrastructure infrastructure
 
-RUN ./mvnw -B -ntp package -pl infrastructure -am -DskipTests \
-    -Dspotless.check.skip=true -Dspotbugs.skip=true -Djacoco.skip=true
+RUN --mount=type=secret,id=github_packages_user \
+    --mount=type=secret,id=github_packages_token \
+    printf '<settings><servers><server><id>github</id><username>%s</username><password>%s</password></server></servers></settings>' \
+      "$(cat /run/secrets/github_packages_user)" "$(cat /run/secrets/github_packages_token)" > /tmp/settings.xml \
+    && ./mvnw -s /tmp/settings.xml -B -ntp package -pl infrastructure -am -DskipTests \
+      -Dspotless.check.skip=true -Dspotbugs.skip=true -Djacoco.skip=true; \
+    rc=$?; rm -f /tmp/settings.xml; exit $rc
 
 
 FROM eclipse-temurin:25-jre AS runtime

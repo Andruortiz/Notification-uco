@@ -13,7 +13,7 @@ class OtlpEndpointEnvironmentPostProcessorTest {
 
   private String endpointFor(final MockEnvironment environment) {
     processor.postProcessEnvironment(environment, null);
-    return environment.getProperty("management.otlp.tracing.endpoint");
+    return environment.getProperty("management.opentelemetry.tracing.export.otlp.endpoint");
   }
 
   @Test
@@ -55,7 +55,9 @@ class OtlpEndpointEnvironmentPostProcessorTest {
     final MockEnvironment environment =
         new MockEnvironment()
             .withProperty("OTEL_EXPORTER_OTLP_ENDPOINT", "http://other:4318")
-            .withProperty("management.otlp.tracing.endpoint", "http://explicit:4318/v1/traces");
+            .withProperty(
+                "management.opentelemetry.tracing.export.otlp.endpoint",
+                "http://explicit:4318/v1/traces");
 
     assertEquals("http://explicit:4318/v1/traces", endpointFor(environment));
   }

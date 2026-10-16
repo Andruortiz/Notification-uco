@@ -18,10 +18,10 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
-import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mongodb.MongoDBContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 
 @Testcontainers
 class TracingResilienceE2ETest {
@@ -47,7 +47,7 @@ class TracingResilienceE2ETest {
                 "--spring.main.banner-mode=off",
                 "--MONGO_USERNAME=test",
                 "--MONGO_PASSWORD=test",
-                "--spring.data.mongodb.uri=" + MONGO.getReplicaSetUrl("notification"),
+                "--spring.mongodb.uri=" + MONGO.getReplicaSetUrl("notification"),
                 "--RABBITMQ_USERNAME=guest",
                 "--RABBITMQ_PASSWORD=guest",
                 "--spring.rabbitmq.host=" + RABBIT.getHost(),
@@ -56,7 +56,7 @@ class TracingResilienceE2ETest {
                 "--notification.scheduler.requeue-interval-ms=600000",
                 "--management.tracing.sampling.probability=1.0"));
     if (endpoint != null) {
-      properties.add("--management.otlp.tracing.endpoint=" + endpoint);
+      properties.add("--management.opentelemetry.tracing.export.otlp.endpoint=" + endpoint);
     }
     return new SpringApplicationBuilder(NotificationServiceApplication.class)
         .profiles("local")

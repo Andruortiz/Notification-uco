@@ -43,11 +43,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
@@ -75,13 +75,13 @@ class AttachmentUploadControllerTest {
 
   @Autowired private WebTestClient webTestClient;
 
-  @MockBean private SubscriptionTicketPort subscriptionTicketPort;
+  @MockitoBean private SubscriptionTicketPort subscriptionTicketPort;
 
-  @MockBean private IssueAttachmentUploadUseCase issueUseCase;
+  @MockitoBean private IssueAttachmentUploadUseCase issueUseCase;
 
-  @MockBean private CompleteAttachmentUploadUseCase completeUseCase;
+  @MockitoBean private CompleteAttachmentUploadUseCase completeUseCase;
 
-  @MockBean private GetAttachmentUploadUseCase getUseCase;
+  @MockitoBean private GetAttachmentUploadUseCase getUseCase;
 
   private ListAppender<ILoggingEvent> logs;
 

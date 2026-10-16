@@ -24,8 +24,6 @@ import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.config.ChannelCatalogProperties;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -48,11 +46,14 @@ import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mongodb.MongoDBContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 import reactor.test.StepVerifier;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -76,7 +77,7 @@ class ChannelCatalogQueryE2ETest {
   private static final String OTHER_TENANT = "tenant-catalogo-b";
   private static final Duration CATALOG_WAIT = Duration.ofSeconds(20);
   private static final Duration SC005_THRESHOLD = Duration.ofSeconds(5);
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
 
   @Container @ServiceConnection
   static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7.0");

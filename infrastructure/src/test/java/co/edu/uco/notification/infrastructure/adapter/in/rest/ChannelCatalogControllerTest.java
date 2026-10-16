@@ -23,9 +23,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
@@ -44,9 +44,9 @@ class ChannelCatalogControllerTest {
 
   @Autowired private WebTestClient webTestClient;
 
-  @MockBean private SubscriptionTicketPort subscriptionTicketPort;
+  @MockitoBean private SubscriptionTicketPort subscriptionTicketPort;
 
-  @MockBean private QueryChannelCatalogUseCase queryChannelCatalogUseCase;
+  @MockitoBean private QueryChannelCatalogUseCase queryChannelCatalogUseCase;
 
   @Test
   void listChannelsMapsEveryFieldAndKeepsAbsentValuesAsExplicitNulls() {

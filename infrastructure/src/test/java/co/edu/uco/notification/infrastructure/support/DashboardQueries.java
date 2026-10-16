@@ -1,7 +1,5 @@
 package co.edu.uco.notification.infrastructure.support;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -14,12 +12,15 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.yaml.snakeyaml.Yaml;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 public final class DashboardQueries {
 
   public record Query(String source, String expression) {}
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
   private static final Set<String> TARGET_LABELS = Set.of("job", "instance");
   private static final Set<String> SYNTHESIZED_METRICS = Set.of("up");
   private static final Pattern FORBIDDEN =
@@ -46,15 +47,15 @@ public final class DashboardQueries {
       final List<Query> queries = new ArrayList<>();
       collect(MAPPER.readTree(json), queries);
       return queries;
-    } catch (final IOException e) {
-      throw new UncheckedIOException(e);
+    } catch (final tools.jackson.core.JacksonException e) {
+      throw new IllegalStateException(e);
     }
   }
 
   private static void collect(final JsonNode node, final List<Query> out) {
     if (node.isObject()) {
-      node.fields()
-          .forEachRemaining(
+      node.properties()
+          .forEach(
               entry -> {
                 if ("targets".equals(entry.getKey()) && entry.getValue().isArray()) {
                   final String title = node.path("title").asText("dashboard");

@@ -18,8 +18,6 @@ import co.edu.uco.notification.infrastructure.config.ConfigurationConfig;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.util.HashSet;
@@ -37,10 +35,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mongodb.MongoDBContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -67,7 +68,7 @@ class ConfigurationObservabilityE2ETest {
 
   private static final String TENANT = "tenant-configuracion";
   private static final Duration RESPONSE_LIMIT = Duration.ofSeconds(5);
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
 
   @Container @ServiceConnection
   static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7.0");
@@ -119,7 +120,7 @@ class ConfigurationObservabilityE2ETest {
             .getResponseBodyContent();
     try {
       return MAPPER.readTree(body);
-    } catch (final java.io.IOException exception) {
+    } catch (final tools.jackson.core.JacksonException exception) {
       throw new IllegalStateException(exception);
     }
   }

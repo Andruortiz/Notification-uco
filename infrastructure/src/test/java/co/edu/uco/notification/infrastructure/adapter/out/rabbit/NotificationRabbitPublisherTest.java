@@ -20,7 +20,6 @@ import co.edu.uco.notification.core.domain.event.NotificationQueued;
 import co.edu.uco.notification.core.domain.valueobject.*;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.utils.CorrelationId;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
@@ -35,6 +34,8 @@ import org.springframework.amqp.core.MessageProperties;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import reactor.test.StepVerifier;
 import reactor.util.context.Context;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 class NotificationRabbitPublisherTest {
 
@@ -51,7 +52,7 @@ class NotificationRabbitPublisherTest {
           "notification.events.exchange");
 
   private static ObjectMapper objectMapper() {
-    return new ObjectMapper().findAndRegisterModules();
+    return JsonMapper.builder().build();
   }
 
   private static Notification aNotification() {

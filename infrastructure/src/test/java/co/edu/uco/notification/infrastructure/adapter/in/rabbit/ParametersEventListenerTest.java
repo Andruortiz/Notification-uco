@@ -21,7 +21,6 @@ import co.edu.uco.notification.core.port.in.ReceivePublishedConfigurationUseCase
 import co.edu.uco.notification.infrastructure.adapter.in.scheduler.ConfigurationEventLogger;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.ParametersEventsProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -39,6 +38,7 @@ import org.springframework.amqp.rabbit.core.RabbitOperations;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.json.JsonMapper;
 
 class ParametersEventListenerTest {
 
@@ -67,7 +67,7 @@ class ParametersEventListenerTest {
         new ParametersEventListener(
             useCase,
             eventLogger,
-            new ObjectMapper(),
+            JsonMapper.builder().build(),
             rabbitTemplate,
             recoverer,
             new ParametersEventsProperties(

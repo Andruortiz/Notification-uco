@@ -1,14 +1,15 @@
 package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
 import java.util.Base64;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 public final class FcmTestCredentials {
 
@@ -19,7 +20,7 @@ public final class FcmTestCredentials {
   public static final String PRIVATE_KEY_FIELD = "private" + "_key";
 
   private static final String PEM_LABEL = "PRIVATE" + " KEY";
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
   private static final FcmTestCredentials SHARED = generate();
 
   private final KeyPair keyPair;
@@ -92,7 +93,7 @@ public final class FcmTestCredentials {
   private static String write(final ObjectNode node) {
     try {
       return MAPPER.writeValueAsString(node);
-    } catch (final JsonProcessingException e) {
+    } catch (final JacksonException e) {
       throw new IllegalStateException(e);
     }
   }

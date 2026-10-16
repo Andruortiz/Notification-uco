@@ -19,12 +19,12 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.infrastructure.config.LogCapture;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.utils.CorrelationId;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import reactor.test.StepVerifier;
+import tools.jackson.databind.json.JsonMapper;
 
 class NotificationRabbitPublisherLoggingTest {
 
@@ -46,7 +46,7 @@ class NotificationRabbitPublisherLoggingTest {
 
   private final NotificationRabbitPublisher publisher =
       new NotificationRabbitPublisher(
-          mock(RabbitTemplate.class), new ObjectMapper().findAndRegisterModules(), PROPERTIES);
+          mock(RabbitTemplate.class), JsonMapper.builder().build(), PROPERTIES);
 
   private static List<DomainEvent> allEvents() {
     final Instant now = Instant.parse("2026-10-01T10:00:00Z");

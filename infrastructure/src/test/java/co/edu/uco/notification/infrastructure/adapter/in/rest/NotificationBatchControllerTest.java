@@ -40,11 +40,11 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
@@ -85,9 +85,9 @@ class NotificationBatchControllerTest {
 
   @Autowired private WebTestClient webTestClient;
 
-  @MockBean private SubscriptionTicketPort subscriptionTicketPort;
+  @MockitoBean private SubscriptionTicketPort subscriptionTicketPort;
 
-  @MockBean private SendNotificationBatchUseCase sendNotificationBatchUseCase;
+  @MockitoBean private SendNotificationBatchUseCase sendNotificationBatchUseCase;
 
   private WebTestClient.ResponseSpec post(final String body) {
     return webTestClient

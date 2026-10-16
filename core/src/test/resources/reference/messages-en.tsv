@@ -1,0 +1,8 @@
+maxItems	Content does not match the schema for channel EMAIL: $.attachments: must have at most 2 items but found 3
+enum	Content does not match the schema for channel EMAIL: $.attachments[1].contentType: does not have a value in the enumeration ["application/pdf", "image/png"]
+maximum	Content does not match the schema for channel EMAIL: $.attachments[0].sizeBytes: must have a maximum value of 5242880
+total	Content does not match the schema for channel EMAIL: $.attachmentsTotalBytes: must have a maximum value of 4000000
+smsMaxLength	Content does not match the schema for channel EMAIL: $.body: must be at most 3 characters long
+pushSubject	Content does not match the schema for channel EMAIL: $.subject: must be at most 2 characters long
+minLength	Content does not match the schema for channel EMAIL: $.subject: null found, string expected
+noAttachmentsDeclared	Content does not match the schema for channel EMAIL: channel does not accept attachments

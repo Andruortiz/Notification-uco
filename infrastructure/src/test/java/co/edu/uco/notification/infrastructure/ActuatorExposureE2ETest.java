@@ -6,27 +6,30 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.infrastructure.support.TestTokens;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.autoconfigure.actuate.observability.AutoConfigureObservability;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
+import org.springframework.boot.micrometer.tracing.test.autoconfigure.AutoConfigureTracing;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalManagementPort;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.test.web.reactive.server.EntityExchangeResult;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mongodb.MongoDBContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
-@AutoConfigureObservability
+@AutoConfigureMetrics
+@AutoConfigureTracing
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {"MONGO_USERNAME=test", "MONGO_PASSWORD=test"})
@@ -39,7 +42,7 @@ class ActuatorExposureE2ETest {
   @Container @ServiceConnection
   static final RabbitMQContainer RABBIT = new RabbitMQContainer("rabbitmq:3-management");
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
   private static final List<String> NOT_APPROVED =
       List.of(
           "env",
@@ -122,11 +125,7 @@ class ActuatorExposureE2ETest {
         management.get().uri("/actuator").exchange().expectBody().returnResult();
     if (result.getStatus().is2xxSuccessful()) {
       final List<String> links = new ArrayList<>();
-      MAPPER
-          .readTree(result.getResponseBody())
-          .get("_links")
-          .fieldNames()
-          .forEachRemaining(links::add);
+      MAPPER.readTree(result.getResponseBody()).get("_links").propertyNames().forEach(links::add);
       for (final String link : links) {
         assertTrue(
             link.equals("self") || link.startsWith("health") || link.equals("prometheus"), link);
@@ -184,7 +183,7 @@ class ActuatorExposureE2ETest {
     try {
       final JsonNode node = MAPPER.readTree(result.getResponseBody());
       return node.get("status").asText();
-    } catch (final java.io.IOException exception) {
+    } catch (final tools.jackson.core.JacksonException exception) {
       throw new IllegalStateException(exception);
     }
   }

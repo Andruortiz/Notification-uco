@@ -34,12 +34,12 @@ import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.containers.RabbitMQContainer;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mongodb.MongoDBContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 import reactor.core.publisher.Mono;
 
 @SpringBootTest(
@@ -60,7 +60,7 @@ class AttachmentScanListenerTest {
   private static final TenantId TENANT = TenantId.of("tenant-1");
   private static final Instant NOW = Instant.parse("2026-09-29T10:00:00Z");
 
-  @MockBean private ScanAttachmentUploadUseCase scanUseCase;
+  @MockitoBean private ScanAttachmentUploadUseCase scanUseCase;
 
   @Autowired private AttachmentScanRequestPort scanRequestPort;
 
@@ -131,7 +131,8 @@ class AttachmentScanListenerTest {
                 .doOnNext(
                     tick ->
                         unackedWhileScanning.set(
-                            amqpAdmin.getQueueInfo(topology.queue()).getMessageCount() + unacked()))
+                            (int) amqpAdmin.getQueueInfo(topology.queue()).getMessageCount()
+                                + unacked()))
                 .map(tick -> clean(uploadId)));
 
     scanRequestPort.requestScan(TENANT, uploadId).block();

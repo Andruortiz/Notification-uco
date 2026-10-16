@@ -4,8 +4,6 @@ import co.edu.uco.notification.infrastructure.config.FcmServiceAccount;
 import co.edu.uco.notification.utils.Preconditions;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -21,6 +19,9 @@ import org.springframework.web.reactive.function.BodyInserters;
 import org.springframework.web.reactive.function.client.ClientResponse;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 public final class FcmAccessTokenProvider {
 
@@ -29,7 +30,7 @@ public final class FcmAccessTokenProvider {
   private static final long ASSERTION_LIFETIME_SECONDS = 3_600L;
   private static final long RENEWAL_MARGIN_SECONDS = 300L;
   private static final Map<String, String> HEADER = Map.of("alg", "RS256", "typ", "JWT");
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
   private static final Base64.Encoder BASE64URL = Base64.getUrlEncoder().withoutPadding();
 
   private final Supplier<WebClient> clientSource;
@@ -117,7 +118,7 @@ public final class FcmAccessTokenProvider {
   private static String encode(final Object value) {
     try {
       return BASE64URL.encodeToString(MAPPER.writeValueAsBytes(value));
-    } catch (final JsonProcessingException e) {
+    } catch (final JacksonException e) {
       throw new IllegalStateException("could not encode the FCM authorization assertion");
     }
   }

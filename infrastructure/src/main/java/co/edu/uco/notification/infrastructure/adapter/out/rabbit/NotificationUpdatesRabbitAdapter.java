@@ -7,14 +7,13 @@ import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import java.io.IOException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 public class NotificationUpdatesRabbitAdapter implements NotificationUpdatesPort {
@@ -39,7 +38,7 @@ public class NotificationUpdatesRabbitAdapter implements NotificationUpdatesPort
       try (LogContext ignored = LogContext.open(null, null, notificationId.value())) {
         LOGGER.debug("Received notification update event");
       }
-    } catch (final RuntimeException | IOException e) {
+    } catch (final RuntimeException e) {
       LOGGER.warn(
           LogFields.failure(ErrorCode.UPDATE_EVENT_UNPARSEABLE),
           "Discarding unparseable notification update event",

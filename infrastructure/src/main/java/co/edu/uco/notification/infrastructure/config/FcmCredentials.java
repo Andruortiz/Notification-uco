@@ -1,18 +1,19 @@
 package co.edu.uco.notification.infrastructure.config;
 
 import co.edu.uco.notification.utils.Preconditions;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.core.io.FileSystemResource;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 public final class FcmCredentials {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
   private static final String JSON_SOURCE =
       "notification.provider.fcm.credentials-json (FCM_CREDENTIALS_JSON)";
   private static final String FILE_SOURCE =
@@ -82,7 +83,7 @@ public final class FcmCredentials {
     final JsonNode node;
     try {
       node = MAPPER.readTree(content);
-    } catch (final JsonProcessingException e) {
+    } catch (final JacksonException e) {
       return malformed(source, "content is not a JSON object");
     }
     if (node == null || !node.isObject()) {

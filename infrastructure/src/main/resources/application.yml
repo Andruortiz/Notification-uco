@@ -4,11 +4,16 @@ server:
 spring:
   application:
     name: notification-service
-  codec:
-    max-in-memory-size: 8MB
+  http:
+    codecs:
+      max-in-memory-size: 8MB
+  jackson:
+    mapper:
+      sort-properties-alphabetically: false
+  mongodb:
+    uri: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:localhost}:${MONGO_PORT:27018}/${MONGO_DATABASE:notification}?authSource=admin
   data:
     mongodb:
-      uri: mongodb://${MONGO_USERNAME}:${MONGO_PASSWORD}@${MONGO_HOST:localhost}:${MONGO_PORT:27018}/${MONGO_DATABASE:notification}?authSource=admin
       auto-index-creation: true
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
@@ -27,6 +32,10 @@ spring:
 management:
   server:
     port: ${MANAGEMENT_PORT:8061}
+  logging:
+    export:
+      otlp:
+        enabled: false
   tracing:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
@@ -40,8 +49,6 @@ management:
         http.server.requests: true
         spring.rabbitmq.listener: true
   endpoint:
-    prometheus:
-      enabled: true
     health:
       probes:
         enabled: true

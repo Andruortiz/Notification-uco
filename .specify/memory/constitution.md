@@ -118,7 +118,7 @@ errores de infraestructura y proveedor deben distinguirse de los errores permane
 
 ## Restricciones técnicas
 
-Java 21 LTS (ADR-0001), Spring Boot 3 sobre WebFlux/Reactor — reactivo, no bloqueante (ADR-0002,
+Java 25 LTS (ADR-0011, que reemplaza a ADR-0001), Spring Boot 3 sobre WebFlux/Reactor — reactivo, no bloqueante (ADR-0002,
 ADR-0003). MongoDB y RabbitMQ gestionados fuera de local en todo ambiente distinto a desarrollo
 (ADR-0006, ADR-0007). Extensibilidad por catálogo declarativo + adaptadores: agregar un canal o
 proveedor no debe requerir modificar el núcleo (ADR-0009 — la decisión que define el proyecto).
@@ -196,4 +196,4 @@ propio seguimiento — esta constitución no les asigna una ubicación formal ni
 herramienta externa como fuente de verdad. Lo único vinculante para el proceso de desarrollo asistido
 por IA es lo que está escrito en este archivo y en `specs/<historia>/`.
 
-**Version**: 1.2.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-09-14
+**Version**: 1.2.1 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-10-16

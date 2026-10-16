@@ -7,6 +7,7 @@ import co.edu.uco.notification.core.exception.InvalidTokenException;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.infrastructure.adapter.out.security.JwtFailures;
 import co.edu.uco.notification.infrastructure.config.AuthPlatformProperties;
+import co.edu.uco.notification.infrastructure.config.PepDelegation;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.JwtParser;
@@ -21,7 +22,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
@@ -31,9 +34,22 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
 
   private final JwtParser parser;
   private final AuthPlatformProperties properties;
+  private final boolean roleOptional;
 
   public PlatformJwtTokenValidationAdapter(final AuthPlatformProperties properties) {
+    this(properties, false);
+  }
+
+  @Autowired
+  public PlatformJwtTokenValidationAdapter(
+      final AuthPlatformProperties properties, final Environment environment) {
+    this(properties, PepDelegation.isActive(environment));
+  }
+
+  private PlatformJwtTokenValidationAdapter(
+      final AuthPlatformProperties properties, final boolean roleOptional) {
     this.properties = properties;
+    this.roleOptional = roleOptional;
     this.parser = buildParser(properties);
   }
 
@@ -115,6 +131,7 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
         .map(this::translate)
         .flatMap(Optional::stream)
         .min(Comparator.comparingInt(Role::ordinal))
+        .or(() -> roleOptional ? Optional.of(Role.CLIENTE) : Optional.empty())
         .orElseThrow(
             () ->
                 new InvalidTokenException(

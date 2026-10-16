@@ -1,5 +1,5 @@
 
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /workspace
 
 COPY .mvn .mvn
@@ -19,7 +19,7 @@ RUN ./mvnw -B -ntp package -pl infrastructure -am -DskipTests \
     -Dspotless.check.skip=true -Dspotbugs.skip=true -Djacoco.skip=true
 
 
-FROM eclipse-temurin:21-jre AS runtime
+FROM eclipse-temurin:25-jre AS runtime
 
 ARG VERSION=dev
 ARG REVISION=unknown

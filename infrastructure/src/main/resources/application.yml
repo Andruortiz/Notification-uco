@@ -56,6 +56,18 @@ springdoc:
   swagger-ui:
     url: /openapi/api-notificaciones.yaml
 
+security:
+  enabled: ${SECURITY_ENABLED:true}
+  pep:
+    enforcement:
+      enabled: ${SECURITY_PEP_ENFORCEMENT_ENABLED:true}
+      pep-url: ${SECURITY_PEP_URL:http://localhost:18081}
+      application-name: ${SECURITY_APPLICATION_NAME:notification-service}
+      environment: ${SECURITY_ENVIRONMENT:local}
+      application-credential: ${PEP_REGISTRATION_TOKEN:}
+      allow-insecure-http: ${SECURITY_PEP_ALLOW_INSECURE_HTTP:false}
+      public-paths: ${SECURITY_PEP_PUBLIC_PATHS:/actuator/health}
+
 notification:
   auth:
     # local: JWT firmado con un secreto compartido, obligatorio y de al menos 32 bytes (perfil local para desarrollo). platform: tokens de la plataforma central

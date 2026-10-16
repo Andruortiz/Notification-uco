@@ -1,8 +1,11 @@
 package co.edu.uco.notification.infrastructure.adapter.in.web;
 
 import co.edu.uco.notification.core.domain.valueobject.Role;
+import co.edu.uco.notification.infrastructure.config.PepDelegation;
 import java.util.List;
 import java.util.function.Predicate;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
 
@@ -45,7 +48,25 @@ public class RouteAuthorizationPolicy {
               path -> path.matches("^/recipients/[^/:]+:updatePreferences$"),
               Role.CLIENTE));
 
+  private final boolean delegatedToPep;
+
+  public RouteAuthorizationPolicy() {
+    this(false);
+  }
+
+  @Autowired
+  public RouteAuthorizationPolicy(final Environment environment) {
+    this(PepDelegation.isActive(environment));
+  }
+
+  private RouteAuthorizationPolicy(final boolean delegatedToPep) {
+    this.delegatedToPep = delegatedToPep;
+  }
+
   public Role minimumRoleFor(final HttpMethod method, final String path) {
+    if (delegatedToPep) {
+      return Role.CLIENTE;
+    }
     return rules.stream()
         .filter(rule -> rule.method().equals(method) && rule.path().test(path))
         .findFirst()

@@ -113,7 +113,8 @@ El starter `security-pep-integration-spring-boot-starter` se publica en GitHub P
 
 - **Local:** en `~/.m2/settings.xml` declara un `<server>` con `<id>github</id>`, tu usuario de GitHub y un token con permiso `read:packages`.
 - **CI:** los workflows leen los secretos del repositorio `GITHUB_PACKAGES_USER` y `GITHUB_PACKAGES_TOKEN` (token con `read:packages` sobre el paquete) y `actions/setup-java` genera el `settings.xml` con `server-id: github`.
-- **Imagen Docker:** el `Dockerfile` recibe las mismas credenciales como secretos de BuildKit y no las deja en ninguna capa: `docker build --secret id=github_packages_user,env=GITHUB_PACKAGES_USER --secret id=github_packages_token,env=GITHUB_PACKAGES_TOKEN -t notification-service .`
+- **PR de forks y de Dependabot:** GitHub no entrega los secretos del repositorio a esos eventos; `GITHUB_PACKAGES_USER` y `GITHUB_PACKAGES_TOKEN` llegan vacios y Maven recibe un 401 al resolver el starter, de modo que los jobs de compilacion, pruebas, calidad, seguridad e imagen fallan en el paso de Maven. Los secretos solo se declaran en los pasos que los usan (Maven y `docker build`), no a nivel de workflow. Esos PR se revisan y se vuelven a lanzar desde una rama del propio repositorio.
+- **Imagen Docker:** el `Dockerfile` lee los secretos como variables de entorno solo dentro de cada `RUN` y usa `.mvn/settings-github-packages.xml` (estatico, con `${env.GITHUB_PACKAGES_USER}` y `${env.GITHUB_PACKAGES_TOKEN}`); un fallo de resolucion rompe el build. Recibe las mismas credenciales como secretos de BuildKit y no las deja en ninguna capa: `docker build --secret id=github_packages_user,env=GITHUB_PACKAGES_USER --secret id=github_packages_token,env=GITHUB_PACKAGES_TOKEN -t notification-service .`
 
 ## Metricas y puerto de gestion
 

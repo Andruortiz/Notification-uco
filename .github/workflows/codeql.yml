@@ -9,10 +9,6 @@ on:
     - cron: "30 1 * * 0"
   workflow_dispatch:
 
-env:
-  GITHUB_PACKAGES_USER: ${{ secrets.GITHUB_PACKAGES_USER }}
-  GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_PACKAGES_TOKEN }}
-
 jobs:
   analyze:
     name: Analizar (java-kotlin)
@@ -42,6 +38,9 @@ jobs:
           build-mode: manual
 
       - name: Compilar
+        env:
+          GITHUB_PACKAGES_USER: ${{ secrets.GITHUB_PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_PACKAGES_TOKEN }}
         run: ./mvnw -B -ntp clean compile
 
       - name: Analisis CodeQL

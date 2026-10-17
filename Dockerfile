@@ -10,10 +10,9 @@ COPY infrastructure/pom.xml infrastructure/pom.xml
 RUN sed -i 's/\r$//' mvnw && chmod +x mvnw
 RUN --mount=type=secret,id=github_packages_user \
     --mount=type=secret,id=github_packages_token \
-    printf '<settings><servers><server><id>github</id><username>%s</username><password>%s</password></server></servers></settings>' \
-      "$(cat /run/secrets/github_packages_user)" "$(cat /run/secrets/github_packages_token)" > /tmp/settings.xml \
-    && ./mvnw -s /tmp/settings.xml -B -ntp -q dependency:go-offline -pl infrastructure -am || true; \
-    rm -f /tmp/settings.xml
+    GITHUB_PACKAGES_USER="$(cat /run/secrets/github_packages_user)" \
+    GITHUB_PACKAGES_TOKEN="$(cat /run/secrets/github_packages_token)" \
+    ./mvnw -s .mvn/settings-github-packages.xml -B -ntp -q dependency:go-offline -pl infrastructure -am
 
 COPY utils utils
 COPY core core
@@ -21,11 +20,10 @@ COPY infrastructure infrastructure
 
 RUN --mount=type=secret,id=github_packages_user \
     --mount=type=secret,id=github_packages_token \
-    printf '<settings><servers><server><id>github</id><username>%s</username><password>%s</password></server></servers></settings>' \
-      "$(cat /run/secrets/github_packages_user)" "$(cat /run/secrets/github_packages_token)" > /tmp/settings.xml \
-    && ./mvnw -s /tmp/settings.xml -B -ntp package -pl infrastructure -am -DskipTests \
-      -Dspotless.check.skip=true -Dspotbugs.skip=true -Djacoco.skip=true; \
-    rc=$?; rm -f /tmp/settings.xml; exit $rc
+    GITHUB_PACKAGES_USER="$(cat /run/secrets/github_packages_user)" \
+    GITHUB_PACKAGES_TOKEN="$(cat /run/secrets/github_packages_token)" \
+    ./mvnw -s .mvn/settings-github-packages.xml -B -ntp package -pl infrastructure -am -DskipTests \
+      -Dspotless.check.skip=true -Dspotbugs.skip=true -Djacoco.skip=true
 
 
 FROM eclipse-temurin:25-jre AS runtime

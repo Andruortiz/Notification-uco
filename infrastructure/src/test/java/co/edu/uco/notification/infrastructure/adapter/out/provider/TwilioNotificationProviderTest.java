@@ -76,16 +76,21 @@ class TwilioNotificationProviderTest {
     fakeServer.stop();
   }
 
+  private Level previousRootLevel;
+
   @BeforeEach
   void setUp() {
     fakeServer.reset();
     logAppender = new ConcurrentListAppender();
     logAppender.start();
+    previousRootLevel = rootLogger().getLevel();
+    rootLogger().setLevel(Level.INFO);
     rootLogger().addAppender(logAppender);
   }
 
   @AfterEach
   void tearDown() {
+    rootLogger().setLevel(previousRootLevel);
     rootLogger().detachAppender(logAppender);
   }
 

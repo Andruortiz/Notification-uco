@@ -31,7 +31,7 @@ capturaron con Spring Boot 3.5.16 antes de migrar y viven en `core/src/test/reso
 
 | Id | Descripción | Dueño | Vence |
 |---|---|---|---|
-| EX-01 | Jackson 2 transitivo por jjwt-jackson 0.13.0 y el SDK de Azure | Equipo del servicio | 2027-01-15 |
+| EX-01 | Jackson 2 (`com.fasterxml.jackson`) permanece en el classpath solo como dependencia transitiva de terceros, medido con `dependency:tree -pl infrastructure -am`: `io.minio:minio` 8.6.0 (`jackson-core`, `jackson-databind`, `jackson-annotations`), `springdoc-openapi-starter-common` 3.1.1 a traves de `swagger-core-jakarta` 2.2.55 (`jackson-dataformat-yaml`), `com.azure:azure-core` 1.60.0 (`jackson-datatype-jsr310`) y `jjwt-jackson` 0.13.0 en ejecucion. El codigo del repositorio no importa Jackson 2 (`ForbiddenImportsTest`) y networknt ya usa Jackson 3. Versiones fijadas por el pin de `jackson-bom` 2.22.3 | Equipo del servicio | 2027-01-15 |
 
 ## Hallazgos adicionales de la implementación
 
@@ -42,3 +42,7 @@ capturaron con Spring Boot 3.5.16 antes de migrar y viven en `core/src/test/reso
 | CC-14 | El filtro del starter del PEP solo se registra con `security.enabled=true` y `security.pep.enforcement.application-credential` | Starter 0.1.3 | `PepStarterEnabledContextTest` | Propiedades añadidas a la prueba |
 
 Intermitencias observadas en una ejecución completa que pasaron al repetir la clase: `AuthenticationSecurityE2ETest` (fallo al arrancar el contenedor de RabbitMQ), `ChannelCatalogControllerTest` y `ConfigurationControllerTest` (timeout de 5 s), `TwilioNotificationProviderTest` (aserción de log). La ejecución completa final fue verde.
+
+## OkHttp
+
+El exportador OTLP traia `opentelemetry-exporter-sender-okhttp` y con el `okhttp-jvm` 5.3.2, que duplicaba las clases `okhttp3.*` del `okhttp` 4.12.0 fijado para MinIO. Se excluye ese sender de `opentelemetry-exporter-otlp` y se usa `opentelemetry-exporter-sender-jdk` (cliente HTTP del JDK) en ejecucion; queda un solo `okhttp` (4.12.0). La exportacion de trazas la sigue demostrando `TracingE2ETest`.

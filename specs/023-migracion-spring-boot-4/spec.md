@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-16
 
-**Status**: Draft
+**Status**: Implementado (2026-10-17)
 
 **Input**: User description: "Como equipo de desarrollo, quiero migrar el servicio de Spring Boot 3.5 a Spring Boot 4.1 sobre
 Java 25, para poder usar el starter del PEP, que está construido sobre esa línea, sin mezclar versiones."
@@ -262,16 +262,15 @@ de la constitución actualizada y el documento de cambios de comportamiento.
 - **SC-008**: Cada propiedad de configuración de Spring usada por el servicio se verifica contra los metadatos de Boot 4:
   0 propiedades marcadas como eliminadas o con reemplazo obligatorio permanecen en `application*.yml`, `application.properties`
   de pruebas o argumentos de pruebas.
-- **SC-009**: El ADR nuevo, la actualización de la constitución y la nota de cambios de comportamiento existen y se
-  referencian entre sí al cerrar la historia (3 de 3).
+- **SC-009**: Quedan versionados la constitución 1.2.2 y `specs/023-migracion-spring-boot-4/cambios-de-comportamiento.md`, y el ADR-0012 se crea en `docs/adr/`, que el repositorio no versiona (vive solo en el disco del equipo hasta que se decida versionarlo); los tres se referencian entre sí.
 
 ## Assumptions
 
 - **S-1 (Q1)**: `resilience4j-spring-boot3` y `spring-retry` se retiran del `pom.xml` porque ninguna clase los usa. Si el
   usuario prefiere conservar Resilience4j para trabajo futuro, la alternativa es `resilience4j-spring-boot4` 2.4.0
   (existe en Maven Central) y se reabre el alcance.
-- **S-2 (Q2)**: Jackson 2 solo permanece como transitivo de jjwt-jackson 0.13.0 (última versión publicada) y del SDK de
-  Azure; dueño: equipo del servicio, revisión al publicarse una versión de jjwt con Jackson 3 o al cambiar de librería de
+- **S-2 (Q2)**: Jackson 2 solo permanece como transitivo de MinIO, de springdoc (por swagger-core), del SDK de Azure y de
+  jjwt-jackson 0.13.0 (última versión publicada); dueño: equipo del servicio, revisión al publicarse una versión de jjwt con Jackson 3 o al cambiar de librería de
   JWT.
 - **S-3 (Q3)**: Los pines por CVE (Netty 4.2.19, amqp-client 5.37.0, Jackson 2.22.3, BouncyCastle 1.86, OkHttp 4.12.0) se
   evalúan uno por uno contra el BOM de Boot 4.1.1 (Netty 4.2.17, amqp-client 5.30.0, jackson-2-bom 2.21.5, Jackson 3

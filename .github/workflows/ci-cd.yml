@@ -37,8 +37,8 @@ jobs:
 
       - name: Compilar
         env:
-          GITHUB_PACKAGES_USER: ${{ secrets.GITHUB_PACKAGES_USER }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_PACKAGES_TOKEN }}
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
         run: ./mvnw -B -ntp clean compile
 
   test:
@@ -73,8 +73,8 @@ jobs:
 
       - name: Pruebas (unitarias, integracion, E2E con Testcontainers)
         env:
-          GITHUB_PACKAGES_USER: ${{ secrets.GITHUB_PACKAGES_USER }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_PACKAGES_TOKEN }}
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
         run: ./mvnw -B -ntp test
 
       - name: Subir clases compiladas y datos de cobertura
@@ -119,8 +119,8 @@ jobs:
 
       - name: Analisis de codigo (SonarCloud)
         env:
-          GITHUB_PACKAGES_USER: ${{ secrets.GITHUB_PACKAGES_USER }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_PACKAGES_TOKEN }}
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
@@ -168,8 +168,8 @@ jobs:
 
       - name: Puertas de calidad (Spotless, SpotBugs, cobertura)
         env:
-          GITHUB_PACKAGES_USER: ${{ secrets.GITHUB_PACKAGES_USER }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_PACKAGES_TOKEN }}
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
         run: ./mvnw -B -ntp install -DskipTests
 
   imagen:
@@ -193,8 +193,8 @@ jobs:
 
       - name: Construir imagen Docker
         env:
-          GITHUB_PACKAGES_USER: ${{ secrets.GITHUB_PACKAGES_USER }}
-          GITHUB_PACKAGES_TOKEN: ${{ secrets.GITHUB_PACKAGES_TOKEN }}
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
         run: >
           docker build
           --secret id=github_packages_user,env=GITHUB_PACKAGES_USER

@@ -4,7 +4,7 @@
 
 Orden: las fases del plan. Formato: `- [ ] Txxx [P?] [USn?] descripción con ruta`. Ejecutar con `JAVA_HOME` en JDK 25 y
 `JAVA_TOOL_OPTIONS=-Dapi.version=1.44`. `spotless:apply` tras crear o editar `.java`. Sin comentarios en código nuevo.
-Decisiones aprobadas: Q-A secretos `GITHUB_PACKAGES_USER`/`GITHUB_PACKAGES_TOKEN`; retirar `resilience4j-spring-boot3` y
+Decisiones aprobadas: Q-A secretos del repositorio `PACKAGES_USER`/`PACKAGES_TOKEN` (expuestos como las variables `GITHUB_PACKAGES_USER`/`GITHUB_PACKAGES_TOKEN`); retirar `resilience4j-spring-boot3` y
 `spring-retry`; Jackson 3 en código propio (EX-01 Jackson 2 transitivo hasta 2027-01-15); conservar solo pines sobre el BOM;
 ADR-0012; variables de entorno sin renombrar; texto de error de contenido idéntico al actual; orden alfabético de Jackson
 desactivado.

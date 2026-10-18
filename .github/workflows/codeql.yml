@@ -27,9 +27,9 @@ jobs:
           distribution: temurin
           java-version: "25"
           cache: maven
-          server-id: github
-          server-username: GITHUB_PACKAGES_USER
-          server-password: GITHUB_PACKAGES_TOKEN
+
+      - name: Configurar el acceso a GitHub Packages
+        run: mkdir -p ~/.m2 && cp .mvn/settings-github-packages.xml ~/.m2/settings.xml
 
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@7999b86c43a865dc79d8923397f35af22de63401 # v4

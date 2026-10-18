@@ -4,24 +4,30 @@ import co.edu.uco.notification.core.domain.valueobject.AttachmentSubmission;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.exception.InvalidContentException;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.networknt.schema.JsonSchema;
-import com.networknt.schema.JsonSchemaFactory;
-import com.networknt.schema.SpecVersion;
-import com.networknt.schema.ValidationMessage;
+import com.networknt.schema.Error;
+import com.networknt.schema.Schema;
+import com.networknt.schema.SchemaRegistry;
+import com.networknt.schema.SchemaRegistryConfig;
+import com.networknt.schema.SpecificationVersion;
+import com.networknt.schema.path.PathType;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 
 public final class ContentSchemaValidator {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
-  private static final JsonSchemaFactory FACTORY =
-      JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
+  private static final SchemaRegistry REGISTRY =
+      SchemaRegistry.withDefaultDialect(
+          SpecificationVersion.DRAFT_2020_12,
+          builder ->
+              builder.schemaRegistryConfig(
+                  SchemaRegistryConfig.builder().pathType(PathType.LEGACY).build()));
   private static final String ATTACHMENTS = "attachments";
 
   private static final String ATTACHMENTS_TOTAL_BYTES = "attachmentsTotalBytes";
@@ -39,11 +45,13 @@ public final class ContentSchemaValidator {
     if (schema == null || schema.isBlank()) {
       return;
     }
-    final JsonSchema jsonSchema = FACTORY.getSchema(schema);
-    final Set<ValidationMessage> errors = jsonSchema.validate(toNode(content, attachments));
+    final Schema jsonSchema = REGISTRY.getSchema(schema);
+    final List<Error> errors = jsonSchema.validate(toNode(content, attachments));
     if (!errors.isEmpty()) {
       final String details =
-          errors.stream().map(ValidationMessage::getMessage).collect(Collectors.joining("; "));
+          errors.stream()
+              .map(error -> error.getInstanceLocation() + ": " + error.getMessage())
+              .collect(Collectors.joining("; "));
       throw new InvalidContentException(channelType, details);
     }
   }
@@ -54,7 +62,7 @@ public final class ContentSchemaValidator {
     }
     try {
       return MAPPER.readTree(schema).path("properties").has(ATTACHMENTS);
-    } catch (final JsonProcessingException e) {
+    } catch (final JacksonException e) {
       return false;
     }
   }

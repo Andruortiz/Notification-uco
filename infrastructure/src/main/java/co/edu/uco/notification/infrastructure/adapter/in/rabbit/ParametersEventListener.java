@@ -10,7 +10,6 @@ import co.edu.uco.notification.infrastructure.config.ParametersEventsProperties;
 import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import java.io.IOException;
 import org.slf4j.Logger;
@@ -25,6 +24,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import reactor.util.context.Context;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 @ConditionalOnExpression("!'${notification.parameters.events.exchange:}'.trim().isEmpty()")
@@ -86,7 +86,7 @@ public class ParametersEventListener {
     final ConfigurationChange change;
     try {
       change = objectMapper.readValue(message.getBody(), ParametersEventPayload.class).toChange();
-    } catch (final RuntimeException | IOException cause) {
+    } catch (final RuntimeException cause) {
       LOGGER.warn(
           LogFields.failure(
               ErrorCode.PARAMETERS_EVENT_UNREADABLE, "errorType", cause.getClass().getSimpleName()),

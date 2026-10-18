@@ -7,13 +7,13 @@ import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyPrope
 import co.edu.uco.notification.infrastructure.config.CorrelationContext;
 import co.edu.uco.notification.infrastructure.config.ReactorObservations;
 import co.edu.uco.notification.utils.Preconditions;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 public class AttachmentScanRequestRabbitPublisher implements AttachmentScanRequestPort {
@@ -64,7 +64,7 @@ public class AttachmentScanRequestRabbitPublisher implements AttachmentScanReque
   private String toJson(final AttachmentScanRequest request) {
     try {
       return objectMapper.writeValueAsString(request);
-    } catch (final JsonProcessingException e) {
+    } catch (final JacksonException e) {
       throw new IllegalStateException("Failed to serialize the scan request", e);
     }
   }

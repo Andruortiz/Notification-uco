@@ -14,8 +14,6 @@ import co.edu.uco.notification.infrastructure.config.ReactorObservations;
 import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +22,8 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 @EnableConfigurationProperties(RabbitTopologyProperties.class)
@@ -104,7 +104,7 @@ public class NotificationRabbitPublisher implements NotificationEventPublisherPo
             CorrelationContext.stamp(message.getMessageProperties(), correlationId);
             return message;
           });
-    } catch (final JsonProcessingException e) {
+    } catch (final JacksonException e) {
       throw new IllegalStateException(
           "Failed to serialize domain event " + event.getClass().getSimpleName(), e);
     }

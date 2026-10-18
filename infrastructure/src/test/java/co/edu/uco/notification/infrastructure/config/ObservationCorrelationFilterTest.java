@@ -49,7 +49,7 @@ class ObservationCorrelationFilterTest {
   @Test
   void theValidatedCorrelationIdOfAPublishedMessageBecomesASpanAttribute() {
     final Observation.Context context =
-        new RabbitMessageSenderContext(messageWith("corr-send"), "template", "exchange");
+        new RabbitMessageSenderContext(messageWith("corr-send"), "template", "exchange", "routing");
 
     filter.map(context);
 
@@ -96,7 +96,8 @@ class ObservationCorrelationFilterTest {
   @Test
   void anInvalidHeaderIsNeverCopiedIntoTheSpan() {
     final Observation.Context context =
-        new RabbitMessageSenderContext(messageWith("bad id\nforged"), "template", "exchange");
+        new RabbitMessageSenderContext(
+            messageWith("bad id\nforged"), "template", "exchange", "routing");
 
     filter.map(context);
 

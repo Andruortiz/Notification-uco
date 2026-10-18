@@ -1,17 +1,18 @@
 package co.edu.uco.notification.infrastructure.support;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.EntityExchangeResult;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 public final class NotificationFlow {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
 
   private final WebTestClient api;
 
@@ -67,7 +68,7 @@ public final class NotificationFlow {
             .returnResult();
     try {
       return MAPPER.readTree(result.getResponseBody()).get("notificationId").asText();
-    } catch (final java.io.IOException e) {
+    } catch (final tools.jackson.core.JacksonException e) {
       throw new IllegalStateException(e);
     }
   }

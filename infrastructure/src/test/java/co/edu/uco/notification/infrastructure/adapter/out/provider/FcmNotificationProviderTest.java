@@ -26,8 +26,6 @@ import co.edu.uco.notification.infrastructure.config.FcmCredentials;
 import co.edu.uco.notification.infrastructure.config.FcmProviderProperties;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.ChannelOption;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -52,10 +50,13 @@ import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.netty.http.client.HttpClient;
 import reactor.test.StepVerifier;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 class FcmNotificationProviderTest {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
   private static final FcmTestCredentials CREDENTIALS = FcmTestCredentials.shared();
   private static final String ACCESS_TOKEN = "test-access-" + "token-1";
   private static final String RECIPIENT = "device-" + "token-demo-1234";
@@ -231,7 +232,7 @@ class FcmNotificationProviderTest {
 
   private static List<String> fieldNames(final JsonNode node) {
     final List<String> names = new ArrayList<>();
-    node.fieldNames().forEachRemaining(names::add);
+    node.propertyNames().forEach(names::add);
     return names;
   }
 

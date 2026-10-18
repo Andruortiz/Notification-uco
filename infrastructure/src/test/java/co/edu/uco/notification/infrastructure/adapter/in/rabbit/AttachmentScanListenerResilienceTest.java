@@ -34,12 +34,12 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.containers.RabbitMQContainer;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mongodb.MongoDBContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 import reactor.core.publisher.Mono;
 
 @SpringBootTest(
@@ -59,9 +59,9 @@ class AttachmentScanListenerResilienceTest {
 
   private static final TenantId TENANT = TenantId.of("tenant-1");
 
-  @MockBean private ScanAttachmentUploadUseCase scanUseCase;
+  @MockitoBean private ScanAttachmentUploadUseCase scanUseCase;
 
-  @MockBean(name = "attachmentScanDlqRecoverer")
+  @MockitoBean(name = "attachmentScanDlqRecoverer")
   private MessageRecoverer deadLetterRecoverer;
 
   @Autowired private AttachmentScanRequestPort scanRequestPort;

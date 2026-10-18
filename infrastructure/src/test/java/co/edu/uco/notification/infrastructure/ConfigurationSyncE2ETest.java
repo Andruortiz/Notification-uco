@@ -47,10 +47,10 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mongodb.MongoDBContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -389,7 +389,7 @@ class ConfigurationSyncE2ETest {
             "--server.port=0",
             "--MONGO_USERNAME=test",
             "--MONGO_PASSWORD=test",
-            "--spring.data.mongodb.uri=" + MONGO.getReplicaSetUrl(),
+            "--spring.mongodb.uri=" + MONGO.getReplicaSetUrl(),
             "--spring.rabbitmq.host=" + RABBIT.getHost(),
             "--spring.rabbitmq.port=" + RABBIT.getAmqpPort(),
             "--spring.rabbitmq.username=" + RABBIT.getAdminUsername(),

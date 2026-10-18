@@ -1,0 +1,8 @@
+NotificationAccepted	{"notificationId":{"value":"notif-1"},"tenantId":{"value":"tenant-1"},"correlationId":{"value":"corr-1"},"occurredOn":"2026-01-02T03:04:05.123456Z"}
+NotificationQueued	{"notificationId":{"value":"notif-1"},"tenantId":{"value":"tenant-1"},"correlationId":{"value":"corr-1"},"occurredOn":"2026-01-02T03:04:05.123456Z"}
+NotificationDelivered	{"notificationId":{"value":"notif-1"},"tenantId":{"value":"tenant-1"},"correlationId":{"value":"corr-1"},"occurredOn":"2026-01-02T03:04:05.123456Z"}
+NotificationFailed	{"notificationId":{"value":"notif-1"},"tenantId":{"value":"tenant-1"},"correlationId":{"value":"corr-1"},"occurredOn":"2026-01-02T03:04:05.123456Z"}
+NotificationRecoverable	{"notificationId":{"value":"notif-1"},"tenantId":{"value":"tenant-1"},"correlationId":{"value":"corr-1"},"occurredOn":"2026-01-02T03:04:05.123456Z"}
+NotificationRequeued	{"notificationId":{"value":"notif-1"},"tenantId":{"value":"tenant-1"},"correlationId":{"value":"corr-1"},"occurredOn":"2026-01-02T03:04:05.123456Z"}
+NotificationDiscarded	{"notificationId":{"value":"notif-1"},"tenantId":{"value":"tenant-1"},"correlationId":null,"occurredOn":"2026-01-02T03:04:05.123456Z"}
+AttachmentScanRequest	{"tenantId":"tenant-1","uploadId":"upload-1"}

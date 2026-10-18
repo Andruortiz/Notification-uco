@@ -16,7 +16,6 @@ import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import io.micrometer.observation.ObservationRegistry;
 import java.io.IOException;
@@ -31,6 +30,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import reactor.util.context.Context;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 public class AttachmentScanListener {
@@ -99,7 +99,7 @@ public class AttachmentScanListener {
       request = objectMapper.readValue(message.getBody(), AttachmentScanRequest.class);
       TenantId.of(request.tenantId());
       UploadId.of(request.uploadId());
-    } catch (final RuntimeException | IOException cause) {
+    } catch (final RuntimeException cause) {
       LOGGER.warn(
           LogFields.failure(ErrorCode.ATTACHMENT_SCAN_MESSAGE_UNREADABLE),
           "Attachment scan message is unreadable, sending it to the dead-letter queue",

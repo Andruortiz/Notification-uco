@@ -6,11 +6,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.configuration.ConfigurationChange;
 import co.edu.uco.notification.infrastructure.adapter.out.parameters.HttpParametersSource;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 class ParametersEventPayloadContractTest {
 
@@ -18,7 +19,7 @@ class ParametersEventPayloadContractTest {
       "{\"version\":12,\"values\":{\"dispatch.max-attempts\":5,"
           + "\"provider.brevo.timeout-ms\":8000,\"requeue.interval-ms\":20000}}";
 
-  private final ObjectMapper mapper = new ObjectMapper();
+  private final ObjectMapper mapper = JsonMapper.builder().build();
 
   @Test
   void theAssumedContractJsonIsReadByTheEventPayloadAndByTheHttpResponseWithTheSameChange()
@@ -48,10 +49,9 @@ class ParametersEventPayloadContractTest {
   @Test
   void unknownTopLevelFieldsAreToleratedSoThePublisherCanAddMetadata() throws IOException {
     final ObjectMapper tolerant =
-        new ObjectMapper()
-            .configure(
-                com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES,
-                false);
+        JsonMapper.builder()
+            .disable(tools.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)
+            .build();
 
     final ConfigurationChange change =
         tolerant

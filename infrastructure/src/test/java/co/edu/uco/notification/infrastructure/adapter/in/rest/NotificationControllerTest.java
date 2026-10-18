@@ -49,14 +49,16 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.reactive.WebFluxTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webflux.test.autoconfigure.WebFluxTest;
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
+@AutoConfigureWebTestClient(timeout = "30s")
 @WebFluxTest(controllers = NotificationController.class)
 @Import({
   SecurityConfig.class,
@@ -69,13 +71,13 @@ class NotificationControllerTest {
 
   @Autowired private WebTestClient webTestClient;
 
-  @MockBean private SubscriptionTicketPort subscriptionTicketPort;
+  @MockitoBean private SubscriptionTicketPort subscriptionTicketPort;
 
-  @MockBean private SendNotificationUseCase sendNotificationUseCase;
+  @MockitoBean private SendNotificationUseCase sendNotificationUseCase;
 
-  @MockBean private GetNotificationStatusUseCase getNotificationStatusUseCase;
+  @MockitoBean private GetNotificationStatusUseCase getNotificationStatusUseCase;
 
-  @MockBean private SearchNotificationsUseCase searchNotificationsUseCase;
+  @MockitoBean private SearchNotificationsUseCase searchNotificationsUseCase;
 
   private static final String REQUEST_BODY =
       """
@@ -446,7 +448,7 @@ class NotificationControllerTest {
   }
 
   @Test
-  void aBodyOverEightMegabytesIsPayloadTooLarge() {
+  void aBodyOverEightMegabytesIsContentTooLarge() {
     final String huge = "a".repeat(9 * 1024 * 1024);
 
     webTestClient
@@ -457,7 +459,7 @@ class NotificationControllerTest {
         .bodyValue(REQUEST_BODY.replace("\"Body\"", "\"" + huge + "\""))
         .exchange()
         .expectStatus()
-        .isEqualTo(HttpStatus.PAYLOAD_TOO_LARGE);
+        .isEqualTo(HttpStatus.CONTENT_TOO_LARGE);
   }
 
   private ListAppender<ILoggingEvent> captureLogs() {

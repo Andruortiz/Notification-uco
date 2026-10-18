@@ -11,7 +11,6 @@ import co.edu.uco.notification.infrastructure.adapter.in.rabbit.ParametersEventL
 import co.edu.uco.notification.infrastructure.adapter.in.scheduler.ConfigurationEventLogger;
 import co.edu.uco.notification.infrastructure.config.ParametersEventsProperties;
 import co.edu.uco.notification.infrastructure.config.ParametersEventsRabbitConfig;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -20,10 +19,11 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.rabbit.config.SimpleRabbitListenerContainerFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer;
+import org.springframework.boot.amqp.autoconfigure.SimpleRabbitListenerContainerFactoryConfigurer;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
+import tools.jackson.databind.ObjectMapper;
 
 class ParametersEventsInactiveTest {
 

@@ -5,10 +5,41 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import co.edu.uco.notification.core.domain.valueobject.Role;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
+import org.springframework.mock.env.MockEnvironment;
 
 class RouteAuthorizationPolicyTest {
 
   private final RouteAuthorizationPolicy policy = new RouteAuthorizationPolicy();
+
+  @Test
+  void requiresNoElevatedRoleWhenThePepEnforces() {
+    final var delegated =
+        new RouteAuthorizationPolicy(
+            new MockEnvironment().withProperty("security.pep.enforcement.enabled", "true"));
+
+    assertEquals(Role.CLIENTE, delegated.minimumRoleFor(HttpMethod.GET, "/notifications"));
+    assertEquals(Role.CLIENTE, delegated.minimumRoleFor(HttpMethod.GET, "/configuration"));
+    assertEquals(Role.CLIENTE, delegated.minimumRoleFor(HttpMethod.GET, "/unknown"));
+  }
+
+  @Test
+  void keepsLocalRulesWhenThePepIsNotEnforcing() {
+    final var local = new RouteAuthorizationPolicy(new MockEnvironment());
+
+    assertEquals(Role.OPERADOR, local.minimumRoleFor(HttpMethod.GET, "/notifications"));
+    assertEquals(Role.ADMINISTRADOR, local.minimumRoleFor(HttpMethod.GET, "/unknown"));
+  }
+
+  @Test
+  void keepsLocalRulesWhenSecurityIsDisabled() {
+    final var disabled =
+        new RouteAuthorizationPolicy(
+            new MockEnvironment()
+                .withProperty("security.enabled", "false")
+                .withProperty("security.pep.enforcement.enabled", "true"));
+
+    assertEquals(Role.ADMINISTRADOR, disabled.minimumRoleFor(HttpMethod.GET, "/configuration"));
+  }
 
   @Test
   void searchRequiresOperador() {

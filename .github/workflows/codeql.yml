@@ -21,12 +21,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Configurar JDK 21
+      - name: Configurar JDK 25
         uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
-          java-version: "21"
+          java-version: "25"
           cache: maven
+
+      - name: Configurar el acceso a GitHub Packages
+        run: mkdir -p ~/.m2 && cp .mvn/settings-github-packages.xml ~/.m2/settings.xml
 
       - name: Inicializar CodeQL
         uses: github/codeql-action/init@7999b86c43a865dc79d8923397f35af22de63401 # v4
@@ -35,6 +38,9 @@ jobs:
           build-mode: manual
 
       - name: Compilar
+        env:
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
         run: ./mvnw -B -ntp clean compile
 
       - name: Analisis CodeQL

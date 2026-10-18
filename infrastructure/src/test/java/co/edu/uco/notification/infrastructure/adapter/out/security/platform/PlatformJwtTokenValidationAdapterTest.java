@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.mock.env.MockEnvironment;
 import reactor.test.StepVerifier;
 
 class PlatformJwtTokenValidationAdapterTest {
@@ -78,6 +79,58 @@ class PlatformJwtTokenValidationAdapterTest {
                     new AuthenticatedPrincipal("user-1", TenantId.of("tenant-a"), Role.OPERADOR),
                     principal))
         .verifyComplete();
+  }
+
+  private static PlatformJwtTokenValidationAdapter adapterWith(final MockEnvironment environment) {
+    return new PlatformJwtTokenValidationAdapter(defaults(), environment);
+  }
+
+  private static String tokenWithoutRole() {
+    return Jwts.builder()
+        .subject("user-1")
+        .claim("tenantId", "tenant-a")
+        .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(5))))
+        .signWith(platformKeys.getPrivate(), Jwts.SIG.RS256)
+        .compact();
+  }
+
+  @Test
+  void usesTheLowestRoleWhenTheRoleClaimIsMissingAndThePepEnforces() {
+    final var environment =
+        new MockEnvironment().withProperty("security.pep.enforcement.enabled", "true");
+
+    StepVerifier.create(adapterWith(environment).validate(tokenWithoutRole()))
+        .assertNext(principal -> assertEquals(Role.CLIENTE, principal.role()))
+        .verifyComplete();
+  }
+
+  @Test
+  void keepsTheTokenRoleWhenThePepEnforcesAndTheClaimIsPresent() {
+    final var environment =
+        new MockEnvironment().withProperty("security.pep.enforcement.enabled", "true");
+
+    StepVerifier.create(adapterWith(environment).validate(token(platformKeys).compact()))
+        .assertNext(principal -> assertEquals(Role.OPERADOR, principal.role()))
+        .verifyComplete();
+  }
+
+  @Test
+  void rejectsAMissingRoleClaimWhenThePepIsNotEnforcing() {
+    StepVerifier.create(adapterWith(new MockEnvironment()).validate(tokenWithoutRole()))
+        .expectError(InvalidTokenException.class)
+        .verify();
+  }
+
+  @Test
+  void rejectsAMissingRoleClaimWhenSecurityIsDisabled() {
+    final var environment =
+        new MockEnvironment()
+            .withProperty("security.enabled", "false")
+            .withProperty("security.pep.enforcement.enabled", "true");
+
+    StepVerifier.create(adapterWith(environment).validate(tokenWithoutRole()))
+        .expectError(InvalidTokenException.class)
+        .verify();
   }
 
   @Test

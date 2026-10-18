@@ -35,7 +35,7 @@
 
 **Language/Version**: [e.g., Java 21]
 
-**Primary Dependencies**: [e.g., Spring Boot 3 / WebFlux, Reactor, Spring Data Reactive MongoDB]
+**Primary Dependencies**: [e.g., Spring Boot 4 / WebFlux, Reactor, Spring Data Reactive MongoDB]
 
 **Storage**: [if applicable, e.g., MongoDB or N/A]
 

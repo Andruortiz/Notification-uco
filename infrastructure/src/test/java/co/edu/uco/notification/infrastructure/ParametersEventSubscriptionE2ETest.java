@@ -18,8 +18,6 @@ import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.FakeParametersSource;
 import co.edu.uco.notification.infrastructure.support.FakeParametersSourceConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -48,10 +46,13 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.context.annotation.Import;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.testcontainers.containers.MongoDBContainer;
-import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
+import org.testcontainers.mongodb.MongoDBContainer;
+import org.testcontainers.rabbitmq.RabbitMQContainer;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
@@ -86,7 +87,7 @@ class ParametersEventSubscriptionE2ETest {
   private static final Duration WAIT = Duration.ofSeconds(15);
   private static final Duration POLL_INTERVAL = Duration.ofSeconds(1);
   private static final Duration POLL_MARGIN = Duration.ofSeconds(2);
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
 
   @LocalServerPort private int port;
 
@@ -136,7 +137,7 @@ class ParametersEventSubscriptionE2ETest {
             .getResponseBodyContent();
     try {
       return MAPPER.readTree(body);
-    } catch (final java.io.IOException exception) {
+    } catch (final tools.jackson.core.JacksonException exception) {
       throw new IllegalStateException(exception);
     }
   }
@@ -153,7 +154,7 @@ class ParametersEventSubscriptionE2ETest {
   private void publish(final long version, final Map<String, Object> values) {
     try {
       publishRaw(MAPPER.writeValueAsBytes(new ParametersEventPayload(version, values)));
-    } catch (final com.fasterxml.jackson.core.JsonProcessingException exception) {
+    } catch (final tools.jackson.core.JacksonException exception) {
       throw new IllegalStateException(exception);
     }
   }
@@ -174,12 +175,12 @@ class ParametersEventSubscriptionE2ETest {
 
   private int queueDepth(final String queue) {
     final Properties info = rabbitAdmin.getQueueProperties(queue);
-    return info == null ? -1 : (Integer) info.get(RabbitAdmin.QUEUE_MESSAGE_COUNT);
+    return info == null ? -1 : ((Number) info.get(RabbitAdmin.QUEUE_MESSAGE_COUNT)).intValue();
   }
 
   private int consumers(final String queue) {
     final Properties info = rabbitAdmin.getQueueProperties(queue);
-    return info == null ? -1 : (Integer) info.get(RabbitAdmin.QUEUE_CONSUMER_COUNT);
+    return info == null ? -1 : ((Number) info.get(RabbitAdmin.QUEUE_CONSUMER_COUNT)).intValue();
   }
 
   private Document storedLastKnown() {

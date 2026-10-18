@@ -1,8 +1,8 @@
 package co.edu.uco.notification.infrastructure.config;
 
 import java.util.Map;
+import org.springframework.boot.EnvironmentPostProcessor;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.env.EnvironmentPostProcessor;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
@@ -10,7 +10,7 @@ import org.springframework.core.env.MapPropertySource;
 public class OtlpEndpointEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
   static final String ENVIRONMENT_VARIABLE = "OTEL_EXPORTER_OTLP_ENDPOINT";
-  static final String ENDPOINT_PROPERTY = "management.otlp.tracing.endpoint";
+  static final String ENDPOINT_PROPERTY = "management.opentelemetry.tracing.export.otlp.endpoint";
   static final String TRACES_PATH = "/v1/traces";
   static final String PROPERTY_SOURCE_NAME = "otlpTracingEndpoint";
 

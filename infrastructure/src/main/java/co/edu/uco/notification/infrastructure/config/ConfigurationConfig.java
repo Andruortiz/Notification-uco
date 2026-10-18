@@ -10,11 +10,8 @@ import co.edu.uco.notification.core.domain.configuration.ValidationResult;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.in.RestoreLastKnownConfigurationUseCase;
 import co.edu.uco.notification.core.usecase.ConfigurationHolder;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.binder.MeterBinder;
-import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.HashMap;
@@ -33,6 +30,10 @@ import org.springframework.boot.convert.DurationStyle;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
 
 @Configuration
 @EnableConfigurationProperties({
@@ -52,7 +53,7 @@ public class ConfigurationConfig {
   private static final Duration DEFAULT_SCAN_TIMEOUT = Duration.ofSeconds(10);
   private static final int DEFAULT_SCAN_MAX_ATTEMPTS = 3;
   public static final String VERSION_METRIC = "notification.configuration.version";
-  private static final ObjectMapper MAPPER = new ObjectMapper();
+  private static final ObjectMapper MAPPER = JsonMapper.builder().build();
   private static final Duration STARTUP_RESTORE_MARGIN = Duration.ofSeconds(1);
   private static final Logger LOG = LoggerFactory.getLogger(ConfigurationConfig.class);
 
@@ -206,13 +207,13 @@ public class ConfigurationConfig {
     }
     try {
       final JsonNode properties = MAPPER.readTree(contentSchema).path("properties");
-      final Iterator<Map.Entry<String, JsonNode>> fields = properties.fields();
+      final Iterator<Map.Entry<String, JsonNode>> fields = properties.properties().iterator();
       while (fields.hasNext()) {
         final Map.Entry<String, JsonNode> field = fields.next();
         collectLimit(limits, field, "maxLength");
         collectLimit(limits, field, "maximum");
       }
-    } catch (final IOException exception) {
+    } catch (final JacksonException exception) {
       return new LinkedHashMap<>();
     }
     return limits;

@@ -21,7 +21,6 @@ import co.edu.uco.notification.infrastructure.config.AttachmentProperties;
 import co.edu.uco.notification.infrastructure.config.AttachmentScanTopologyProperties;
 import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.CorrelationId;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.rabbitmq.client.Channel;
 import io.micrometer.observation.ObservationRegistry;
 import java.nio.charset.StandardCharsets;
@@ -38,6 +37,7 @@ import org.springframework.amqp.rabbit.core.RabbitOperations;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.rabbit.retry.MessageRecoverer;
 import reactor.core.publisher.Mono;
+import tools.jackson.databind.json.JsonMapper;
 
 class AttachmentScanListenerCorrelationTest {
 
@@ -51,7 +51,7 @@ class AttachmentScanListenerCorrelationTest {
   private final AttachmentScanListener listener =
       new AttachmentScanListener(
           scanUseCase,
-          new ObjectMapper(),
+          JsonMapper.builder().build(),
           rabbitTemplate,
           recoverer,
           new AttachmentScanTopologyProperties("ex", "rk", "q", "dlx", "dlrk", "dlq"),

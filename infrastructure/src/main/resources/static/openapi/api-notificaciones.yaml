@@ -40,6 +40,10 @@ info:
     8. Cada operación declara `x-status` y `x-minimum-role`.
     9. HU2-111, incompatible: se retira `POST /notifications/stream/tickets` y el parámetro `ticket`
     de `GET /notifications/stream`. El stream se autentica con Bearer o con la cookie de sesión.
+    10. HU2-103: se declaran en `x-public-routes` las rutas de documentación que no exigen credencial
+    (`security: []` para el PEP): `GET /openapi/api-notificaciones.yaml` y `GET /v3/api-docs` en todo
+    entorno; `GET /v3/api-docs/swagger-config`, `GET /swagger-ui.html` y `GET /swagger-ui/**` solo
+    fuera de producción. No son operaciones de `paths` ni recursos que haya que registrar en el PDP.
 
     Tabla de migración (método y ruta v1 a método y ruta v2):
 
@@ -72,6 +76,28 @@ servers:
 security:
   - BearerAuth: []
   - SessionCookie: []
+
+x-public-routes:
+  - method: GET
+    path: /openapi/api-notificaciones.yaml
+    exposure: always
+    security: []
+  - method: GET
+    path: /v3/api-docs
+    exposure: always
+    security: []
+  - method: GET
+    path: /v3/api-docs/swagger-config
+    exposure: non-production
+    security: []
+  - method: GET
+    path: /swagger-ui.html
+    exposure: non-production
+    security: []
+  - method: GET
+    path: /swagger-ui/**
+    exposure: non-production
+    security: []
 
 tags:
   - name: Notificaciones

@@ -31,8 +31,12 @@ derivar de esa propiedad las exenciones del `AuthenticationWebFilter` y blindar 
 
 ## Decisiones
 
-1. Rutas públicas siempre: `GET /openapi/api-notificaciones.yaml`, `GET /v3/api-docs`, `GET /v3/api-docs/swagger-config`
-   (estructura del API sin datos). Swagger UI (`/swagger-ui.html`, `/swagger-ui/**`) solo en `local` (ver research.md).
+1. Rutas públicas siempre: `GET /openapi/api-notificaciones.yaml`, `GET /v3/api-docs`
+   (estructura del API sin datos). Swagger UI (`/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/swagger-config`) solo en
+   `local` (ver research.md). Además, las sondas del puerto de gestión (`/actuator/health`, `/actuator/health/**`,
+   `/actuator/prometheus`) pasan a `public-paths` por defecto: el PEP también filtra el puerto 8061 y respondía 401 a las
+   sondas de Kubernetes y al scrape de Prometheus (hallazgo previo a la implementación, a confirmar en CI); el 8060 no sirve
+   `/actuator`, así que allí siguen siendo 404.
 2. `AuthenticationWebFilter` recibe `PublicRoutes` (lista de `PathPattern` de la misma propiedad, sin las `/actuator`, que
    siguen resueltas por contexto de gestión).
 3. `x-public-routes` no entra en `paths`, de modo que el catálogo de recursos del PDP sigue en 16 operaciones.

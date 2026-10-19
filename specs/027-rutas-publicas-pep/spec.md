@@ -24,7 +24,8 @@ Un integrador, un gateway o el cargador del PDP descargan el contrato sin sesió
 **Acceptance Scenarios**:
 
 1. **Given** el PEP activo, **When** `GET /openapi/api-notificaciones.yaml` sin credencial, **Then** 200 con el contrato.
-2. **Given** el PEP activo, **When** `GET /v3/api-docs` y `GET /v3/api-docs/swagger-config` sin credencial, **Then** 200.
+2. **Given** el PEP activo, **When** `GET /v3/api-docs` sin credencial, **Then** 200 (`/v3/api-docs/swagger-config` es de la
+   interfaz y solo es pública fuera de producción).
 3. **Given** el PEP activo, **When** se invoca sin credencial cualquier operación de negocio del contrato, **Then** 401.
 4. **Given** el PEP activo, **When** se pide sin credencial una ruta que solo comparte prefijo con una pública
    (`/openapi/otro.yaml`, `/v3/api-docs-x`), **Then** 401.

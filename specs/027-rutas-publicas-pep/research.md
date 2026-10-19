@@ -24,6 +24,13 @@ productivos. Por defecto `springdoc.swagger-ui.enabled=${SWAGGER_UI_ENABLED:fals
 
 ## Actuator
 
-El puerto de gestión (8061) comparte los filtros web con el contexto principal; el resultado del PEP sobre `/actuator/**`
-en ese puerto se verifica en `PublicRoutesPepE2ETest` y determina si las sondas y `prometheus` deben figurar en `public-paths`
-(el puerto 8060 no sirve `/actuator`, así que declararlas allí públicas solo produce 404).
+El puerto de gestión (8061) comparte los filtros web con el contexto principal. Una ejecución previa de
+`PublicRoutesPepE2ETest` con el PEP activo mostró 401 en `/actuator/health/liveness`, `/actuator/health/readiness` y
+`/actuator/prometheus` en el 8061 (solo `/actuator/health` exacto era público). Por eso los valores por defecto incluyen
+`/actuator/health`, `/actuator/health/**` y `/actuator/prometheus`; el 8060 no sirve `/actuator` (404) y el
+`AuthenticationWebFilter` ignora esas entradas, de modo que en el 8060 siguen exigiendo credencial.
+
+## swagger-config
+
+`/v3/api-docs/swagger-config` solo existe con la UI habilitada (404 sin ella, comprobado en una ejecución previa), por lo que
+se trata como ruta de la interfaz y solo es pública fuera de producción.

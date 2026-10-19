@@ -13,7 +13,6 @@ import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
 import java.nio.charset.StandardCharsets;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -43,12 +42,11 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String SESSION_COOKIE = "SECURITY_BASELINE_SESSION";
   private static final String ACTUATOR_PATH = "/actuator";
-  private static final List<String> EXEMPT_PATHS =
-      List.of("/v3/api-docs", "/swagger-ui", "/swagger-ui.html", "/openapi");
 
   private final TokenValidationPort tokenValidationPort;
   private final RouteAuthorizationPolicy routeAuthorizationPolicy;
   private final SessionIdentityPort sessionIdentityPort;
+  private final PublicRoutes publicRoutes;
 
   public AuthenticationWebFilter(
       final TokenValidationPort tokenValidationPort,
@@ -56,7 +54,6 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     this(tokenValidationPort, routeAuthorizationPolicy, AuthenticationWebFilter::rejectSession);
   }
 
-  @Autowired
   public AuthenticationWebFilter(
       final TokenValidationPort tokenValidationPort,
       final RouteAuthorizationPolicy routeAuthorizationPolicy,
@@ -64,7 +61,21 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     this(
         tokenValidationPort,
         routeAuthorizationPolicy,
-        sessionIdentityPort.getIfAvailable(() -> AuthenticationWebFilter::rejectSession));
+        sessionIdentityPort,
+        PublicRoutes.documentation());
+  }
+
+  @Autowired
+  public AuthenticationWebFilter(
+      final TokenValidationPort tokenValidationPort,
+      final RouteAuthorizationPolicy routeAuthorizationPolicy,
+      final ObjectProvider<SessionIdentityPort> sessionIdentityPort,
+      final PublicRoutes publicRoutes) {
+    this(
+        tokenValidationPort,
+        routeAuthorizationPolicy,
+        sessionIdentityPort.getIfAvailable(() -> AuthenticationWebFilter::rejectSession),
+        publicRoutes);
   }
 
   private static Mono<AuthenticatedPrincipal> rejectSession(final SessionCredential credential) {
@@ -80,6 +91,19 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       final TokenValidationPort tokenValidationPort,
       final RouteAuthorizationPolicy routeAuthorizationPolicy,
       final SessionIdentityPort sessionIdentityPort) {
+    this(
+        tokenValidationPort,
+        routeAuthorizationPolicy,
+        sessionIdentityPort,
+        PublicRoutes.documentation());
+  }
+
+  public AuthenticationWebFilter(
+      final TokenValidationPort tokenValidationPort,
+      final RouteAuthorizationPolicy routeAuthorizationPolicy,
+      final SessionIdentityPort sessionIdentityPort,
+      final PublicRoutes publicRoutes) {
+    this.publicRoutes = Preconditions.requireNonNull(publicRoutes, "publicRoutes must not be null");
     this.tokenValidationPort =
         Preconditions.requireNonNull(tokenValidationPort, "tokenValidationPort must not be null");
     this.routeAuthorizationPolicy =
@@ -224,8 +248,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     if (isManagementContext(exchange) && isActuatorPath(path)) {
       return true;
     }
-    return EXEMPT_PATHS.stream()
-        .anyMatch(exempt -> path.equals(exempt) || path.startsWith(exempt + "/"));
+    return publicRoutes.matches(path);
   }
 
   private static String bearerToken(final String header) {

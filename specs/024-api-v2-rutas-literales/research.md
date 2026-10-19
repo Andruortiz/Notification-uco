@@ -40,3 +40,14 @@
 - `AttachmentUploadResponse` usa `@JsonInclude(NON_NULL)`; los demás records no, por lo que sus nulos se serializan como
   `null`. La prueba (e) debe distinguir entre "ausente" y "nulo".
 - La métrica HTTP etiqueta `uri` por plantilla de ruta; el cambio de ruta modifica ese valor.
+
+## Verificacion T-07: forma de los errores del PEP (starter 0.1.3, leida del jar)
+
+- Clase `PepEnforcementWebFilter`, metodo `write`. Cuerpo JSON armado como
+  `{"type":"urn:security-pep:error:<code en minusculas>","title":"<code>","status":<n>,"detail":"<reason phrase HTTP>","code":"<code>"}`.
+- `Content-Type: application/problem+json`, `Cache-Control: no-store`; en 401 anade `WWW-Authenticate: Bearer`.
+- Estados: `TOKEN_INVALID` 401, `ACCESS_DENIED` 403, `PEP_UNAVAILABLE` 503. La cabecera `X-Decision-Id` se anade cuando el PEP
+  la devuelve con la decision.
+- Una solicitud sin credenciales utilizables (ni `Bearer` ni cookie `SECURITY_BASELINE_SESSION=`) se rechaza localmente con
+  `TOKEN_INVALID` sin consultar al PEP.
+- El esquema `PepErrorResponse` del contrato refleja estos cinco campos.

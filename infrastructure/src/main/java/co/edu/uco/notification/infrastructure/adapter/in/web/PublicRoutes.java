@@ -9,7 +9,7 @@ import org.springframework.web.util.pattern.PathPattern;
 import org.springframework.web.util.pattern.PathPatternParser;
 
 @Component
-public class PublicRoutes {
+public final class PublicRoutes {
 
   public static final List<String> DOCUMENTATION =
       List.of(

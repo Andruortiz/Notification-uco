@@ -2,8 +2,10 @@ package co.edu.uco.notification.infrastructure.adapter.in.web;
 
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.Role;
+import co.edu.uco.notification.core.domain.valueobject.SessionCredential;
 import co.edu.uco.notification.core.domain.valueobject.SubscriptionTicketFingerprint;
 import co.edu.uco.notification.core.exception.InvalidTokenException;
+import co.edu.uco.notification.core.port.out.SessionIdentityPort;
 import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.infrastructure.config.LogContext;
@@ -16,9 +18,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
+import org.springframework.http.HttpCookie;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -38,6 +42,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AuthenticationWebFilter.class);
   private static final String BEARER_PREFIX = "Bearer ";
+  private static final String SESSION_COOKIE = "SECURITY_BASELINE_SESSION";
   private static final String SUBSCRIBE_PATH = "/notifications/stream";
   private static final String TICKET_PARAM = "ticket";
   private static final String ACTUATOR_PATH = "/actuator";
@@ -47,11 +52,31 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
   private final TokenValidationPort tokenValidationPort;
   private final SubscriptionTicketPort subscriptionTicketPort;
   private final RouteAuthorizationPolicy routeAuthorizationPolicy;
+  private final SessionIdentityPort sessionIdentityPort;
 
   public AuthenticationWebFilter(
       final TokenValidationPort tokenValidationPort,
       final SubscriptionTicketPort subscriptionTicketPort,
       final RouteAuthorizationPolicy routeAuthorizationPolicy) {
+    this(
+        tokenValidationPort,
+        subscriptionTicketPort,
+        routeAuthorizationPolicy,
+        credential ->
+            Mono.error(
+                new InvalidTokenException(
+                    "session cookie not accepted",
+                    InvalidTokenException.Reason.INVALID_SESSION,
+                    null,
+                    null)));
+  }
+
+  @Autowired
+  public AuthenticationWebFilter(
+      final TokenValidationPort tokenValidationPort,
+      final SubscriptionTicketPort subscriptionTicketPort,
+      final RouteAuthorizationPolicy routeAuthorizationPolicy,
+      final SessionIdentityPort sessionIdentityPort) {
     this.tokenValidationPort =
         Preconditions.requireNonNull(tokenValidationPort, "tokenValidationPort must not be null");
     this.subscriptionTicketPort =
@@ -60,6 +85,8 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     this.routeAuthorizationPolicy =
         Preconditions.requireNonNull(
             routeAuthorizationPolicy, "routeAuthorizationPolicy must not be null");
+    this.sessionIdentityPort =
+        Preconditions.requireNonNull(sessionIdentityPort, "sessionIdentityPort must not be null");
   }
 
   @Override
@@ -73,8 +100,14 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       return chain.filter(exchange);
     }
     final String header = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-    if (header == null && isSubscribe(exchange)) {
-      return authenticateWithTicket(exchange, chain);
+    if (header == null) {
+      final SessionCredential session = sessionCredential(exchange);
+      if (session != null) {
+        return authenticateWithSession(exchange, chain, session);
+      }
+      if (isSubscribe(exchange)) {
+        return authenticateWithTicket(exchange, chain);
+      }
     }
     final String rawToken = bearerToken(header);
     if (rawToken == null) {
@@ -87,6 +120,25 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
             .validate(rawToken)
             .map(Authentication::accepted)
             .onErrorResume(error -> Mono.just(Authentication.rejected(error))));
+  }
+
+  private static SessionCredential sessionCredential(final ServerWebExchange exchange) {
+    final HttpCookie cookie = exchange.getRequest().getCookies().getFirst(SESSION_COOKIE);
+    return cookie == null || cookie.getValue().isBlank()
+        ? null
+        : new SessionCredential(cookie.getValue());
+  }
+
+  private Mono<Void> authenticateWithSession(
+      final ServerWebExchange exchange,
+      final WebFilterChain chain,
+      final SessionCredential credential) {
+    return finishAuthentication(
+        exchange,
+        chain,
+        Mono.defer(() -> sessionIdentityPort.resolve(credential))
+            .map(Authentication::accepted)
+            .onErrorResume(error -> Mono.just(Authentication.rejectedSession(error))));
   }
 
   private Mono<Void> authenticateWithTicket(
@@ -136,6 +188,13 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       return rejectedFor(RejectionReason.MALFORMED_TOKEN);
     }
 
+    static Authentication rejectedSession(final Throwable error) {
+      if (error instanceof InvalidTokenException invalid) {
+        return new Authentication(null, invalid.tenantId(), reasonOf(invalid.reason()));
+      }
+      return rejectedFor(RejectionReason.SESSION_UNAVAILABLE);
+    }
+
     static Authentication rejectedFor(final RejectionReason reason) {
       return new Authentication(null, null, reason);
     }
@@ -149,6 +208,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       case MISSING_EXPIRATION -> RejectionReason.MISSING_EXPIRATION;
       case MISSING_CLAIMS -> RejectionReason.MISSING_CLAIMS;
       case UNKNOWN_ROLE -> RejectionReason.UNKNOWN_ROLE;
+      case INVALID_SESSION -> RejectionReason.INVALID_SESSION;
       case MALFORMED -> RejectionReason.MALFORMED_TOKEN;
     };
   }
@@ -203,6 +263,14 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
 
   private Mono<Void> reject(
       final ServerWebExchange exchange, final String tenantId, final RejectionReason reason) {
+    if (reason == RejectionReason.SESSION_UNAVAILABLE) {
+      logRejection(exchange, tenantId, reason, ErrorCode.AUTHENTICATION_UNAVAILABLE);
+      return writeJson(
+          exchange,
+          HttpStatus.SERVICE_UNAVAILABLE,
+          ErrorCode.AUTHENTICATION_UNAVAILABLE,
+          "session platform unavailable");
+    }
     logRejection(exchange, tenantId, reason, ErrorCode.AUTHENTICATION_REQUIRED);
     return writeJson(
         exchange,

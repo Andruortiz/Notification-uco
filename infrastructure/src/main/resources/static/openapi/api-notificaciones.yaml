@@ -2,19 +2,62 @@ openapi: 3.1.0
 info:
   title: API de Notificaciones
   description: >
-    API de Notification-uco. Cada endpoint corresponde a un caso de uso documentado.  Convención de nombramiento: los endpoints
-    que representan una acción de negocio explícita (no CRUD genérico) usan el sufijo `:accion` en
-    el path (patrón "custom methods", ej. Google AIP-136) en vez de forzar un verbo HTTP que no
-    encaja; los que sí son CRUD natural (crear, consultar) usan REST estándar. CU-03 (despachar) no
+    API de Notification-uco. Cada endpoint corresponde a un caso de uso documentado.  Convención de nombramiento (versión 2):
+    toda ruta es literal, sin `:` ni `{}`, para que el PDP la registre como recurso protegido por
+    igualdad exacta de método y ruta. Los identificadores de recurso viajan en la query string
+    (consultas) o en el cuerpo (comandos). Cada operación declara `x-status` (`available` si el
+    servicio la sirve, `planned` si solo está documentada) y `x-minimum-role` (rol mínimo: `CLIENTE`,
+    `OPERADOR` o `ADMINISTRADOR`, jerárquico). CU-03 (despachar) no
     tiene endpoint propio -- es un proceso interno disparado por el consumidor de RabbitMQ, nunca
     invocado directamente por un cliente. Autenticación (HU2-096): toda operación exige
     `Authorization: Bearer <JWT>` -- un token interino, emitido y firmado por este mismo servicio,
     con las claims `sub`, `tenantId` y `role` (`ADMINISTRADOR`, `OPERADOR` o `CLIENTE`, jerárquico).
     El tenant y el rol del solicitante salen siempre del token, nunca de un encabezado. Se
     reemplazará por la identidad resuelta contra la plataforma de Seguridad externa cuando DEP-01 se
-    cierre, sin cambiar la forma de las claims. GET /configuration (HU2-073) exige como mínimo el rol
-    ADMINISTRADOR.
-  version: 1.0.0
+    cierre, sin cambiar la forma de las claims. Con el PEP activo, la credencial puede ser también la
+    cookie de sesión `SECURITY_BASELINE_SESSION`, y el PEP puede responder 401, 403 o 503 con
+    `PepErrorResponse` y la cabecera `X-Decision-Id`. GET /configuration (HU2-073) exige como mínimo
+    el rol ADMINISTRADOR.
+
+    Registro de cambios 2.0.0 (incompatible con 1.0.0, corte directo sin alias ni prefijo /v2):
+
+    1. Ninguna ruta contiene `:` ni `{}`. Los identificadores van en la query string o en el cuerpo.
+    2. Se retiran sin alias: `GET /notifications/{id}`, `GET /attachment-uploads/{uploadId}`,
+    `POST /attachment-uploads/{uploadId}:complete`, `POST /notifications:sendBatch`,
+    `GET /notifications:subscribe`, `POST /notifications:subscribeTicket`,
+    `POST /notifications/{id}:retry`, `POST /channels:register`, `POST /providers:register`,
+    `GET /recipients/{recipientId}/preferences`, `POST /recipients/{recipientId}:updatePreferences`.
+    3. `POST /attachment-uploads` devuelve `Location: /attachment-uploads/status?uploadId=<id>`.
+    4. La finalización de una subida y el reintento reciben el identificador en el cuerpo JSON.
+    5. Las preferencias se actualizan con `PUT /recipients/preferences?recipientId=`.
+    6. `SendNotificationResponse`, `NotificationStatusResponse`, `BatchItemResult`,
+    `NotificationHistoryItem` y `DeliveryAttempt` declaran `required`.
+    7. Se añade el esquema de seguridad `SessionCookie` y las respuestas 401, 403 y 503 del PEP con
+    `X-Decision-Id`.
+    8. Cada operación declara `x-status` y `x-minimum-role`.
+
+    Tabla de migración (método y ruta v1 a método y ruta v2):
+
+    | v1 | v2 |
+    |---|---|
+    | POST /notifications | POST /notifications |
+    | GET /notifications | GET /notifications |
+    | POST /notifications:sendBatch | POST /notifications/batches |
+    | GET /notifications/{id} | GET /notifications/detail?notificationId={id} |
+    | POST /notifications/{id}:retry | POST /notification-retries (cuerpo notificationId; planned) |
+    | GET /notifications:subscribe | GET /notifications/stream |
+    | POST /notifications:subscribeTicket | POST /notifications/stream/tickets |
+    | POST /attachment-uploads | POST /attachment-uploads |
+    | POST /attachment-uploads/{uploadId}:complete | POST /attachment-upload-completions (cuerpo uploadId) |
+    | GET /attachment-uploads/{uploadId} | GET /attachment-uploads/status?uploadId={uploadId} |
+    | GET /channels | GET /channels |
+    | GET /providers | GET /providers |
+    | GET /configuration | GET /configuration |
+    | POST /channels:register | POST /channels (planned) |
+    | POST /providers:register | POST /providers (planned) |
+    | GET /recipients/{recipientId}/preferences | GET /recipients/preferences?recipientId={recipientId} (planned) |
+    | POST /recipients/{recipientId}:updatePreferences | PUT /recipients/preferences?recipientId={recipientId} (planned) |
+  version: 2.0.0
 servers:
   - url: /
     description: >
@@ -23,6 +66,7 @@ servers:
 
 security:
   - BearerAuth: []
+  - SessionCookie: []
 
 tags:
   - name: Notificaciones
@@ -30,7 +74,7 @@ tags:
   - name: Catálogo
     description: >
       CU-07, CU-08. La consulta (GET /channels, GET /providers) está disponible; el registro
-      (/channels:register, /providers:register) sigue bloqueado.
+      (POST /channels, POST /providers) sigue bloqueado.
   - name: Preferencias
     description: CU-09
   - name: Adjuntos
@@ -55,6 +99,8 @@ paths:
         asíncrono. Si ya existe una notificación con el mismo (tenantId, externalId), devuelve esa
         misma notificación en vez de crear una segunda (idempotencia).
       operationId: sendNotification
+      x-status: available
+      x-minimum-role: CLIENTE
       requestBody:
         required: true
         content:
@@ -73,6 +119,8 @@ paths:
                 $ref: '#/components/schemas/SendNotificationResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           headers:
             X-Correlation-Id:
@@ -95,7 +143,7 @@ paths:
               $ref: '#/components/headers/CorrelationId'
           description: >
             Un adjunto referencia una subida todavía en PENDING_SCAN. Reintentar cuando
-            GET /attachment-uploads/{uploadId} devuelva CLEAN. Una subida en FAILED se rechaza con 400.
+            GET /attachment-uploads/status?uploadId=... devuelva CLEAN. Una subida en FAILED se rechaza con 400.
             También responde 409 ante una modificación concurrente, una clave externalId ya aceptada o una
             transición de estado no permitida, con mensaje fijo.
           content:
@@ -115,14 +163,19 @@ paths:
           headers:
             X-Correlation-Id:
               $ref: '#/components/headers/CorrelationId'
+            X-Decision-Id:
+              $ref: '#/components/headers/DecisionId'
           description: >
             El antivirus o el almacén de archivos no están disponibles o no respondieron a tiempo. La
             notificación no se aceptó; puede reintentarse. Las notificaciones sin adjuntos no se ven
-            afectadas.
+            afectadas. También lo devuelve el PEP (PEP_UNAVAILABLE) cuando no puede decidir el acceso.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/PepErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
     get:
@@ -130,9 +183,11 @@ paths:
       summary: Consultar histórico y trazabilidad
       description: >
         CU-05. Busca notificaciones por filtros combinables. Cada resultado incluye su recorrido
-        completo de intentos, no solo el estado actual (a diferencia de GET /notifications/{id}, que
+        completo de intentos, no solo el estado actual (a diferencia de GET /notifications/detail, que
         solo exige rol CLIENTE). Requiere rol OPERADOR o ADMINISTRADOR.
       operationId: searchNotifications
+      x-status: available
+      x-minimum-role: OPERADOR
       parameters:
         - name: recipientId
           in: query
@@ -197,6 +252,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
   /notifications/stream:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
@@ -217,6 +274,8 @@ paths:
         principal nunca viaja en la dirección de la conexión. Si llega la cabecera `Authorization`,
         tiene prioridad sobre `ticket`.
       operationId: subscribeToNotificationUpdates
+      x-status: available
+      x-minimum-role: CLIENTE
       parameters:
         - name: ticket
           in: query
@@ -271,10 +330,19 @@ paths:
           headers:
             X-Correlation-Id:
               $ref: '#/components/headers/CorrelationId'
+            X-Decision-Id:
+              $ref: '#/components/headers/DecisionId'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/PepErrorResponse'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
 
   /notifications/stream/tickets:
     parameters:
@@ -289,6 +357,8 @@ paths:
         (EventSource nativo). La credencial principal no viaja en la dirección de la conexión. Rol
         mínimo: CLIENTE.
       operationId: issueSubscriptionTicket
+      x-status: available
+      x-minimum-role: CLIENTE
       responses:
         '200':
           headers:
@@ -303,6 +373,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
 
   /notifications/batches:
     parameters:
@@ -325,6 +397,8 @@ paths:
         guardado; si el guardado falló (trackingSaved=false) no hay registro y el reenvío vuelve a
         procesar los elementos (la deduplicación por externalId evita duplicar notificaciones).
       operationId: sendNotificationBatch
+      x-status: available
+      x-minimum-role: CLIENTE
       requestBody:
         required: true
         content:
@@ -343,6 +417,10 @@ paths:
                 $ref: '#/components/schemas/BatchAcceptedResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
         '400':
           headers:
             X-Correlation-Id:
@@ -360,7 +438,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /notifications/{id}:
+  /notifications/detail:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/TraceParent'
@@ -369,6 +447,8 @@ paths:
       summary: Consultar el estado de una notificación
       description: CU-04. Devuelve el estado actual, canal, proveedor y marca de tiempo del último intento.
       operationId: getNotificationStatus
+      x-status: available
+      x-minimum-role: CLIENTE
       parameters:
         - $ref: '#/components/parameters/NotificationId'
       responses:
@@ -383,6 +463,19 @@ paths:
                 $ref: '#/components/schemas/NotificationStatusResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: El parámetro notificationId falta o no es un identificador válido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           headers:
             X-Correlation-Id:
@@ -395,7 +488,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /notifications/{id}:retry:
+  /notification-retries:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/TraceParent'
@@ -408,8 +501,20 @@ paths:
         Requiere rol OPERADOR o ADMINISTRADOR. Planificada: sin controlador REST todavía (el mapeo de
         rol queda documentado para cuando exista).
       operationId: retryNotification
-      parameters:
-        - $ref: '#/components/parameters/NotificationId'
+      x-status: planned
+      x-minimum-role: OPERADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [notificationId]
+              properties:
+                notificationId:
+                  type: string
+                  format: uuid
+                  description: Identificador de la notificación que se reintenta.
       responses:
         '202':
           headers:
@@ -424,6 +529,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
         '400':
           headers:
             X-Correlation-Id:
@@ -463,6 +570,8 @@ paths:
         en la notificación con attachmentUrl. uploadFields es una credencial temporal: solo aparece en esta
         respuesta.
       operationId: issueAttachmentUpload
+      x-status: available
+      x-minimum-role: CLIENTE
       requestBody:
         required: true
         content:
@@ -478,13 +587,15 @@ paths:
             Location:
               schema:
                 type: string
-              description: /attachment-uploads/{uploadId}
+              description: /attachment-uploads/status?uploadId=<uploadId>
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/AttachmentUploadResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           headers:
             X-Correlation-Id:
@@ -500,11 +611,18 @@ paths:
           headers:
             X-Correlation-Id:
               $ref: '#/components/headers/CorrelationId'
-          description: El almacén de archivos no está disponible.
+            X-Decision-Id:
+              $ref: '#/components/headers/DecisionId'
+          description: >
+            El almacén de archivos no está disponible. También lo devuelve el PEP (PEP_UNAVAILABLE)
+            cuando no puede decidir el acceso.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/PepErrorResponse'
         '409':
           $ref: '#/components/responses/Conflict'
         '500':
@@ -523,6 +641,8 @@ paths:
         FAILED. Si la subida ya está resuelta, o si otra llamada simultánea ganó la transición, devuelve su
         estado vigente sin volver a analizar. Si la subida ya venció, responde 409 y pasa a FAILED.
       operationId: completeAttachmentUpload
+      x-status: available
+      x-minimum-role: CLIENTE
       requestBody:
         required: true
         content:
@@ -546,6 +666,8 @@ paths:
                 $ref: '#/components/schemas/AttachmentUploadResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '400':
           headers:
             X-Correlation-Id:
@@ -581,15 +703,22 @@ paths:
           headers:
             X-Correlation-Id:
               $ref: '#/components/headers/CorrelationId'
-          description: El almacén de archivos o el broker no están disponibles.
+            X-Decision-Id:
+              $ref: '#/components/headers/DecisionId'
+          description: >
+            El almacén de archivos o el broker no están disponibles. También lo devuelve el PEP
+            (PEP_UNAVAILABLE) cuando no puede decidir el acceso.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/PepErrorResponse'
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /attachment-uploads/{uploadId}:
+  /attachment-uploads/status:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/TraceParent'
@@ -597,6 +726,8 @@ paths:
       tags: [Adjuntos]
       summary: Consultar el estado de una subida
       operationId: getAttachmentUpload
+      x-status: available
+      x-minimum-role: CLIENTE
       parameters:
         - $ref: '#/components/parameters/UploadId'
       responses:
@@ -611,6 +742,19 @@ paths:
                 $ref: '#/components/schemas/AttachmentUploadResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '400':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: El parámetro uploadId falta o está en blanco.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         '404':
           headers:
             X-Correlation-Id:
@@ -637,6 +781,8 @@ paths:
         mismo refresco en que el enrutamiento empieza a usarlo. Ningún campo contiene el valor de una
         credencial.
       operationId: listChannels
+      x-status: available
+      x-minimum-role: CLIENTE
       responses:
         '200':
           headers:
@@ -649,66 +795,10 @@ paths:
                 $ref: '#/components/schemas/ChannelCatalogResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
-
-  /providers:
-    parameters:
-      - $ref: '#/components/parameters/CorrelationId'
-      - $ref: '#/components/parameters/TraceParent'
-    get:
-      tags: [Catálogo]
-      summary: Consultar los proveedores, su estado y dónde se usan
-      description: >
-        CU-08 (lectura). Devuelve la unión de los proveedores con adaptador en este despliegue y los que
-        nombra el catálogo, cada uno con su estado y los canales en que aparece. MISSING_ADAPTER indica
-        que el catálogo nombra un proveedor para el que el despliegue no tiene adaptador. El estado de
-        habilitación es el de configuración de la réplica que responde, no la salud actual del
-        proveedor. Misma respuesta para cualquier identidad autenticada; ningún campo contiene el
-        valor de una credencial.
-      operationId: listProviders
-      responses:
-        '200':
-          headers:
-            X-Correlation-Id:
-              $ref: '#/components/headers/CorrelationId'
-          description: Proveedores ordenados por providerId.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProviderCatalogResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /configuration:
-    parameters:
-      - $ref: '#/components/parameters/CorrelationId'
-      - $ref: '#/components/parameters/TraceParent'
-    get:
-      tags: [Configuración]
-      summary: Consultar los parámetros gestionables y la configuración en uso
-      description: >
-        CU-11 (lectura). Requiere permiso de ADMINISTRADOR. Devuelve el registro de parámetros que el
-        servicio permite gestionar y, para la réplica que responde, la versión de la configuración en uso,
-        su origen y las claves aceptadas que esperan un reinicio. Ningún campo contiene credenciales,
-        topología de colas ni direcciones base.
-      operationId: getConfiguration
-      responses:
-        '200':
-          headers:
-            X-Correlation-Id:
-              $ref: '#/components/headers/CorrelationId'
-          description: Configuración en uso de la réplica y registro de parámetros.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConfigurationResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
-  /channels:register:
-    parameters:
-      - $ref: '#/components/parameters/CorrelationId'
-      - $ref: '#/components/parameters/TraceParent'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
     post:
       tags: [Catálogo]
       summary: Registrar o actualizar un canal
@@ -718,6 +808,8 @@ paths:
         Bloqueado: el catálogo dinámico ya existe, pero su escritura por API aún no está
         habilitada.
       operationId: registerChannel
+      x-status: planned
+      x-minimum-role: ADMINISTRADOR
       requestBody:
         required: true
         content:
@@ -734,6 +826,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
         '400':
           headers:
             X-Correlation-Id:
@@ -744,10 +838,39 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /providers:register:
+  /providers:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/TraceParent'
+    get:
+      tags: [Catálogo]
+      summary: Consultar los proveedores, su estado y dónde se usan
+      description: >
+        CU-08 (lectura). Devuelve la unión de los proveedores con adaptador en este despliegue y los que
+        nombra el catálogo, cada uno con su estado y los canales en que aparece. MISSING_ADAPTER indica
+        que el catálogo nombra un proveedor para el que el despliegue no tiene adaptador. El estado de
+        habilitación es el de configuración de la réplica que responde, no la salud actual del
+        proveedor. Misma respuesta para cualquier identidad autenticada; ningún campo contiene el
+        valor de una credencial.
+      operationId: listProviders
+      x-status: available
+      x-minimum-role: CLIENTE
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Proveedores ordenados por providerId.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderCatalogResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
     post:
       tags: [Catálogo]
       summary: Registrar un proveedor para uno o más canales
@@ -757,6 +880,8 @@ paths:
         requerida, el proveedor queda registrado pero deshabilitado -- nunca a medias en silencio.
         Bloqueado hasta que exista el catálogo dinámico (Fase 6).
       operationId: registerProvider
+      x-status: planned
+      x-minimum-role: ADMINISTRADOR
       requestBody:
         required: true
         content:
@@ -777,6 +902,8 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
         '404':
           headers:
             X-Correlation-Id:
@@ -787,10 +914,42 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /recipients/{recipientId}/preferences:
+  /configuration:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/TraceParent'
+    get:
+      tags: [Configuración]
+      summary: Consultar los parámetros gestionables y la configuración en uso
+      description: >
+        CU-11 (lectura). Requiere permiso de ADMINISTRADOR. Devuelve el registro de parámetros que el
+        servicio permite gestionar y, para la réplica que responde, la versión de la configuración en uso,
+        su origen y las claves aceptadas que esperan un reinicio. Ningún campo contiene credenciales,
+        topología de colas ni direcciones base.
+      operationId: getConfiguration
+      x-status: available
+      x-minimum-role: ADMINISTRADOR
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Configuración en uso de la réplica y registro de parámetros.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConfigurationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+  /recipients/preferences:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+      - $ref: '#/components/parameters/RecipientId'
     get:
       tags: [Preferencias]
       summary: Consultar las preferencias de un destinatario
@@ -802,8 +961,8 @@ paths:
         mismo recipientId. Requiere rol CLIENTE o superior. Planificada: sin controlador REST todavía
         (el mapeo de rol queda documentado para cuando exista).
       operationId: getRecipientPreferences
-      parameters:
-        - $ref: '#/components/parameters/RecipientId'
+      x-status: planned
+      x-minimum-role: CLIENTE
       responses:
         '200':
           headers:
@@ -816,12 +975,11 @@ paths:
                 $ref: '#/components/schemas/RecipientPreferencesResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
-
-  /recipients/{recipientId}:updatePreferences:
-    parameters:
-      - $ref: '#/components/parameters/CorrelationId'
-      - $ref: '#/components/parameters/TraceParent'
-    post:
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+    put:
       tags: [Preferencias]
       summary: Actualizar las preferencias de un destinatario
       description: >
@@ -834,8 +992,8 @@ paths:
         CLIENTE o superior. Planificada: sin controlador REST todavía (el mapeo de rol queda
         documentado para cuando exista).
       operationId: updateRecipientPreferences
-      parameters:
-        - $ref: '#/components/parameters/RecipientId'
+      x-status: planned
+      x-minimum-role: CLIENTE
       requestBody:
         required: true
         content:
@@ -854,6 +1012,10 @@ paths:
                 $ref: '#/components/schemas/RecipientPreferencesResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
         '400':
           headers:
             X-Correlation-Id:
@@ -874,6 +1036,12 @@ components:
         type: string
         maxLength: 64
         pattern: '^[A-Za-z0-9._-]{1,64}$'
+    DecisionId:
+      description: >
+        Identificador de la decisión del PEP que autorizó o rechazó la solicitud. Presente cuando el
+        PEP responde.
+      schema:
+        type: string
   securitySchemes:
     BearerAuth:
       type: http
@@ -884,29 +1052,62 @@ components:
         tenantId y role. Se reemplazará por la identidad resuelta contra la plataforma de Seguridad
         externa cuando DEP-01 se cierre -- la forma de las claims es la misma que usará el adaptador
         definitivo.
+    SessionCookie:
+      type: apiKey
+      in: cookie
+      name: SECURITY_BASELINE_SESSION
+      description: >
+        Cookie de sesión de la plataforma de Seguridad. La valida el PEP; el modo interino del
+        servicio solo acepta Bearer y todavía no la lee.
 
   responses:
     Unauthorized:
       headers:
         X-Correlation-Id:
           $ref: '#/components/headers/CorrelationId'
+        X-Decision-Id:
+          $ref: '#/components/headers/DecisionId'
       description: >
-        Sin token, token mal formado, firma inválida, expirado, o con alguna claim obligatoria (sub,
-        tenantId, role) ausente o con role fuera de ADMINISTRADOR/OPERADOR/CLIENTE. El cuerpo nunca
-        detalla la causa criptográfica exacta del rechazo.
+        Sin credencial, credencial mal formada, firma inválida, expirada, o con alguna claim
+        obligatoria (sub, tenantId, role) ausente o con role fuera de ADMINISTRADOR/OPERADOR/CLIENTE.
+        Con el modo interino responde ErrorResponse (NTF-2001); con el PEP activo responde
+        PepErrorResponse con code TOKEN_INVALID. El cuerpo nunca detalla la causa criptográfica
+        exacta del rechazo.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/PepErrorResponse'
     Forbidden:
       headers:
         X-Correlation-Id:
           $ref: '#/components/headers/CorrelationId'
-      description: Token válido, pero el rol no alcanza el mínimo requerido por esta operación.
+        X-Decision-Id:
+          $ref: '#/components/headers/DecisionId'
+      description: >
+        Credencial válida, pero el rol no alcanza el mínimo requerido por esta operación. Con el modo
+        interino responde ErrorResponse (NTF-2002); con el PEP activo responde PepErrorResponse con
+        code ACCESS_DENIED.
       content:
         application/json:
           schema:
             $ref: '#/components/schemas/ErrorResponse'
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/PepErrorResponse'
+    PepUnavailable:
+      headers:
+        X-Decision-Id:
+          $ref: '#/components/headers/DecisionId'
+      description: >
+        El PEP no pudo decidir el acceso (PEP_UNAVAILABLE). La solicitud no llegó a ejecutarse y puede
+        reintentarse.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/PepErrorResponse'
     Conflict:
       headers:
         X-Correlation-Id:
@@ -956,8 +1157,8 @@ components:
         type: string
         pattern: '^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$'
     NotificationId:
-      name: id
-      in: path
+      name: notificationId
+      in: query
       required: true
       description: Identificador de la notificación.
       schema:
@@ -965,14 +1166,14 @@ components:
         format: uuid
     RecipientId:
       name: recipientId
-      in: path
+      in: query
       required: true
-      description: Identificador del destinatario, estable entre canales.
+      description: Identificador del destinatario, estable entre canales. Se codifica como porcentaje en la query.
       schema:
         type: string
     UploadId:
       name: uploadId
-      in: path
+      in: query
       required: true
       description: Identificador de la subida emitida por POST /attachment-uploads.
       schema:
@@ -1181,6 +1382,7 @@ components:
 
     SendNotificationResponse:
       type: object
+      required: [notificationId, status, duplicate]
       properties:
         notificationId:
           type: string
@@ -1240,6 +1442,7 @@ components:
 
     BatchItemResult:
       type: object
+      required: [externalId, outcome, notificationId, rejectionReason]
       properties:
         externalId:
           type: string
@@ -1251,19 +1454,18 @@ components:
             problema transitorio de infraestructura (por ejemplo el escaner de adjuntos no responde);
             el cliente puede reintentar ese elemento.
         notificationId:
-          type: string
+          type: [string, 'null']
           format: uuid
-          nullable: true
           description: Nulo cuando outcome es REJECTED o FAILED.
         rejectionReason:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: >
             Solo presente cuando outcome es REJECTED o FAILED. Para FAILED el valor es siempre
             "Internal error"; los rechazos de negocio conservan su texto.
 
     NotificationStatusResponse:
       type: object
+      required: [notificationId, status, channelType, providerId, lastUpdatedAt, correlationId]
       properties:
         notificationId:
           type: string
@@ -1273,15 +1475,13 @@ components:
         channelType:
           type: string
         providerId:
-          type: string
-          nullable: true
+          type: [string, 'null']
           description: Proveedor del último intento de envío. Nulo si aún no se ha intentado despachar.
         lastUpdatedAt:
           type: string
           format: date-time
         correlationId:
-          type: string
-          nullable: true
+          type: [string, 'null']
           maxLength: 64
           description: >
             Identificador de correlación con el que se aceptó la notificación. Nulo en notificaciones
@@ -1307,6 +1507,8 @@ components:
 
     NotificationHistoryItem:
       type: object
+      required:
+        [notificationId, externalId, recipientId, channelType, status, acceptedAt, deliveryAttempts]
       properties:
         notificationId:
           type: string
@@ -1329,6 +1531,7 @@ components:
 
     DeliveryAttempt:
       type: object
+      required: [occurredOn, result, origin, providerId]
       properties:
         occurredOn:
           type: string
@@ -1645,6 +1848,30 @@ components:
           type: string
           maxLength: 64
           description: Identificador de correlación de la petición que produjo el error.
+
+    PepErrorResponse:
+      type: object
+      required: [type, title, status, detail, code]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: Siempre urn:security-pep:error:<code en minúsculas>.
+          example: urn:security-pep:error:access_denied
+        title:
+          type: string
+          description: Igual a code.
+        status:
+          type: integer
+          enum: [401, 403, 503]
+        detail:
+          type: string
+          description: Texto estándar del estado HTTP.
+          example: Forbidden
+        code:
+          type: string
+          enum: [TOKEN_INVALID, ACCESS_DENIED, PEP_UNAVAILABLE]
+          description: TOKEN_INVALID acompaña al 401, ACCESS_DENIED al 403 y PEP_UNAVAILABLE al 503.
 
     Priority:
       type: string

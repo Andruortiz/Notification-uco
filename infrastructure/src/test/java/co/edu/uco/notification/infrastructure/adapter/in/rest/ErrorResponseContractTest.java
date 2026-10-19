@@ -20,6 +20,7 @@ import org.yaml.snakeyaml.Yaml;
 class ErrorResponseContractTest {
 
   private static final String ERROR_SCHEMA_REF = "#/components/schemas/ErrorResponse";
+  private static final String PEP_ERROR_SCHEMA_REF = "#/components/schemas/PepErrorResponse";
   private static final String RESPONSE_REF_PREFIX = "#/components/responses/";
 
   private static Map<String, Object> document;
@@ -87,8 +88,10 @@ class ErrorResponseContractTest {
           if (Integer.parseInt(response.getKey()) < 400) {
             continue;
           }
+          final boolean pepStatus = Set.of("401", "403", "503").contains(response.getKey());
           assertTrue(
-              referencesErrorSchema(map(response.getValue())),
+              referencesErrorSchema(
+                  map(response.getValue()), pepStatus, "503".equals(response.getKey())),
               path.getKey() + " " + operation.getKey() + " " + response.getKey());
           checked++;
         }
@@ -100,21 +103,59 @@ class ErrorResponseContractTest {
   @Test
   void everyReusableErrorResponseReferencesTheErrorSchema() {
     for (final Map.Entry<String, Object> response : components("responses").entrySet()) {
-      assertTrue(referencesErrorSchema(map(response.getValue())), response.getKey());
+      final boolean pepStatus =
+          Set.of("Unauthorized", "Forbidden", "PepUnavailable").contains(response.getKey());
+      assertTrue(
+          referencesErrorSchema(
+              map(response.getValue()), pepStatus, "PepUnavailable".equals(response.getKey())),
+          response.getKey());
     }
   }
 
-  private static boolean referencesErrorSchema(final Map<String, Object> response) {
+  @Test
+  void securityResponsesDocumentBothTheInterimAndThePepForms() {
+    for (final String name : List.of("Unauthorized", "Forbidden")) {
+      final Map<String, Object> content =
+          map(map(components("responses").get(name)).get("content"));
+      assertEquals(
+          ERROR_SCHEMA_REF, map(map(content.get("application/json")).get("schema")).get("$ref"));
+      assertEquals(
+          PEP_ERROR_SCHEMA_REF,
+          map(map(content.get("application/problem+json")).get("schema")).get("$ref"));
+    }
+  }
+
+  @Test
+  void pepErrorResponseDocumentsTheStarterBody() {
+    final Map<String, Object> schema = map(components("schemas").get("PepErrorResponse"));
+
+    assertEquals(
+        List.of("type", "title", "status", "detail", "code"), list(schema.get("required")));
+    assertEquals(
+        List.of("TOKEN_INVALID", "ACCESS_DENIED", "PEP_UNAVAILABLE"),
+        list(map(map(schema.get("properties")).get("code")).get("enum")));
+  }
+
+  private static boolean referencesErrorSchema(
+      final Map<String, Object> response, final boolean pepAllowed, final boolean pepOnlyAllowed) {
     final Object ref = response.get("$ref");
     if (ref != null) {
       final String name = String.valueOf(ref).substring(RESPONSE_REF_PREFIX.length());
-      return referencesErrorSchema(map(components("responses").get(name)));
+      return referencesErrorSchema(
+          map(components("responses").get(name)), pepAllowed, pepOnlyAllowed);
     }
     final Map<String, Object> content = map(response.get("content"));
     if (content == null) {
       return false;
     }
     final Map<String, Object> json = map(content.get("application/json"));
-    return json != null && ERROR_SCHEMA_REF.equals(map(json.get("schema")).get("$ref"));
+    final Map<String, Object> problem = map(content.get("application/problem+json"));
+    final boolean pepDeclared =
+        problem != null && PEP_ERROR_SCHEMA_REF.equals(map(problem.get("schema")).get("$ref"));
+    if (json == null) {
+      return pepOnlyAllowed && pepDeclared;
+    }
+    return ERROR_SCHEMA_REF.equals(map(json.get("schema")).get("$ref"))
+        && (problem == null || (pepAllowed && pepDeclared));
   }
 }

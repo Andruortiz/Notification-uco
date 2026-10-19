@@ -21,7 +21,7 @@ import reactor.test.StepVerifier;
 
 class PdpSessionIdentityAdapterTest {
 
-  private static final Duration TIMEOUT = Duration.ofSeconds(1);
+  private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
   private static StubSecurityPlatform platform;
   private static PdpSessionIdentityAdapter adapter;
@@ -140,8 +140,13 @@ class PdpSessionIdentityAdapterTest {
     platform.reset();
     platform.withSession("cookie-a", "universidad-uco");
     platform.delaySessionBy(Duration.ofSeconds(4));
+    final PdpSessionIdentityAdapter impatient =
+        new PdpSessionIdentityAdapter(
+            WebClient.builder().baseUrl(platform.baseUrl()).build(),
+            "/api/v1/session",
+            Duration.ofSeconds(1));
     final Instant start = Instant.now();
-    StepVerifier.create(adapter.resolve(new SessionCredential("cookie-a")))
+    StepVerifier.create(impatient.resolve(new SessionCredential("cookie-a")))
         .expectError(AuthenticationUnavailableException.class)
         .verify(Duration.ofSeconds(5));
     assertTrue(Duration.between(start, Instant.now()).compareTo(Duration.ofSeconds(3)) < 0);

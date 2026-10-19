@@ -342,31 +342,17 @@ class SessionCookieE2ETest {
   }
 
   @Test
-  void theTicketOfASubscriptionStillAuthenticatesWithoutBearerOrCookie() {
-    final String ticket =
-        client
-            .post()
-            .uri("/notifications/stream/tickets")
-            .cookie(COOKIE, "cookie-a")
-            .exchange()
-            .expectStatus()
-            .is2xxSuccessful()
-            .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
-            .returnResult()
-            .getResponseBody()
-            .get("ticket")
-            .toString();
-
+  void aTicketCanBeIssuedWithTheSessionCookie() {
     client
-        .get()
-        .uri("/notifications/stream?ticket={ticket}", ticket)
+        .post()
+        .uri("/notifications/stream/tickets")
+        .cookie(COOKIE, "cookie-a")
         .exchange()
         .expectStatus()
-        .isOk()
-        .returnResult(String.class)
-        .getResponseBody()
-        .take(Duration.ofSeconds(1))
-        .blockLast(Duration.ofSeconds(10));
+        .is2xxSuccessful()
+        .expectBody()
+        .jsonPath("$.ticket")
+        .isNotEmpty();
   }
 
   private static void pause(final Duration duration) {

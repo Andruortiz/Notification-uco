@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.Ordered;
@@ -62,16 +63,31 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
         tokenValidationPort,
         subscriptionTicketPort,
         routeAuthorizationPolicy,
-        credential ->
-            Mono.error(
-                new InvalidTokenException(
-                    "session cookie not accepted",
-                    InvalidTokenException.Reason.INVALID_SESSION,
-                    null,
-                    null)));
+        AuthenticationWebFilter::rejectSession);
   }
 
   @Autowired
+  public AuthenticationWebFilter(
+      final TokenValidationPort tokenValidationPort,
+      final SubscriptionTicketPort subscriptionTicketPort,
+      final RouteAuthorizationPolicy routeAuthorizationPolicy,
+      final ObjectProvider<SessionIdentityPort> sessionIdentityPort) {
+    this(
+        tokenValidationPort,
+        subscriptionTicketPort,
+        routeAuthorizationPolicy,
+        sessionIdentityPort.getIfAvailable(() -> AuthenticationWebFilter::rejectSession));
+  }
+
+  private static Mono<AuthenticatedPrincipal> rejectSession(final SessionCredential credential) {
+    return Mono.error(
+        new InvalidTokenException(
+            "session cookie not accepted",
+            InvalidTokenException.Reason.INVALID_SESSION,
+            null,
+            null));
+  }
+
   public AuthenticationWebFilter(
       final TokenValidationPort tokenValidationPort,
       final SubscriptionTicketPort subscriptionTicketPort,

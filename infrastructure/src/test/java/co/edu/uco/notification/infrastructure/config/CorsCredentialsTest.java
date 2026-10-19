@@ -23,9 +23,14 @@ class CorsCredentialsTest {
 
   private final CorsWebFilter filter = new CorsConfig().corsWebFilter(List.of(ALLOWED));
 
+  private static HttpHeaders committedHeaders(final MockServerWebExchange exchange) {
+    exchange.getResponse().setComplete().block();
+    return exchange.getResponse().getHeaders();
+  }
+
   private MockServerWebExchange preflight(final String origin) {
     return MockServerWebExchange.from(
-        MockServerHttpRequest.method(HttpMethod.OPTIONS, "/notifications")
+        MockServerHttpRequest.method(HttpMethod.OPTIONS, "http://localhost:8060/notifications")
             .header(HttpHeaders.ORIGIN, origin)
             .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
             .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "content-type")
@@ -38,7 +43,7 @@ class CorsCredentialsTest {
 
     StepVerifier.create(filter.filter(exchange, chain -> Mono.empty())).verifyComplete();
 
-    final HttpHeaders headers = exchange.getResponse().getHeaders();
+    final HttpHeaders headers = committedHeaders(exchange);
     assertEquals(ALLOWED, headers.getFirst(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
     assertEquals("true", headers.getFirst(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS));
   }
@@ -49,7 +54,7 @@ class CorsCredentialsTest {
 
     StepVerifier.create(filter.filter(exchange, chain -> Mono.empty())).verifyComplete();
 
-    final HttpHeaders headers = exchange.getResponse().getHeaders();
+    final HttpHeaders headers = committedHeaders(exchange);
     assertNull(headers.getFirst(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
     assertNull(headers.getFirst(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS));
   }
@@ -58,7 +63,7 @@ class CorsCredentialsTest {
   void aSimpleRequestFromAConfiguredOriginAlsoCarriesCredentialsAndExposesTheCorrelationId() {
     final MockServerWebExchange exchange =
         MockServerWebExchange.from(
-            MockServerHttpRequest.get("/notifications")
+            MockServerHttpRequest.get("http://localhost:8060/notifications")
                 .header(HttpHeaders.ORIGIN, ALLOWED)
                 .build());
     final AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -72,7 +77,7 @@ class CorsCredentialsTest {
                 }))
         .verifyComplete();
 
-    final HttpHeaders headers = exchange.getResponse().getHeaders();
+    final HttpHeaders headers = committedHeaders(exchange);
     assertEquals("true", headers.getFirst(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS));
     assertEquals(ALLOWED, headers.getFirst(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN));
     assertEquals("X-Correlation-Id", headers.getFirst(HttpHeaders.ACCESS_CONTROL_EXPOSE_HEADERS));

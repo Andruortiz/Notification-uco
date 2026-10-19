@@ -61,7 +61,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     this(
         tokenValidationPort,
         routeAuthorizationPolicy,
-        sessionIdentityPort,
+        sessionIdentityPort.getIfAvailable(() -> AuthenticationWebFilter::rejectSession),
         PublicRoutes.documentation());
   }
 

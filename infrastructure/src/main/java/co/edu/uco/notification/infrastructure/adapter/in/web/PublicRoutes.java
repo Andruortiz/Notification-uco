@@ -36,7 +36,7 @@ public class PublicRoutes {
             .toList();
   }
 
-  public static PublicRoutes documentation() {
+  public static PublicRoutes withDocumentationPaths() {
     return new PublicRoutes(DOCUMENTATION);
   }
 

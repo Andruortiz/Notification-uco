@@ -52,7 +52,7 @@ class PublicRoutesTest {
 
   @Test
   void theDocumentationDefaultsCoverTheContractAndTheInterface() {
-    final PublicRoutes routes = PublicRoutes.documentation();
+    final PublicRoutes routes = PublicRoutes.withDocumentationPaths();
 
     assertTrue(routes.matches("/openapi/api-notificaciones.yaml"));
     assertTrue(routes.matches("/v3/api-docs"));

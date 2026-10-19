@@ -62,7 +62,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
         tokenValidationPort,
         routeAuthorizationPolicy,
         sessionIdentityPort.getIfAvailable(() -> AuthenticationWebFilter::rejectSession),
-        PublicRoutes.documentation());
+        PublicRoutes.withDocumentationPaths());
   }
 
   @Autowired
@@ -75,7 +75,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
         tokenValidationPort,
         routeAuthorizationPolicy,
         sessionIdentityPort.getIfAvailable(() -> AuthenticationWebFilter::rejectSession),
-        publicRoutes.getIfAvailable(PublicRoutes::documentation));
+        publicRoutes.getIfAvailable(PublicRoutes::withDocumentationPaths));
   }
 
   private static Mono<AuthenticatedPrincipal> rejectSession(final SessionCredential credential) {
@@ -95,7 +95,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
         tokenValidationPort,
         routeAuthorizationPolicy,
         sessionIdentityPort,
-        PublicRoutes.documentation());
+        PublicRoutes.withDocumentationPaths());
   }
 
   public AuthenticationWebFilter(

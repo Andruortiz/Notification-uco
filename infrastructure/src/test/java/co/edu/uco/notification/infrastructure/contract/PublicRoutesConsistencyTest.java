@@ -77,7 +77,7 @@ class PublicRoutesConsistencyTest {
 
   @Test
   void theServiceFilterExemptsEveryContractRouteAndNothingElseOfTheContract() {
-    final PublicRoutes routes = PublicRoutes.documentation();
+    final PublicRoutes routes = PublicRoutes.withDocumentationPaths();
 
     assertEquals(
         contractPaths(null).stream().sorted().toList(),

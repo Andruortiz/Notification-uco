@@ -82,6 +82,8 @@ Cada modo es un adaptador del puerto `TokenValidationPort`; el dominio y el filt
 
 Panel en vivo: `GET /notifications/stream` acepta la cabecera `Authorization` o, para clientes que no pueden enviar cabeceras (`EventSource` nativo), un ticket de un solo uso. El ticket se pide con `POST /notifications/stream/tickets` (rol minimo `CLIENTE`), vale 30 segundos (`AUTH_SUBSCRIPTION_TICKET_TTL_SECONDS`), se guarda como huella SHA-256 en MongoDB (coleccion `subscription_tickets`) y se presenta una sola vez como `?ticket=`. El parametro `access_token` ya no se acepta.
 
+Contrato de la API (version 2.0.0): todas las rutas son literales, sin `:` ni `{}`, para que el PDP las registre como recursos protegidos. Los identificadores viajan en la query o en el cuerpo: `GET /notifications/detail?notificationId=...`, `GET /attachment-uploads/status?uploadId=...`, `POST /attachment-upload-completions` con `{uploadId}`. Cada operacion declara `x-status` (`available` o `planned`) y `x-minimum-role` en `api-notificaciones.yaml`, que tambien trae la tabla de migracion v1 a v2. La lista de recursos protegidos se genera en cada build en `infrastructure/target/contract/protected-resources.json`.
+
 | Variable | Para que sirve | Por defecto |
 | --- | --- | --- |
 | `AUTH_PLATFORM_PUBLIC_KEY` | Clave publica del emisor, en PEM (X.509); admite los saltos de linea como `\n` | obligatoria |

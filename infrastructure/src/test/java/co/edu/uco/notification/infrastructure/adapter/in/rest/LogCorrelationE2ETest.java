@@ -165,7 +165,7 @@ class LogCorrelationE2ETest {
   private Map<String, Object> status(final String tenant, final String notificationId) {
     return webTestClient
         .get()
-        .uri("/notifications/{id}", notificationId)
+        .uri("/notifications/detail?notificationId={id}", notificationId)
         .header("Authorization", TestTokens.bearer(tenant))
         .exchange()
         .expectStatus()
@@ -296,7 +296,7 @@ class LogCorrelationE2ETest {
   void errorsAndRejectionsReturnTheCorrelationIdInHeaderAndBody() {
     webTestClient
         .get()
-        .uri("/notifications/{id}", "00000000-0000-0000-0000-000000000000")
+        .uri("/notifications/detail?notificationId={id}", "00000000-0000-0000-0000-000000000000")
         .header("Authorization", TestTokens.bearer("tenant-log-e"))
         .header("X-Correlation-Id", "e2e-corr-404")
         .exchange()
@@ -310,7 +310,7 @@ class LogCorrelationE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", "00000000-0000-0000-0000-000000000000")
+        .uri("/notifications/detail?notificationId={id}", "00000000-0000-0000-0000-000000000000")
         .header("X-Correlation-Id", "e2e-corr-401")
         .exchange()
         .expectStatus()
@@ -335,7 +335,8 @@ class LogCorrelationE2ETest {
     final String echoed =
         webTestClient
             .get()
-            .uri("/notifications/{id}", "00000000-0000-0000-0000-000000000000")
+            .uri(
+                "/notifications/detail?notificationId={id}", "00000000-0000-0000-0000-000000000000")
             .header("Authorization", TestTokens.bearer("tenant-log-g"))
             .header("X-Correlation-Id", "bad id with spaces")
             .exchange()

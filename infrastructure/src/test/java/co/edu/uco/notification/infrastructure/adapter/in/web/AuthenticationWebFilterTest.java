@@ -395,7 +395,7 @@ class AuthenticationWebFilterTest {
     final String ticket = tickets.issue("unused-ticket-00000000000000000000000001", Role.CLIENTE);
     final ServerWebExchange exchange =
         MockServerWebExchange.from(
-            MockServerHttpRequest.get("/notifications:subscribe?ticket=" + ticket)
+            MockServerHttpRequest.get("/notifications/stream?ticket=" + ticket)
                 .header("Authorization", "Bearer " + validToken)
                 .build());
     final AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -413,7 +413,7 @@ class AuthenticationWebFilterTest {
     final String ticket = tickets.issue("shadowed-ticket-000000000000000000000001", Role.CLIENTE);
     final ServerWebExchange exchange =
         MockServerWebExchange.from(
-            MockServerHttpRequest.get("/notifications:subscribe?ticket=" + ticket)
+            MockServerHttpRequest.get("/notifications/stream?ticket=" + ticket)
                 .header("Authorization", "Bearer not-a-jwt")
                 .build());
     final AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -615,8 +615,7 @@ class AuthenticationWebFilterTest {
   }
 
   private static ServerWebExchange subscribeExchange(final String query) {
-    final String uri =
-        query.isEmpty() ? "/notifications:subscribe" : "/notifications:subscribe?" + query;
+    final String uri = query.isEmpty() ? "/notifications/stream" : "/notifications/stream?" + query;
     return MockServerWebExchange.from(MockServerHttpRequest.get(uri).build());
   }
 

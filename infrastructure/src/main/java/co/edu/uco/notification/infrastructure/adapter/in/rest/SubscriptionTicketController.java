@@ -19,7 +19,7 @@ public class SubscriptionTicketController {
             issueSubscriptionTicketUseCase, "issueSubscriptionTicketUseCase must not be null");
   }
 
-  @PostMapping("/notifications:subscribeTicket")
+  @PostMapping("/notifications/stream/tickets")
   public Mono<SubscriptionTicketResponse> issue(final AuthenticatedPrincipal principal) {
     return issueSubscriptionTicketUseCase.issue(principal).map(SubscriptionTicketResponse::from);
   }

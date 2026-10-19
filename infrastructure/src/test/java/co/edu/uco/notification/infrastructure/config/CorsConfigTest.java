@@ -44,7 +44,7 @@ class CorsConfigTest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", id.value())
+        .uri("/notifications/detail?notificationId={id}", id.value())
         .header(HttpHeaders.ORIGIN, "http://localhost:5173")
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
@@ -58,7 +58,7 @@ class CorsConfigTest {
   void disallowedOriginIsRejected() {
     webTestClient
         .get()
-        .uri("/notifications/{id}", NotificationId.newId().value())
+        .uri("/notifications/detail?notificationId={id}", NotificationId.newId().value())
         .header(HttpHeaders.ORIGIN, "http://localhost:9999")
         .exchange()
         .expectStatus()

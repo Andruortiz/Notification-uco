@@ -101,7 +101,7 @@ class AuthenticationInterinaE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", "00000000-0000-0000-0000-000000000000")
+        .uri("/notifications/detail?notificationId={id}", "00000000-0000-0000-0000-000000000000")
         .exchange()
         .expectStatus()
         .isUnauthorized();
@@ -130,7 +130,7 @@ class AuthenticationInterinaE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", notificationId)
+        .uri("/notifications/detail?notificationId={id}", notificationId)
         .header("Authorization", TestTokens.bearer("tenant-a"))
         .exchange()
         .expectStatus()
@@ -138,7 +138,7 @@ class AuthenticationInterinaE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", notificationId)
+        .uri("/notifications/detail?notificationId={id}", notificationId)
         .header("Authorization", TestTokens.bearer("tenant-b"))
         .exchange()
         .expectStatus()
@@ -165,7 +165,7 @@ class AuthenticationInterinaE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", notificationId)
+        .uri("/notifications/detail?notificationId={id}", notificationId)
         .header("Authorization", TestTokens.bearer("tenant-role-check", Role.CLIENTE))
         .exchange()
         .expectStatus()
@@ -201,7 +201,7 @@ class AuthenticationInterinaE2ETest {
     final Map<?, ?> issued =
         webTestClient
             .post()
-            .uri("/notifications:subscribeTicket")
+            .uri("/notifications/stream/tickets")
             .header("Authorization", TestTokens.bearer("tenant-sse"))
             .exchange()
             .expectStatus()
@@ -212,14 +212,14 @@ class AuthenticationInterinaE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications:subscribe?ticket=" + issued.get("ticket"))
+        .uri("/notifications/stream?ticket=" + issued.get("ticket"))
         .exchange()
         .expectStatus()
         .isOk();
 
     webTestClient
         .get()
-        .uri("/notifications:subscribe?ticket=" + issued.get("ticket"))
+        .uri("/notifications/stream?ticket=" + issued.get("ticket"))
         .exchange()
         .expectStatus()
         .isUnauthorized();

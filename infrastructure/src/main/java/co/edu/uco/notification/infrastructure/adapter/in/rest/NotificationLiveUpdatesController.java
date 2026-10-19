@@ -38,7 +38,7 @@ public class NotificationLiveUpdatesController {
             "subscribeToNotificationUpdatesUseCase must not be null");
   }
 
-  @GetMapping(value = "/notifications:subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  @GetMapping(value = "/notifications/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   public Flux<ServerSentEvent<NotificationLiveUpdateResponse>> subscribe(
       final AuthenticatedPrincipal principal,
       @RequestParam(name = "recipientId", required = false) final String recipientId,

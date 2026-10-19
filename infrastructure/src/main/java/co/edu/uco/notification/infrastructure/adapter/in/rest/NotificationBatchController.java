@@ -34,7 +34,7 @@ public class NotificationBatchController {
             sendNotificationBatchUseCase, "sendNotificationBatchUseCase must not be null");
   }
 
-  @PostMapping("/notifications:sendBatch")
+  @PostMapping("/notifications/batches")
   public Mono<ResponseEntity<BatchAcceptedResponse>> sendBatch(
       final AuthenticatedPrincipal principal,
       @RequestBody final SendNotificationBatchRequest request) {

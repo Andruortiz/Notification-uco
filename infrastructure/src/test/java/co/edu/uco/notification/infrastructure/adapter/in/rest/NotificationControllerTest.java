@@ -165,7 +165,7 @@ class NotificationControllerTest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", id.value())
+        .uri("/notifications/detail?notificationId={id}", id.value())
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
@@ -185,7 +185,7 @@ class NotificationControllerTest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", id.value())
+        .uri("/notifications/detail?notificationId={id}", id.value())
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
@@ -676,7 +676,7 @@ class NotificationControllerTest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", id.value())
+        .uri("/notifications/detail?notificationId={id}", id.value())
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
@@ -694,7 +694,7 @@ class NotificationControllerTest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", id.value())
+        .uri("/notifications/detail?notificationId={id}", id.value())
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .header(CorrelationId.HEADER, "req-404")
         .exchange()
@@ -716,7 +716,7 @@ class NotificationControllerTest {
     final String echoed =
         webTestClient
             .get()
-            .uri("/notifications/{id}", id.value())
+            .uri("/notifications/detail?notificationId={id}", id.value())
             .header("Authorization", TestTokens.bearer("tenant-1"))
             .header(CorrelationId.HEADER, "bad id with spaces")
             .exchange()

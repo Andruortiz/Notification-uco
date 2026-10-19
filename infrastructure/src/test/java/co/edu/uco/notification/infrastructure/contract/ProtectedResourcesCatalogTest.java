@@ -1,0 +1,96 @@
+package co.edu.uco.notification.infrastructure.contract;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
+
+class ProtectedResourcesCatalogTest {
+
+  private static final List<String> ROLES = List.of("CLIENTE", "OPERADOR", "ADMINISTRADOR");
+
+  private static List<String> profilesFor(final String minimumRole) {
+    return ROLES.subList(ROLES.indexOf(minimumRole), ROLES.size());
+  }
+
+  private static List<Map<String, Object>> catalog() {
+    final List<Map<String, Object>> entries = new ArrayList<>();
+    for (final ApiContract.Operation operation : ApiContract.operations()) {
+      final Map<String, Object> entry = new LinkedHashMap<>();
+      entry.put("method", operation.method());
+      entry.put("path", operation.path());
+      entry.put("minimumRole", operation.minimumRole());
+      entry.put("profiles", profilesFor(operation.minimumRole()));
+      entry.put("status", operation.status());
+      entry.put("operationId", operation.operationId());
+      entries.add(entry);
+    }
+    return entries;
+  }
+
+  private static long countForProfile(final List<Map<String, Object>> entries, final String role) {
+    return entries.stream()
+        .filter(entry -> ((List<?>) entry.get("profiles")).contains(role))
+        .count();
+  }
+
+  @Test
+  void theCatalogHasOneEntryPerOperationWithoutDuplicates() {
+    final List<Map<String, Object>> entries = catalog();
+
+    assertEquals(17, entries.size());
+    assertEquals(
+        17,
+        entries.stream()
+            .map(entry -> entry.get("method") + " " + entry.get("path"))
+            .collect(Collectors.toSet())
+            .size());
+    assertEquals(
+        12, entries.stream().filter(entry -> "available".equals(entry.get("status"))).count());
+  }
+
+  @Test
+  void everyEntryDeclaresARegistrablePathARoleAndAnOperationId() {
+    for (final Map<String, Object> entry : catalog()) {
+      assertTrue(((String) entry.get("path")).matches(ApiContract.PATH_REGEX), entry.toString());
+      assertTrue(ROLES.contains(entry.get("minimumRole")), entry.toString());
+      assertTrue(Set.of("GET", "POST", "PUT").contains(entry.get("method")), entry.toString());
+      assertTrue(entry.get("operationId") != null, entry.toString());
+    }
+  }
+
+  @Test
+  void profilesAreCumulativeAndComputedFromTheMinimumRole() {
+    final List<Map<String, Object>> entries = catalog();
+    final long clientes =
+        entries.stream().filter(entry -> "CLIENTE".equals(entry.get("minimumRole"))).count();
+    final long operadores =
+        entries.stream().filter(entry -> "OPERADOR".equals(entry.get("minimumRole"))).count();
+
+    assertEquals(clientes, countForProfile(entries, "CLIENTE"));
+    assertEquals(clientes + operadores, countForProfile(entries, "OPERADOR"));
+    assertEquals(17, countForProfile(entries, "ADMINISTRADOR"));
+    assertEquals(List.of("OPERADOR", "ADMINISTRADOR"), profilesFor("OPERADOR"));
+  }
+
+  @Test
+  void theCatalogIsWrittenAsABuildArtifactForThePdpLoader() throws IOException {
+    final Path target = Path.of("target", "contract", "protected-resources.json");
+    Files.createDirectories(target.getParent());
+
+    new ObjectMapper().writerWithDefaultPrettyPrinter().writeValue(target.toFile(), catalog());
+
+    final List<?> written = new ObjectMapper().readValue(target.toFile(), List.class);
+    assertEquals(17, written.size());
+  }
+}

@@ -48,7 +48,7 @@ class RouteAuthorizationPolicyTest {
 
   @Test
   void individualStatusRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/notifications/abc-123"));
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/notifications/detail"));
   }
 
   @Test
@@ -58,33 +58,32 @@ class RouteAuthorizationPolicyTest {
 
   @Test
   void sendBatchRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications:sendBatch"));
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications/batches"));
   }
 
   @Test
   void attachmentUploadFlowRequiresOnlyCliente() {
     assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/attachment-uploads"));
     assertEquals(
-        Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/attachment-uploads/u1:complete"));
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/attachment-uploads/u1"));
+        Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/attachment-upload-completions"));
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/attachment-uploads/status"));
   }
 
   @Test
   void subscribeRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/notifications:subscribe"));
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/notifications/stream"));
   }
 
   @Test
   void subscribeTicketRequiresOnlyCliente() {
     assertEquals(
-        Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications:subscribeTicket"));
+        Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications/stream/tickets"));
   }
 
   @Test
   void subscribeTicketIsNotOpenToOtherMethods() {
     assertEquals(
-        Role.ADMINISTRADOR,
-        policy.minimumRoleFor(HttpMethod.GET, "/notifications:subscribeTicket"));
+        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.GET, "/notifications/stream/tickets"));
   }
 
   @Test
@@ -101,6 +100,6 @@ class RouteAuthorizationPolicyTest {
   @Test
   void unknownRouteDefaultsToTheMostRestrictiveRoleNeverToOpenAccess() {
     assertEquals(
-        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.DELETE, "/notifications/abc-123"));
+        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.DELETE, "/notifications/detail"));
   }
 }

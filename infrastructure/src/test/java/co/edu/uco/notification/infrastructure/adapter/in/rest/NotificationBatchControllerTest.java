@@ -94,7 +94,7 @@ class NotificationBatchControllerTest {
   private WebTestClient.ResponseSpec post(final String body) {
     return webTestClient
         .post()
-        .uri("/notifications:sendBatch")
+        .uri("/notifications/batches")
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(body)
@@ -331,7 +331,7 @@ class NotificationBatchControllerTest {
   void sendBatchRejectsARequestWithoutAToken() {
     webTestClient
         .post()
-        .uri("/notifications:sendBatch")
+        .uri("/notifications/batches")
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue("{\"items\": [" + VALID_ITEM + "]}")
         .exchange()
@@ -354,7 +354,7 @@ class NotificationBatchControllerTest {
 
     webTestClient
         .post()
-        .uri("/notifications:sendBatch")
+        .uri("/notifications/batches")
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .header(CorrelationId.HEADER, "req-batch-1")
         .contentType(MediaType.APPLICATION_JSON)

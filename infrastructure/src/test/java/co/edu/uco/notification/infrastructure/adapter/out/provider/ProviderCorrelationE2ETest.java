@@ -181,7 +181,7 @@ class ProviderCorrelationE2ETest {
       final Map<String, Object> view =
           webTestClient
               .get()
-              .uri("/notifications/{id}", notificationId)
+              .uri("/notifications/detail?notificationId={id}", notificationId)
               .header("Authorization", TestTokens.bearer(TENANT))
               .exchange()
               .expectStatus()

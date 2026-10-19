@@ -96,7 +96,7 @@ class SubscriptionTicketE2ETest {
     final Map<?, ?> body =
         webTestClient
             .post()
-            .uri("/notifications:subscribeTicket")
+            .uri("/notifications/stream/tickets")
             .header("Authorization", TestTokens.bearer(tenantId, Role.CLIENTE))
             .exchange()
             .expectStatus()
@@ -114,7 +114,7 @@ class SubscriptionTicketE2ETest {
       final String ticket) {
     return webTestClient
         .get()
-        .uri("/notifications:subscribe?ticket=" + ticket)
+        .uri("/notifications/stream?ticket=" + ticket)
         .exchange()
         .expectStatus()
         .isOk()
@@ -163,7 +163,7 @@ class SubscriptionTicketE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications:subscribe?ticket=" + ticket)
+        .uri("/notifications/stream?ticket=" + ticket)
         .exchange()
         .expectStatus()
         .isUnauthorized();
@@ -177,7 +177,7 @@ class SubscriptionTicketE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications:subscribe?ticket=" + ticket)
+        .uri("/notifications/stream?ticket=" + ticket)
         .exchange()
         .expectStatus()
         .isUnauthorized();
@@ -187,11 +187,11 @@ class SubscriptionTicketE2ETest {
   void anUnknownOrMissingTicketIsRejectedWithUnauthorized() {
     webTestClient
         .get()
-        .uri("/notifications:subscribe?ticket=never-issued")
+        .uri("/notifications/stream?ticket=never-issued")
         .exchange()
         .expectStatus()
         .isUnauthorized();
-    webTestClient.get().uri("/notifications:subscribe").exchange().expectStatus().isUnauthorized();
+    webTestClient.get().uri("/notifications/stream").exchange().expectStatus().isUnauthorized();
   }
 
   @Test
@@ -200,7 +200,7 @@ class SubscriptionTicketE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications:subscribe?access_token=" + jwt)
+        .uri("/notifications/stream?access_token=" + jwt)
         .exchange()
         .expectStatus()
         .isUnauthorized();
@@ -210,7 +210,7 @@ class SubscriptionTicketE2ETest {
   void issuingATicketRequiresAnAuthenticatedPrincipal() {
     webTestClient
         .post()
-        .uri("/notifications:subscribeTicket")
+        .uri("/notifications/stream/tickets")
         .exchange()
         .expectStatus()
         .isUnauthorized();
@@ -232,7 +232,7 @@ class SubscriptionTicketE2ETest {
           .verify(Duration.ofSeconds(20));
       webTestClient
           .get()
-          .uri("/notifications:subscribe?ticket=" + ticket)
+          .uri("/notifications/stream?ticket=" + ticket)
           .exchange()
           .expectStatus()
           .isUnauthorized();

@@ -101,7 +101,7 @@ class NotificationBatchE2ETest {
   private Map<String, Object> postBatch(final String tenant, final Object body) {
     return webTestClient
         .post()
-        .uri("/notifications:sendBatch")
+        .uri("/notifications/batches")
         .header("Authorization", TestTokens.bearer(tenant))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(body)
@@ -121,7 +121,7 @@ class NotificationBatchE2ETest {
   private Map<String, Object> status(final String tenant, final String notificationId) {
     return webTestClient
         .get()
-        .uri("/notifications/{id}", notificationId)
+        .uri("/notifications/detail?notificationId={id}", notificationId)
         .header("Authorization", TestTokens.bearer(tenant))
         .exchange()
         .expectStatus()
@@ -243,14 +243,14 @@ class NotificationBatchE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", notificationIdA)
+        .uri("/notifications/detail?notificationId={id}", notificationIdA)
         .header("Authorization", TestTokens.bearer(tenantB))
         .exchange()
         .expectStatus()
         .isNotFound();
     webTestClient
         .get()
-        .uri("/notifications/{id}", notificationIdB)
+        .uri("/notifications/detail?notificationId={id}", notificationIdB)
         .header("Authorization", TestTokens.bearer(tenantA))
         .exchange()
         .expectStatus()
@@ -274,7 +274,7 @@ class NotificationBatchE2ETest {
     final Instant start = Instant.now();
     webTestClient
         .post()
-        .uri("/notifications:sendBatch")
+        .uri("/notifications/batches")
         .header("Authorization", TestTokens.bearer(tenant))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(Map.of("batchId", "batch-too-big", "items", oversized))
@@ -377,7 +377,7 @@ class NotificationBatchE2ETest {
 
     webTestClient
         .post()
-        .uri("/notifications:sendBatch")
+        .uri("/notifications/batches")
         .header("Authorization", TestTokens.bearer(tenant))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(Map.of("items", List.of(itemWithoutPriority)))

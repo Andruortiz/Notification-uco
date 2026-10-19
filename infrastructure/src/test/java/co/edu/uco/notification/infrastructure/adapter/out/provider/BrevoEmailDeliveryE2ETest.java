@@ -201,7 +201,7 @@ class BrevoEmailDeliveryE2ETest {
   private Map<String, Object> status(final String notificationId) {
     return webTestClient
         .get()
-        .uri("/notifications/{id}", notificationId)
+        .uri("/notifications/detail?notificationId={id}", notificationId)
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()

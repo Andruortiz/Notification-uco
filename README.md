@@ -80,7 +80,9 @@ El servicio exige un JWT en `Authorization: Bearer`. El modo se elige con `NOTIF
 
 Cada modo es un adaptador del puerto `TokenValidationPort`; el dominio y el filtro de autenticacion no cambian. En modo `platform` el arranque falla si falta la clave publica.
 
-Panel en vivo: `GET /notifications:subscribe` acepta la cabecera `Authorization` o, para clientes que no pueden enviar cabeceras (`EventSource` nativo), un ticket de un solo uso. El ticket se pide con `POST /notifications:subscribeTicket` (rol minimo `CLIENTE`), vale 30 segundos (`AUTH_SUBSCRIPTION_TICKET_TTL_SECONDS`), se guarda como huella SHA-256 en MongoDB (coleccion `subscription_tickets`) y se presenta una sola vez como `?ticket=`. El parametro `access_token` ya no se acepta.
+Panel en vivo: `GET /notifications/stream` acepta la cabecera `Authorization` o, para clientes que no pueden enviar cabeceras (`EventSource` nativo), un ticket de un solo uso. El ticket se pide con `POST /notifications/stream/tickets` (rol minimo `CLIENTE`), vale 30 segundos (`AUTH_SUBSCRIPTION_TICKET_TTL_SECONDS`), se guarda como huella SHA-256 en MongoDB (coleccion `subscription_tickets`) y se presenta una sola vez como `?ticket=`. El parametro `access_token` ya no se acepta.
+
+Contrato de la API (version 2.0.0): todas las rutas son literales, sin `:` ni `{}`, para que el PDP las registre como recursos protegidos. Los identificadores viajan en la query o en el cuerpo: `GET /notifications/detail?notificationId=...`, `GET /attachment-uploads/status?uploadId=...`, `POST /attachment-upload-completions` con `{uploadId}`. Cada operacion declara `x-status` (`available` o `planned`) y `x-minimum-role` en `api-notificaciones.yaml`, que tambien trae la tabla de migracion v1 a v2. La lista de recursos protegidos se genera en cada build en `infrastructure/target/contract/protected-resources.json`.
 
 | Variable | Para que sirve | Por defecto |
 | --- | --- | --- |

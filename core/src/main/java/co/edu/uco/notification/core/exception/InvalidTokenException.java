@@ -9,7 +9,8 @@ public class InvalidTokenException extends RuntimeException {
     NOT_YET_VALID,
     MISSING_EXPIRATION,
     MISSING_CLAIMS,
-    UNKNOWN_ROLE
+    UNKNOWN_ROLE,
+    INVALID_SESSION
   }
 
   private final Reason reason;

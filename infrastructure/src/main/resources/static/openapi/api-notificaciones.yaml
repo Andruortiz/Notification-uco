@@ -15,8 +15,11 @@ info:
     El tenant y el rol del solicitante salen siempre del token, nunca de un encabezado. Se
     reemplazará por la identidad resuelta contra la plataforma de Seguridad externa cuando DEP-01 se
     cierre, sin cambiar la forma de las claims. Con el PEP activo, la credencial puede ser también la
-    cookie de sesión `SECURITY_BASELINE_SESSION`, y el PEP puede responder 401, 403 o 503 con
-    `PepErrorResponse` y la cabecera `X-Decision-Id`. GET /configuration (HU2-073) exige como mínimo
+    cookie de sesión `SECURITY_BASELINE_SESSION` (HU2-101): el servicio resuelve tenant y usuario
+    consultando la sesión a la plataforma de Seguridad, el rol efectivo es CLIENTE y el Bearer tiene
+    precedencia sobre la cookie. El PEP puede responder 401, 403 o 503 con `PepErrorResponse` y la
+    cabecera `X-Decision-Id`; si la plataforma de sesiones no responde, el servicio responde 503 con
+    `ErrorResponse` (NTF-2003). GET /configuration (HU2-073) exige como mínimo
     el rol ADMINISTRADOR.
 
     Registro de cambios 2.0.0 (incompatible con 1.0.0, corte directo sin alias ni prefijo /v2):
@@ -1057,8 +1060,10 @@ components:
       in: cookie
       name: SECURITY_BASELINE_SESSION
       description: >
-        Cookie de sesión de la plataforma de Seguridad. La valida el PEP; el modo interino del
-        servicio solo acepta Bearer y todavía no la lee.
+        Cookie de sesión de la plataforma de Seguridad. El servicio la acepta como alternativa al
+        Bearer solo con el PEP activo: resuelve la identidad consultando la sesión a la plataforma
+        y el PEP la valida y autoriza la ruta. Si la petición trae Authorization, manda el Bearer y,
+        si es inválido, responde 401 sin probar la cookie. El rol efectivo de la sesión es CLIENTE.
 
   responses:
     Unauthorized:
@@ -1070,9 +1075,10 @@ components:
       description: >
         Sin credencial, credencial mal formada, firma inválida, expirada, o con alguna claim
         obligatoria (sub, tenantId, role) ausente o con role fuera de ADMINISTRADOR/OPERADOR/CLIENTE.
-        Con el modo interino responde ErrorResponse (NTF-2001); con el PEP activo responde
-        PepErrorResponse con code TOKEN_INVALID. El cuerpo nunca detalla la causa criptográfica
-        exacta del rechazo.
+        También cuando la cookie de sesión es inválida, expirada o revocada. Responde ErrorResponse
+        (NTF-2001) cuando lo rechaza el servicio, con Bearer o con cookie; con el PEP activo puede
+        responder PepErrorResponse con code TOKEN_INVALID. El cuerpo nunca detalla la causa
+        criptográfica exacta del rechazo.
       content:
         application/json:
           schema:
@@ -1099,12 +1105,18 @@ components:
             $ref: '#/components/schemas/PepErrorResponse'
     PepUnavailable:
       headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
         X-Decision-Id:
           $ref: '#/components/headers/DecisionId'
       description: >
-        El PEP no pudo decidir el acceso (PEP_UNAVAILABLE). La solicitud no llegó a ejecutarse y puede
-        reintentarse.
+        El PEP no pudo decidir el acceso (PEP_UNAVAILABLE) o la plataforma de sesiones no respondió
+        a tiempo al resolver la cookie de sesión (ErrorResponse, NTF-2003). La solicitud no llegó a
+        ejecutarse y puede reintentarse.
       content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
         application/problem+json:
           schema:
             $ref: '#/components/schemas/PepErrorResponse'
@@ -1804,6 +1816,7 @@ components:
             - NTF-1005
             - NTF-2001
             - NTF-2002
+            - NTF-2003
             - NTF-3000
             - NTF-3001
             - NTF-3002

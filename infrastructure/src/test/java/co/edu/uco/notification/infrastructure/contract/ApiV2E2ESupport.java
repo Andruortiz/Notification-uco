@@ -28,25 +28,26 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {"MONGO_USERNAME=test", "MONGO_PASSWORD=test"})
-@Testcontainers
 abstract class ApiV2E2ESupport {
 
   protected static final String TENANT_A = "tenant-v2-a";
   protected static final String TENANT_B = "tenant-v2-b";
 
-  @Container @ServiceConnection
-  static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7.0");
+  @ServiceConnection static final MongoDBContainer MONGO = new MongoDBContainer("mongo:7.0");
 
-  @Container @ServiceConnection
+  @ServiceConnection
   static final RabbitMQContainer RABBIT = new RabbitMQContainer("rabbitmq:3-management");
+
+  static {
+    MONGO.start();
+    RABBIT.start();
+  }
 
   @DynamicPropertySource
   static void attachmentProperties(final DynamicPropertyRegistry registry) {

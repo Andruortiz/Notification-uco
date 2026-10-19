@@ -17,6 +17,11 @@ import org.springframework.http.MediaType;
 
 class ApiV2RoutesE2ETest extends ApiV2E2ESupport {
 
+  private static String normalized(final String body) {
+    return body.replaceAll("\"correlationId\":\"[^\"]*\"", "")
+        .replaceAll("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", "<id>");
+  }
+
   @Test
   void aNotificationIsSentAndReadBackThroughTheQueryParameter() {
     final Map<String, Object> sent = send(TENANT_A, notification("v2-flow-1", "recipient-flow"));
@@ -87,9 +92,7 @@ class ApiV2RoutesE2ETest extends ApiV2E2ESupport {
                 .getResponseBody());
 
     assertTrue(foreign.contains("\"code\""));
-    assertEquals(
-        foreign.replaceAll("\"correlationId\":\"[^\"]*\"", ""),
-        unknown.replaceAll("\"correlationId\":\"[^\"]*\"", ""));
+    assertEquals(normalized(foreign), normalized(unknown));
     detail(TENANT_A, id).expectStatus().isOk();
   }
 

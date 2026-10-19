@@ -18,11 +18,13 @@ public class CorsConfig {
   CorsWebFilter corsWebFilter(
       @Value("${notification.cors.allowed-origins:http://localhost:5173}")
           final List<String> allowedOrigins) {
+    CorsOrigins.requireExplicit(allowedOrigins);
     final CorsConfiguration configuration = new CorsConfiguration();
     configuration.setAllowedOrigins(allowedOrigins);
     configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE"));
     configuration.setAllowedHeaders(List.of("*"));
     configuration.setExposedHeaders(List.of("X-Correlation-Id"));
+    configuration.setAllowCredentials(true);
 
     final UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
     source.registerCorsConfiguration("/**", configuration);

@@ -424,7 +424,9 @@ class PdpProvisioningScriptTest {
 
   @Test
   void theFakePdpRejectsWhatTheRealPdpRejects() {
-    assertTrue(available().stream().noneMatch(op -> op.path().matches(".*[{}:*].*")));
+    assertTrue(
+        available().stream()
+            .noneMatch(op -> op.path().chars().anyMatch(c -> "{}:*".indexOf(c) >= 0)));
     assertTrue(available().stream().allMatch(op -> op.path().matches(ApiContract.PATH_REGEX)));
   }
 }

@@ -22,5 +22,5 @@
 
 - [x] T006 README y `quickstart.md` con uso, orden y asignación manual de perfiles.
 - [ ] T007 `spotless:apply` hecho. Pruebas (`PdpProvisioningScriptTest`, arquitectura, `verify` completo): pendiente de
-  verificación en CI por instrucción del usuario; no se ejecutaron localmente y el script no se probó ni siquiera con un
-  intérprete (ni siquiera sintaxis) en esta historia.
+  verificación en CI por instrucción del usuario; no se ejecutaron localmente. Solo se probó a mano `--dry-run` sin
+  credencial (PowerShell 5.1, sin red) con una lista de ejemplo: el modo con credencial y las escrituras no se han ejecutado.

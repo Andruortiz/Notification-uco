@@ -6,7 +6,7 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente
+**Estado**: Aprobado (2026-10-19)
 
 **Versión del plan**: 1
 

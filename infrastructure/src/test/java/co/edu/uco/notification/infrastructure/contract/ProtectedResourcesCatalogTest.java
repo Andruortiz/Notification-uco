@@ -6,8 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -17,25 +15,14 @@ import tools.jackson.databind.ObjectMapper;
 
 class ProtectedResourcesCatalogTest {
 
-  private static final List<String> ROLES = List.of("CLIENTE", "OPERADOR", "ADMINISTRADOR");
+  private static final List<String> ROLES = ProtectedResourcesCatalog.ROLES;
 
   private static List<String> profilesFor(final String minimumRole) {
-    return ROLES.subList(ROLES.indexOf(minimumRole), ROLES.size());
+    return ProtectedResourcesCatalog.profilesFor(minimumRole);
   }
 
   private static List<Map<String, Object>> catalog() {
-    final List<Map<String, Object>> entries = new ArrayList<>();
-    for (final ApiContract.Operation operation : ApiContract.operations()) {
-      final Map<String, Object> entry = new LinkedHashMap<>();
-      entry.put("method", operation.method());
-      entry.put("path", operation.path());
-      entry.put("minimumRole", operation.minimumRole());
-      entry.put("profiles", profilesFor(operation.minimumRole()));
-      entry.put("status", operation.status());
-      entry.put("operationId", operation.operationId());
-      entries.add(entry);
-    }
-    return entries;
+    return ProtectedResourcesCatalog.entries();
   }
 
   private static long countForProfile(final List<Map<String, Object>> entries, final String role) {
@@ -86,9 +73,7 @@ class ProtectedResourcesCatalogTest {
   @Test
   void theCatalogIsWrittenAsABuildArtifactForThePdpLoader() throws IOException {
     final Path target = Path.of("target", "contract", "protected-resources.json");
-    Files.createDirectories(target.getParent());
-
-    new ObjectMapper().writerWithDefaultPrettyPrinter().writeValue(target.toFile(), catalog());
+    ProtectedResourcesCatalog.write(target, catalog());
 
     final List<?> written = new ObjectMapper().readValue(target.toFile(), List.class);
     assertEquals(16, written.size());

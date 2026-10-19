@@ -197,7 +197,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-  /notifications:subscribe:
+  /notifications/stream:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/TraceParent'
@@ -213,7 +213,7 @@ paths:
         de retomar el flujo en vivo, sin necesitar ningún encabezado ni parámetro de reanudación.
         Autenticación: con cabecera `Authorization` o, para clientes que no pueden enviar cabeceras
         (`EventSource` nativo), con un ticket de un solo uso obtenido en
-        `POST /notifications:subscribeTicket` y presentado en el parámetro `ticket`. La credencial
+        `POST /notifications/stream/tickets` y presentado en el parámetro `ticket`. La credencial
         principal nunca viaja en la dirección de la conexión. Si llega la cabecera `Authorization`,
         tiene prioridad sobre `ticket`.
       operationId: subscribeToNotificationUpdates
@@ -222,7 +222,7 @@ paths:
           in: query
           required: false
           description: >
-            Ticket de un solo uso emitido por `POST /notifications:subscribeTicket`, vigente 30
+            Ticket de un solo uso emitido por `POST /notifications/stream/tickets`, vigente 30
             segundos. Se consume al usarse: un segundo uso da 401. Ignorado si la cabecera
             `Authorization` está presente.
           schema:
@@ -276,7 +276,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
-  /notifications:subscribeTicket:
+  /notifications/stream/tickets:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/TraceParent'
@@ -285,7 +285,7 @@ paths:
       summary: Obtener un ticket de un solo uso para abrir el panel en vivo
       description: >
         Devuelve un ticket opaco con vigencia corta (30 segundos) que se presenta una sola vez en
-        GET /notifications:subscribe?ticket=... para clientes que no pueden enviar cabeceras
+        GET /notifications/stream?ticket=... para clientes que no pueden enviar cabeceras
         (EventSource nativo). La credencial principal no viaja en la dirección de la conexión. Rol
         mínimo: CLIENTE.
       operationId: issueSubscriptionTicket
@@ -304,7 +304,7 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
-  /notifications:sendBatch:
+  /notifications/batches:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/TraceParent'
@@ -459,7 +459,7 @@ paths:
         servicio un archivo de más de 1 MB y hasta 10 MB. La subida nace en PENDING_SCAN. El cliente envía un
         POST multipart a uploadUrl con todos los campos de uploadFields y el campo "file" al final, antes de
         expiresAt; el almacén rechaza un archivo de tamaño distinto de sizeBytes o de un tipo distinto de
-        contentType. Después avisa con POST /attachment-uploads/{uploadId}:complete y referencia el archivo
+        contentType. Después avisa con POST /attachment-upload-completions y referencia el archivo
         en la notificación con attachmentUrl. uploadFields es una credencial temporal: solo aparece en esta
         respuesta.
       operationId: issueAttachmentUpload
@@ -510,7 +510,7 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
-  /attachment-uploads/{uploadId}:complete:
+  /attachment-upload-completions:
     parameters:
       - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/TraceParent'
@@ -523,8 +523,17 @@ paths:
         FAILED. Si la subida ya está resuelta, o si otra llamada simultánea ganó la transición, devuelve su
         estado vigente sin volver a analizar. Si la subida ya venció, responde 409 y pasa a FAILED.
       operationId: completeAttachmentUpload
-      parameters:
-        - $ref: '#/components/parameters/UploadId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [uploadId]
+              properties:
+                uploadId:
+                  type: string
+                  description: Identificador de la subida emitida por POST /attachment-uploads.
       responses:
         '202':
           headers:

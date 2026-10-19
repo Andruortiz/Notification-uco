@@ -101,7 +101,7 @@ class NotificationBatchE2ETest {
   private Map<String, Object> postBatch(final String tenant, final Object body) {
     return webTestClient
         .post()
-        .uri("/notifications:sendBatch")
+        .uri("/notifications/batches")
         .header("Authorization", TestTokens.bearer(tenant))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(body)
@@ -274,7 +274,7 @@ class NotificationBatchE2ETest {
     final Instant start = Instant.now();
     webTestClient
         .post()
-        .uri("/notifications:sendBatch")
+        .uri("/notifications/batches")
         .header("Authorization", TestTokens.bearer(tenant))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(Map.of("batchId", "batch-too-big", "items", oversized))
@@ -377,7 +377,7 @@ class NotificationBatchE2ETest {
 
     webTestClient
         .post()
-        .uri("/notifications:sendBatch")
+        .uri("/notifications/batches")
         .header("Authorization", TestTokens.bearer(tenant))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(Map.of("items", List.of(itemWithoutPriority)))

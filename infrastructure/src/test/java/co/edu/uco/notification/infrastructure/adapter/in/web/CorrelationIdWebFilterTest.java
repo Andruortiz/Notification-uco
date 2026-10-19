@@ -174,7 +174,7 @@ class CorrelationIdWebFilterTest {
             .issue(TenantId.of("tenant-z"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
     final MockServerWebExchange forbidden =
         MockServerWebExchange.from(
-            MockServerHttpRequest.post("/channels:register")
+            MockServerHttpRequest.post("/channels")
                 .header("Authorization", "Bearer " + token)
                 .header(CorrelationId.HEADER, "req-403"));
     final WebFilterChain chain =

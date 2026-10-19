@@ -201,7 +201,7 @@ class AuthenticationInterinaE2ETest {
     final Map<?, ?> issued =
         webTestClient
             .post()
-            .uri("/notifications:subscribeTicket")
+            .uri("/notifications/stream/tickets")
             .header("Authorization", TestTokens.bearer("tenant-sse"))
             .exchange()
             .expectStatus()
@@ -212,14 +212,14 @@ class AuthenticationInterinaE2ETest {
 
     webTestClient
         .get()
-        .uri("/notifications:subscribe?ticket=" + issued.get("ticket"))
+        .uri("/notifications/stream?ticket=" + issued.get("ticket"))
         .exchange()
         .expectStatus()
         .isOk();
 
     webTestClient
         .get()
-        .uri("/notifications:subscribe?ticket=" + issued.get("ticket"))
+        .uri("/notifications/stream?ticket=" + issued.get("ticket"))
         .exchange()
         .expectStatus()
         .isUnauthorized();

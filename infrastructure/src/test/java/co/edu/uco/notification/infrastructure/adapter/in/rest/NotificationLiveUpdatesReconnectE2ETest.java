@@ -81,7 +81,7 @@ class NotificationLiveUpdatesReconnectE2ETest {
   private Flux<ServerSentEvent<NotificationLiveUpdateResponse>> subscribe() {
     return webTestClient
         .get()
-        .uri("/notifications:subscribe")
+        .uri("/notifications/stream")
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()

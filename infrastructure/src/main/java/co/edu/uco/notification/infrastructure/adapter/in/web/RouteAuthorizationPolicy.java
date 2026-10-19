@@ -18,20 +18,18 @@ public class RouteAuthorizationPolicy {
       List.of(
           new Rule(HttpMethod.POST, path -> path.equals("/notifications"), Role.CLIENTE),
           new Rule(HttpMethod.GET, path -> path.equals("/notifications"), Role.OPERADOR),
-          new Rule(HttpMethod.POST, path -> path.equals("/notifications:sendBatch"), Role.CLIENTE),
+          new Rule(HttpMethod.POST, path -> path.equals("/notifications/batches"), Role.CLIENTE),
           new Rule(HttpMethod.GET, path -> path.matches("^/notifications/[^/:]+$"), Role.CLIENTE),
           new Rule(
               HttpMethod.POST,
               path -> path.matches("^/notifications/[^/:]+:retry$"),
               Role.OPERADOR),
-          new Rule(HttpMethod.GET, path -> path.equals("/notifications:subscribe"), Role.CLIENTE),
+          new Rule(HttpMethod.GET, path -> path.equals("/notifications/stream"), Role.CLIENTE),
           new Rule(
-              HttpMethod.POST, path -> path.equals("/notifications:subscribeTicket"), Role.CLIENTE),
+              HttpMethod.POST, path -> path.equals("/notifications/stream/tickets"), Role.CLIENTE),
           new Rule(HttpMethod.POST, path -> path.equals("/attachment-uploads"), Role.CLIENTE),
           new Rule(
-              HttpMethod.POST,
-              path -> path.matches("^/attachment-uploads/[^/:]+:complete$"),
-              Role.CLIENTE),
+              HttpMethod.POST, path -> path.equals("/attachment-upload-completions"), Role.CLIENTE),
           new Rule(
               HttpMethod.GET, path -> path.matches("^/attachment-uploads/[^/:]+$"), Role.CLIENTE),
           new Rule(HttpMethod.GET, path -> path.equals("/channels"), Role.CLIENTE),

@@ -253,8 +253,9 @@ class AttachmentUploadE2ETest {
   private WebTestClient.ResponseSpec complete(final String tenant, final Object uploadId) {
     return webTestClient
         .post()
-        .uri("/attachment-uploads/" + uploadId + ":complete")
+        .uri("/attachment-upload-completions")
         .header("Authorization", TestTokens.bearer(tenant))
+        .bodyValue(java.util.Map.of("uploadId", uploadId))
         .exchange();
   }
 

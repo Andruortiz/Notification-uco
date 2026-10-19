@@ -95,7 +95,7 @@ class NotificationLiveUpdatesFilteredE2ETest {
       final NotificationStatus status) {
     return webTestClient
         .get()
-        .uri("/notifications:subscribe?status=" + status)
+        .uri("/notifications/stream?status=" + status)
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()

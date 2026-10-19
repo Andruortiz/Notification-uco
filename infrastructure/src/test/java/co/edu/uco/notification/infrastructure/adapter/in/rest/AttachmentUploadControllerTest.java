@@ -54,7 +54,8 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 @AutoConfigureWebTestClient(timeout = "30s")
-@WebFluxTest(controllers = AttachmentUploadController.class)
+@WebFluxTest(
+    controllers = {AttachmentUploadController.class, AttachmentUploadCompletionController.class})
 @Import({
   SecurityConfig.class,
   AuthenticationWebFilter.class,
@@ -92,11 +93,15 @@ class AttachmentUploadControllerTest {
     logs = new ConcurrentListAppender();
     logs.start();
     ((Logger) LoggerFactory.getLogger(AttachmentUploadController.class)).addAppender(logs);
+    ((Logger) LoggerFactory.getLogger(AttachmentUploadCompletionController.class))
+        .addAppender(logs);
   }
 
   @AfterEach
   void releaseLogs() {
     ((Logger) LoggerFactory.getLogger(AttachmentUploadController.class)).detachAppender(logs);
+    ((Logger) LoggerFactory.getLogger(AttachmentUploadCompletionController.class))
+        .detachAppender(logs);
   }
 
   private static AttachmentUpload pending() {
@@ -160,8 +165,9 @@ class AttachmentUploadControllerTest {
 
     webTestClient
         .post()
-        .uri("/attachment-uploads/upload-1:complete")
+        .uri("/attachment-upload-completions")
         .header("Authorization", TestTokens.bearer("tenant-1"))
+        .bodyValue(java.util.Map.of("uploadId", "upload-1"))
         .exchange()
         .expectStatus()
         .isAccepted()
@@ -225,8 +231,9 @@ class AttachmentUploadControllerTest {
         .isNotFound();
     webTestClient
         .post()
-        .uri("/attachment-uploads/upload-1:complete")
+        .uri("/attachment-upload-completions")
         .header("Authorization", TestTokens.bearer("tenant-1"))
+        .bodyValue(java.util.Map.of("uploadId", "upload-1"))
         .exchange()
         .expectStatus()
         .isEqualTo(HttpStatus.CONFLICT);
@@ -267,8 +274,9 @@ class AttachmentUploadControllerTest {
 
     webTestClient
         .post()
-        .uri("/attachment-uploads/upload-1:complete")
+        .uri("/attachment-upload-completions")
         .header("Authorization", TestTokens.bearer("tenant-1"))
+        .bodyValue(java.util.Map.of("uploadId", "upload-1"))
         .exchange()
         .expectStatus()
         .isEqualTo(409)
@@ -303,11 +311,16 @@ class AttachmentUploadControllerTest {
   @Test
   void anInvalidUploadIdFailsInsideTheReactiveFlowInsteadOfThrowingWhileAssembling() {
     final AttachmentUploadController controller =
-        new AttachmentUploadController(issueUseCase, completeUseCase, getUseCase);
+        new AttachmentUploadController(issueUseCase, getUseCase);
+    final AttachmentUploadCompletionController completionController =
+        new AttachmentUploadCompletionController(completeUseCase);
     final AuthenticatedPrincipal principal =
         new AuthenticatedPrincipal("subject-1", TENANT, Role.CLIENTE);
 
-    final Mono<?> complete = assertDoesNotThrow(() -> controller.complete(principal, " "));
+    final Mono<?> complete =
+        assertDoesNotThrow(
+            () ->
+                completionController.complete(principal, new CompleteAttachmentUploadRequest(" ")));
     final Mono<?> get = assertDoesNotThrow(() -> controller.get(principal, " "));
 
     StepVerifier.create(complete).expectError(RuntimeException.class).verify();

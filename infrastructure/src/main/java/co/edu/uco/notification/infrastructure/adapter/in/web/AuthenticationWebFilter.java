@@ -38,7 +38,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(AuthenticationWebFilter.class);
   private static final String BEARER_PREFIX = "Bearer ";
-  private static final String SUBSCRIBE_PATH = "/notifications:subscribe";
+  private static final String SUBSCRIBE_PATH = "/notifications/stream";
   private static final String TICKET_PARAM = "ticket";
   private static final String ACTUATOR_PATH = "/actuator";
   private static final List<String> EXEMPT_PATHS =

@@ -18,5 +18,5 @@ PDP simulado caído, preflight con credenciales solo para el origen configurado.
 ## Manual (cierra la suposición de la forma de la sesión)
 
 1. Levantar dependencias y el servicio con `SECURITY_PEP_ENFORCEMENT_ENABLED=true` y `AUTH_SESSION_URL=http://localhost:18080`.
-2. Con una cookie real: `curl -i -H "Cookie: SECURITY_BASELINE_SESSION=<valor>" http://localhost:8060/notifications/search`.
+2. Con una cookie real: `curl -i -H "Cookie: SECURITY_BASELINE_SESSION=<valor>" http://localhost:8060/notifications`.
 3. Comparar la respuesta de `GET http://localhost:18080/api/v1/session` con `contracts/session-response.md` y corregir el doble si difiere.

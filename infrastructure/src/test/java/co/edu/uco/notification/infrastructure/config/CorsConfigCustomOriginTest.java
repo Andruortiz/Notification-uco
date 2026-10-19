@@ -45,7 +45,7 @@ class CorsConfigCustomOriginTest {
   void configuredOriginIsAllowedAndDefaultOriginNoLongerIs() {
     webTestClient
         .get()
-        .uri("/notifications/{id}", NotificationId.newId().value())
+        .uri("/notifications/detail?notificationId={id}", NotificationId.newId().value())
         .header(HttpHeaders.ORIGIN, "http://localhost:4000")
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
@@ -54,7 +54,7 @@ class CorsConfigCustomOriginTest {
 
     webTestClient
         .get()
-        .uri("/notifications/{id}", NotificationId.newId().value())
+        .uri("/notifications/detail?notificationId={id}", NotificationId.newId().value())
         .header(HttpHeaders.ORIGIN, "http://localhost:5173")
         .exchange()
         .expectStatus()

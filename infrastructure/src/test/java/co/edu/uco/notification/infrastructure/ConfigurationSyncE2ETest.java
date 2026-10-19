@@ -164,7 +164,7 @@ class ConfigurationSyncE2ETest {
       final WebTestClient client, final String notificationId) {
     return client
         .get()
-        .uri("/notifications/{id}", notificationId)
+        .uri("/notifications/detail?notificationId={id}", notificationId)
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()

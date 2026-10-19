@@ -262,7 +262,7 @@ class AttachmentUploadE2ETest {
   private WebTestClient.ResponseSpec getUpload(final String tenant, final Object uploadId) {
     return webTestClient
         .get()
-        .uri("/attachment-uploads/" + uploadId)
+        .uri("/attachment-uploads/status?uploadId=" + uploadId)
         .header("Authorization", TestTokens.bearer(tenant))
         .exchange();
   }
@@ -346,7 +346,7 @@ class AttachmentUploadE2ETest {
       final Map<String, Object> response =
           webTestClient
               .get()
-              .uri("/notifications/{id}", id)
+              .uri("/notifications/detail?notificationId={id}", id)
               .header("Authorization", TestTokens.bearer(tenant))
               .exchange()
               .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
@@ -734,7 +734,7 @@ class AttachmentUploadE2ETest {
           bodyOf(
               webTestClient
                   .get()
-                  .uri("/notifications/" + notificationId)
+                  .uri("/notifications/detail?notificationId=" + notificationId)
                   .header("Authorization", TestTokens.bearer(TENANT_A))
                   .exchange(),
               200));

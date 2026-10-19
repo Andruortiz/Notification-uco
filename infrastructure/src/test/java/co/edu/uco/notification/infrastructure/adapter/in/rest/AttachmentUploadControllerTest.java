@@ -137,7 +137,7 @@ class AttachmentUploadControllerTest {
         .expectStatus()
         .isCreated()
         .expectHeader()
-        .location("/attachment-uploads/upload-1")
+        .location("/attachment-uploads/status?uploadId=upload-1")
         .expectBody()
         .jsonPath("$.uploadId")
         .isEqualTo("upload-1")
@@ -193,7 +193,7 @@ class AttachmentUploadControllerTest {
 
     webTestClient
         .get()
-        .uri("/attachment-uploads/upload-1")
+        .uri("/attachment-uploads/status?uploadId=upload-1")
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()
@@ -224,7 +224,7 @@ class AttachmentUploadControllerTest {
 
     webTestClient
         .get()
-        .uri("/attachment-uploads/upload-1")
+        .uri("/attachment-uploads/status?uploadId=upload-1")
         .header("Authorization", TestTokens.bearer("tenant-2"))
         .exchange()
         .expectStatus()
@@ -292,7 +292,7 @@ class AttachmentUploadControllerTest {
 
     webTestClient
         .get()
-        .uri("/attachment-uploads/upload-1")
+        .uri("/attachment-uploads/status?uploadId=upload-1")
         .header("Authorization", TestTokens.bearer("tenant-1"))
         .exchange()
         .expectStatus()

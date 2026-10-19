@@ -252,7 +252,7 @@ class MetricsE2ETest {
     while (Instant.now().isBefore(deadline)) {
       final EntityExchangeResult<byte[]> result =
           api.get()
-              .uri("/notifications/" + id)
+              .uri("/notifications/detail?notificationId=" + id)
               .header("Authorization", TestTokens.bearer(tenant))
               .exchange()
               .expectBody()

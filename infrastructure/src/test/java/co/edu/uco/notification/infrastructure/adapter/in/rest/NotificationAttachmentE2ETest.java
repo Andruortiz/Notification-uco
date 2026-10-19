@@ -229,7 +229,7 @@ class NotificationAttachmentE2ETest {
       final Map<String, Object> response =
           webTestClient
               .get()
-              .uri("/notifications/{id}", notificationId)
+              .uri("/notifications/detail?notificationId={id}", notificationId)
               .header("Authorization", TestTokens.bearer(TENANT))
               .exchange()
               .expectStatus()
@@ -594,7 +594,7 @@ class NotificationAttachmentE2ETest {
               .expectBody(String.class)
               .returnResult()
               .getResponseBody();
-      final String statusBody = getBody("/notifications/" + notificationId);
+      final String statusBody = getBody("/notifications/detail?notificationId=" + notificationId);
       final String searchBody = getBody("/notifications?limit=50");
       final List<String> eventBodies = new ArrayList<>();
       Message message = rabbitTemplate.receive(events.getName(), 2_000);

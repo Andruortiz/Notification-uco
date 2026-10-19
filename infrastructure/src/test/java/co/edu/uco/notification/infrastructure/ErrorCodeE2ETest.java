@@ -312,7 +312,7 @@ class ErrorCodeE2ETest {
       final EntityExchangeResult<byte[]> result =
           webTestClient
               .get()
-              .uri("/notifications/" + notificationId)
+              .uri("/notifications/detail?notificationId=" + notificationId)
               .header("Authorization", TestTokens.bearer("tenant-a"))
               .exchange()
               .expectBody()

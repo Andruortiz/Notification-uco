@@ -193,7 +193,7 @@ class CorrelationIdWebFilterTest {
 
     final MockServerWebExchange allowed =
         MockServerWebExchange.from(
-            MockServerHttpRequest.get("/notifications/abc")
+            MockServerHttpRequest.get("/notifications/detail?notificationId=abc")
                 .header("Authorization", "Bearer " + token));
     final AtomicReference<Object> tenantSeen = new AtomicReference<>();
     final WebFilterChain capturingTenant =

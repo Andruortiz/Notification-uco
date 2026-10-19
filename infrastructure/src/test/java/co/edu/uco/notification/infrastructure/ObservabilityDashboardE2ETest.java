@@ -230,7 +230,7 @@ class ObservabilityDashboardE2ETest {
     while (Instant.now().isBefore(deadline)) {
       final EntityExchangeResult<byte[]> result =
           api.get()
-              .uri("/notifications/" + id)
+              .uri("/notifications/detail?notificationId=" + id)
               .header("Authorization", TestTokens.bearer(tenant))
               .exchange()
               .expectBody()
@@ -270,7 +270,7 @@ class ObservabilityDashboardE2ETest {
     send("tenant-a", run + "-bad", "SMS", AttemptResult.PERMANENT_FAILURE, "FAILED", 2);
     send("tenant-b", run + "-sms", "SMS", AttemptResult.ACCEPTED, "DELIVERED", 1);
     api.get()
-        .uri("/notifications/unknown-" + run)
+        .uri("/notifications/detail?notificationId=unknown-" + run)
         .header("Authorization", TestTokens.bearer("tenant-a"))
         .exchange()
         .expectStatus()

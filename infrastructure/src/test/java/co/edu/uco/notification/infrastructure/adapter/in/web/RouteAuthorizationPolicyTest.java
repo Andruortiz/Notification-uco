@@ -48,7 +48,7 @@ class RouteAuthorizationPolicyTest {
 
   @Test
   void individualStatusRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/notifications/abc-123"));
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/notifications/detail"));
   }
 
   @Test
@@ -66,7 +66,7 @@ class RouteAuthorizationPolicyTest {
     assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/attachment-uploads"));
     assertEquals(
         Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/attachment-upload-completions"));
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/attachment-uploads/u1"));
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/attachment-uploads/status"));
   }
 
   @Test
@@ -100,6 +100,6 @@ class RouteAuthorizationPolicyTest {
   @Test
   void unknownRouteDefaultsToTheMostRestrictiveRoleNeverToOpenAccess() {
     assertEquals(
-        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.DELETE, "/notifications/abc-123"));
+        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.DELETE, "/notifications/detail"));
   }
 }

@@ -147,17 +147,6 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
                 .expectStatus()
                 .isOk()),
         "ConfigurationResponse");
-    conforms(
-        "POST /notifications/stream/tickets",
-        body(
-            client
-                .post()
-                .uri("/notifications/stream/tickets")
-                .header("Authorization", auth)
-                .exchange()
-                .expectStatus()
-                .isOk()),
-        "SubscriptionTicketResponse");
 
     final var issuedResult =
         issueUpload(TENANT_A)

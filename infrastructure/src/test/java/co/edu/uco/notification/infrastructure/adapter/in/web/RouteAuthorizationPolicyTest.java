@@ -75,15 +75,10 @@ class RouteAuthorizationPolicyTest {
   }
 
   @Test
-  void subscribeTicketRequiresOnlyCliente() {
+  void retiredTicketRouteFallsBackToAdministrador() {
     assertEquals(
-        Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications/stream/tickets"));
-  }
-
-  @Test
-  void subscribeTicketIsNotOpenToOtherMethods() {
-    assertEquals(
-        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.GET, "/notifications/stream/tickets"));
+        Role.ADMINISTRADOR,
+        policy.minimumRoleFor(HttpMethod.POST, "/notifications/stream/tickets"));
   }
 
   @Test

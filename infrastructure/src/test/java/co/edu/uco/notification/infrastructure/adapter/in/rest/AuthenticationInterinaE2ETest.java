@@ -197,32 +197,21 @@ class AuthenticationInterinaE2ETest {
   }
 
   @Test
-  void subscribeAcceptsAOneTimeTicketBecauseEventSourceCannotSendHeaders() {
-    final Map<?, ?> issued =
-        webTestClient
-            .post()
-            .uri("/notifications/stream/tickets")
-            .header("Authorization", TestTokens.bearer("tenant-sse"))
-            .exchange()
-            .expectStatus()
-            .isOk()
-            .expectBody(Map.class)
-            .returnResult()
-            .getResponseBody();
-
+  void subscribeNoLongerAcceptsATicketAndTheIssuingRouteIsGone() {
     webTestClient
         .get()
-        .uri("/notifications/stream?ticket=" + issued.get("ticket"))
-        .exchange()
-        .expectStatus()
-        .isOk();
-
-    webTestClient
-        .get()
-        .uri("/notifications/stream?ticket=" + issued.get("ticket"))
+        .uri("/notifications/stream?ticket=any-ticket-value")
         .exchange()
         .expectStatus()
         .isUnauthorized();
+
+    webTestClient
+        .post()
+        .uri("/notifications/stream/tickets")
+        .header("Authorization", TestTokens.bearer("tenant-sse"))
+        .exchange()
+        .expectStatus()
+        .is4xxClientError();
   }
 
   @Test

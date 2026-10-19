@@ -143,10 +143,7 @@ class CorrelationIdWebFilterTest {
   void aRejectedRequestStillCarriesTheCorrelationIdInHeaderAndBody() {
     final AuthenticationWebFilter authentication =
         new AuthenticationWebFilter(
-            new LocalJwtTokenValidationAdapter(SECRET),
-            org.mockito.Mockito.mock(
-                co.edu.uco.notification.core.port.out.SubscriptionTicketPort.class),
-            new RouteAuthorizationPolicy());
+            new LocalJwtTokenValidationAdapter(SECRET), new RouteAuthorizationPolicy());
     final MockServerWebExchange exchange =
         MockServerWebExchange.from(
             MockServerHttpRequest.post("/notifications").header(CorrelationId.HEADER, "req-401"));
@@ -165,10 +162,7 @@ class CorrelationIdWebFilterTest {
   void aRoleRejectionAlsoCarriesTheCorrelationIdAndTheTenantIsAddedToTheContext() {
     final AuthenticationWebFilter authentication =
         new AuthenticationWebFilter(
-            new LocalJwtTokenValidationAdapter(SECRET),
-            org.mockito.Mockito.mock(
-                co.edu.uco.notification.core.port.out.SubscriptionTicketPort.class),
-            new RouteAuthorizationPolicy());
+            new LocalJwtTokenValidationAdapter(SECRET), new RouteAuthorizationPolicy());
     final String token =
         new LocalJwtTokenIssuer(SECRET)
             .issue(TenantId.of("tenant-z"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));

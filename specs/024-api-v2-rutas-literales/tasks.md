@@ -58,15 +58,17 @@ Rutas base: `API` = `infrastructure/src/main/resources/static/openapi/api-notifi
 
 ## Phase 8: Polish
 
-- [ ] T022 `./mvnw -B -ntp spotless:apply` y pruebas `HexagonalArchitectureTest` y `ModularityTests`
-- [ ] T023 `./mvnw -B -ntp verify` completo (RabbitMQ desechable en 5674, excluyendo las dos pruebas de DLQ) y corrección de lo que falle
-- [ ] T024 Cierre: revisar tareas, desviaciones y excepciones del plan; informe
+- [x] T022 `./mvnw -B -ntp spotless:apply` y pruebas `HexagonalArchitectureTest` y `ModularityTests`
+- [x] T023 `./mvnw -B -ntp verify` completo (RabbitMQ desechable en 5674, excluyendo las dos pruebas de DLQ) y corrección de lo que falle
+- [x] T024 Cierre: revisar tareas, desviaciones y excepciones del plan; informe
 
 ## Desviaciones registradas
 
 - La base 6646bb6 referenciaba AttachmentUploadCompletionController y CompleteAttachmentUploadRequest sin incluirlos; se agregaron en el commit 5891796 antes de seguir (no estaban en el plan).
 - El contrato absorbe el 400 por parametro faltante en detalle y estado de subida, y la E2E de conformidad cubre las 11 operaciones disponibles distintas de GET /notifications/stream, que ya cubren las E2E del panel en vivo.
 - docs/ no esta versionado: sus cambios se entregan como lista al usuario (T021).
+
+- T023: verify completo en verde (jdk-25, RabbitMQ desechable en 5674, sin DeadLetterQueueE2ETest ni RabbitRetryConfigCustomAttemptsTest, que esperan 5673); core 715, utils 32, infrastructure 1034 pruebas, 0 fallos, Spotless, SpotBugs y JaCoCo en verde.
 
 ## Dependencies
 

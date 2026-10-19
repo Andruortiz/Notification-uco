@@ -101,7 +101,7 @@ infrastructure/src/test/java/co/edu/uco/notification/infrastructure/
 ├── adapter/in/web/AuthenticationWebFilterSessionTest.java
 ├── config/CorsCredentialsTest.java
 ├── contract/SessionCookieContractTest.java
-└── e2e/SessionCookieE2ETest.java
+└── adapter/in/rest/SessionCookieE2ETest.java
 ```
 
 **Structure Decision**: puerto en `core`, adaptador HTTP y filtro en `infrastructure`, como el resto de la autenticación

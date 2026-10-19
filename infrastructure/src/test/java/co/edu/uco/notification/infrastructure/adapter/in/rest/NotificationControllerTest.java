@@ -32,7 +32,6 @@ import co.edu.uco.notification.core.port.in.SearchNotificationsUseCase;
 import co.edu.uco.notification.core.port.in.SendNotificationCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationResult;
 import co.edu.uco.notification.core.port.in.SendNotificationUseCase;
-import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
@@ -70,8 +69,6 @@ import reactor.core.publisher.Mono;
 class NotificationControllerTest {
 
   @Autowired private WebTestClient webTestClient;
-
-  @MockitoBean private SubscriptionTicketPort subscriptionTicketPort;
 
   @MockitoBean private SendNotificationUseCase sendNotificationUseCase;
 

@@ -65,23 +65,21 @@ Repetir el paso 3 con un token de `tenant-b` y confirmar, vía `GET /notificatio
 `tenant-a`, que la notificación de `tenant-b` no es visible (comportamiento ya garantizado por el
 aislamiento multi-tenant existente, ahora alimentado por el token).
 
-## 6. SSE con ticket de un solo uso
+## 6. SSE con la cookie de sesión (sustituye al ticket, HU2-111)
 
-El parámetro `access_token` ya no se acepta en `GET /notifications:subscribe`. Quien no pueda enviar
-cabeceras (`EventSource` nativo) pide primero un ticket con su credencial normal:
+El parámetro `access_token` y el ticket de un solo uso ya no se aceptan en `GET /notifications/stream`
+(el ticket y `POST /notifications/stream/tickets` se retiraron en HU2-111). Quien no pueda enviar
+cabeceras (`EventSource` nativo) usa la cookie de sesión del PEP:
 
 ```bash
-TICKET=$(curl -s -X POST -H "Authorization: Bearer $TOKEN_TENANT_A_CLIENTE"   "http://localhost:8060/notifications:subscribeTicket" | jq -r .ticket)
-curl -N "http://localhost:8060/notifications:subscribe?ticket=$TICKET"
+curl -N -H "Cookie: SECURITY_BASELINE_SESSION=$SESSION" "http://localhost:8060/notifications/stream"
 ```
 
-Resultado esperado: `200`, stream `text/event-stream` con la foto inicial de las notificaciones de
-`tenant-a` y luego los eventos en vivo. El ticket vale 30 segundos y se consume al usarlo: repetir el
-segundo `curl` con el mismo ticket, o con `?access_token=...`, responde `401`. La cabecera
-`Authorization`, si llega, tiene prioridad sobre `ticket`.
+Resultado esperado: `200` con la foto inicial de las notificaciones del tenant de la sesión y luego
+los eventos en vivo. Sin credenciales, o con `?ticket=...`, responde `401`.
 
 ## Validación automatizada equivalente
 
 Cada paso de este quickstart tiene una prueba automatizada correspondiente en
-`AuthenticationInterinaE2ETest` y `SubscriptionTicketE2ETest` (ver `tasks.md`) — este documento es una guía de verificación manual,
+`AuthenticationInterinaE2ETest` y `SessionCookieE2ETest` (ver `tasks.md`) — este documento es una guía de verificación manual,
 no sustituye esa prueba.

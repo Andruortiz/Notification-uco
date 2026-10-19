@@ -23,7 +23,6 @@ import co.edu.uco.notification.core.port.in.BatchItemResult;
 import co.edu.uco.notification.core.port.in.BatchNotificationItem;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchCommand;
 import co.edu.uco.notification.core.port.in.SendNotificationBatchUseCase;
-import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
@@ -86,8 +85,6 @@ class NotificationBatchControllerTest {
       """;
 
   @Autowired private WebTestClient webTestClient;
-
-  @MockitoBean private SubscriptionTicketPort subscriptionTicketPort;
 
   @MockitoBean private SendNotificationBatchUseCase sendNotificationBatchUseCase;
 

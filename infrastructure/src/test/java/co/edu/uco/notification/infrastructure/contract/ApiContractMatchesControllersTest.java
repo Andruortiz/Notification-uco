@@ -53,7 +53,7 @@ class ApiContractMatchesControllersTest {
             .map(ApiContract.Operation::key)
             .collect(Collectors.toCollection(TreeSet::new));
 
-    assertEquals(12, available.size());
+    assertEquals(11, available.size());
     assertEquals(available, served());
   }
 

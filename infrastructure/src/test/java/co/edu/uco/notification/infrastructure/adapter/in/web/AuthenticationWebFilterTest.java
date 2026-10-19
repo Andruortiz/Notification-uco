@@ -8,11 +8,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.Role;
-import co.edu.uco.notification.core.domain.valueobject.SubscriptionTicketFingerprint;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
-import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenIssuer;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
@@ -21,13 +18,9 @@ import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.Date;
 import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationContext;
@@ -49,33 +42,8 @@ class AuthenticationWebFilterTest {
   private final LocalJwtTokenIssuer issuer = new LocalJwtTokenIssuer(SECRET);
   private final TokenValidationPort tokenValidationPort =
       new LocalJwtTokenValidationAdapter(SECRET);
-  private final InMemoryTickets tickets = new InMemoryTickets();
   private final AuthenticationWebFilter filter =
-      new AuthenticationWebFilter(tokenValidationPort, tickets, new RouteAuthorizationPolicy());
-
-  private static final class InMemoryTickets implements SubscriptionTicketPort {
-
-    private final Map<String, AuthenticatedPrincipal> stored = new ConcurrentHashMap<>();
-
-    String issue(final String ticket, final Role role) {
-      stored.put(
-          SubscriptionTicketFingerprint.of(ticket),
-          new AuthenticatedPrincipal("client-1", TenantId.of("tenant-a"), role));
-      return ticket;
-    }
-
-    @Override
-    public Mono<Void> save(
-        final String fingerprint, final AuthenticatedPrincipal principal, final Instant expiresAt) {
-      stored.put(fingerprint, principal);
-      return Mono.empty();
-    }
-
-    @Override
-    public Mono<AuthenticatedPrincipal> consume(final String fingerprint) {
-      return Mono.justOrEmpty(stored.remove(fingerprint));
-    }
-  }
+      new AuthenticationWebFilter(tokenValidationPort, new RouteAuthorizationPolicy());
 
   @Test
   void rejectsRequestWithoutAuthorizationHeader() {
@@ -303,52 +271,6 @@ class AuthenticationWebFilterTest {
   }
 
   @Test
-  void subscribeWithAValidTicketResolvesThePrincipalWithoutTouchingTokenValidation() {
-    final AtomicBoolean validatorCalled = new AtomicBoolean(false);
-    final TokenValidationPort failingValidator =
-        rawToken -> {
-          validatorCalled.set(true);
-          return Mono.error(new IllegalStateException("must not be called"));
-        };
-    final AuthenticationWebFilter ticketFilter =
-        new AuthenticationWebFilter(failingValidator, tickets, new RouteAuthorizationPolicy());
-    final String ticket =
-        tickets.issue("valid-ticket-0000000000000000000000000000001", Role.CLIENTE);
-    final ServerWebExchange exchange = subscribeExchange("ticket=" + ticket);
-    final AtomicReference<Object> principal = new AtomicReference<>();
-    final WebFilterChain chain =
-        chainExchange -> {
-          principal.set(chainExchange.getAttribute(AuthenticationWebFilter.PRINCIPAL_ATTRIBUTE));
-          return Mono.empty();
-        };
-
-    StepVerifier.create(ticketFilter.filter(exchange, chain)).verifyComplete();
-
-    assertFalse(validatorCalled.get());
-    assertEquals(
-        new AuthenticatedPrincipal("client-1", TenantId.of("tenant-a"), Role.CLIENTE),
-        principal.get());
-  }
-
-  @Test
-  void theSameTicketCannotBeUsedTwice() {
-    final String ticket = tickets.issue("single-use-ticket-000000000000000000000001", Role.CLIENTE);
-
-    final AtomicBoolean firstInvoked = new AtomicBoolean(false);
-    StepVerifier.create(
-            filter.filter(subscribeExchange("ticket=" + ticket), recordingChain(firstInvoked)))
-        .verifyComplete();
-    assertTrue(firstInvoked.get());
-
-    final ServerWebExchange second = subscribeExchange("ticket=" + ticket);
-    final AtomicBoolean secondInvoked = new AtomicBoolean(false);
-    StepVerifier.create(filter.filter(second, recordingChain(secondInvoked))).verifyComplete();
-
-    assertEquals(HttpStatus.UNAUTHORIZED, second.getResponse().getStatusCode());
-    assertFalse(secondInvoked.get());
-  }
-
-  @Test
   void anUnknownOrBlankOrMissingTicketIsRejectedWithUnauthorized() {
     for (final String query : List.of("ticket=never-issued", "ticket=", "ticket=%20", "")) {
       final ServerWebExchange exchange = subscribeExchange(query);
@@ -359,20 +281,6 @@ class AuthenticationWebFilterTest {
       assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode(), query);
       assertFalse(chainInvoked.get(), query);
     }
-  }
-
-  @Test
-  void aTicketIsOnlyHonouredOnTheSubscribeRoute() {
-    final String ticket = tickets.issue("route-bound-ticket-0000000000000000000001", Role.CLIENTE);
-    final ServerWebExchange exchange =
-        MockServerWebExchange.from(
-            MockServerHttpRequest.post("/notifications?ticket=" + ticket).build());
-    final AtomicBoolean chainInvoked = new AtomicBoolean(false);
-
-    StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
-
-    assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
-    assertFalse(chainInvoked.get());
   }
 
   @Test
@@ -389,28 +297,8 @@ class AuthenticationWebFilterTest {
   }
 
   @Test
-  void headerTakesPriorityOverTheTicketQueryParam() {
-    final String validToken =
-        issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
-    final String ticket = tickets.issue("unused-ticket-00000000000000000000000001", Role.CLIENTE);
-    final ServerWebExchange exchange =
-        MockServerWebExchange.from(
-            MockServerHttpRequest.get("/notifications/stream?ticket=" + ticket)
-                .header("Authorization", "Bearer " + validToken)
-                .build());
-    final AtomicBoolean chainInvoked = new AtomicBoolean(false);
-
-    StepVerifier.create(filter.filter(exchange, recordingChain(chainInvoked))).verifyComplete();
-
-    assertTrue(chainInvoked.get());
-    StepVerifier.create(tickets.consume(SubscriptionTicketFingerprint.of(ticket)))
-        .expectNextCount(1)
-        .verifyComplete();
-  }
-
-  @Test
-  void anInvalidHeaderIsRejectedEvenWhenAValidTicketIsPresent() {
-    final String ticket = tickets.issue("shadowed-ticket-000000000000000000000001", Role.CLIENTE);
+  void anInvalidHeaderIsRejectedEvenWhenATicketIsPresent() {
+    final String ticket = "shadowed-ticket-000000000000000000000001";
     final ServerWebExchange exchange =
         MockServerWebExchange.from(
             MockServerHttpRequest.get("/notifications/stream?ticket=" + ticket)

@@ -80,7 +80,7 @@ El servicio exige un JWT en `Authorization: Bearer`. El modo se elige con `NOTIF
 
 Cada modo es un adaptador del puerto `TokenValidationPort`; el dominio y el filtro de autenticacion no cambian. En modo `platform` el arranque falla si falta la clave publica.
 
-Panel en vivo: `GET /notifications/stream` acepta la cabecera `Authorization` o, para clientes que no pueden enviar cabeceras (`EventSource` nativo), un ticket de un solo uso. El ticket se pide con `POST /notifications/stream/tickets` (rol minimo `CLIENTE`), vale 30 segundos (`AUTH_SUBSCRIPTION_TICKET_TTL_SECONDS`), se guarda como huella SHA-256 en MongoDB (coleccion `subscription_tickets`) y se presenta una sola vez como `?ticket=`. El parametro `access_token` ya no se acepta.
+Panel en vivo: `GET /notifications/stream` se autentica con la cabecera `Authorization: Bearer` o con la cookie de sesion `SECURITY_BASELINE_SESSION` (un `EventSource` nativo la envia con `withCredentials`). Sin credenciales o con una sesion invalida responde 401; si la plataforma de sesiones no responde, 503. Desde HU2-111 se retiraron `POST /notifications/stream/tickets` y el parametro `ticket`; `access_token` tampoco se acepta.
 
 Contrato de la API (version 2.0.0): todas las rutas son literales, sin `:` ni `{}`, para que el PDP las registre como recursos protegidos. Los identificadores viajan en la query o en el cuerpo: `GET /notifications/detail?notificationId=...`, `GET /attachment-uploads/status?uploadId=...`, `POST /attachment-upload-completions` con `{uploadId}`. Cada operacion declara `x-status` (`available` o `planned`) y `x-minimum-role` en `api-notificaciones.yaml`, que tambien trae la tabla de migracion v1 a v2. La lista de recursos protegidos se genera en cada build en `infrastructure/target/contract/protected-resources.json`.
 
@@ -113,7 +113,7 @@ Si el token trae varios roles, gana el de mayor privilegio; si ninguno es valido
 
 Con el PEP activo (`security.enabled` y `security.pep.enforcement.enabled`), el servicio acepta tambien la cookie `SECURITY_BASELINE_SESSION` como alternativa al Bearer:
 
-- **Precedencia:** si la peticion trae `Authorization`, manda el Bearer y, si es invalido, responde 401 sin probar la cookie. Sin `Authorization`, se usa la cookie; sin ninguna de las dos, en `GET /notifications/stream` se usa el ticket.
+- **Precedencia:** si la peticion trae `Authorization`, manda el Bearer y, si es invalido, responde 401 sin probar la cookie. Sin `Authorization`, se usa la cookie; sin ninguna de las dos, responde 401 tambien en `GET /notifications/stream`.
 - **Identidad:** el servicio consulta `GET {AUTH_SESSION_URL}{AUTH_SESSION_PATH}` (por defecto `http://localhost:18080/api/v1/session`) reenviando solo esa cookie. Toma `data.subject` y `data.tenantId` de la respuesta; el rol efectivo es `CLIENTE` y la autorizacion por ruta la hace el PEP. No se cachea la identidad: cada peticion con cookie consulta la sesion, de modo que un cierre de sesion se refleja de inmediato.
 - **Errores:** sesion inexistente, expirada, revocada o con una forma inesperada: 401 (`NTF-2001`). Plataforma de sesiones caida, con error 5xx o sin respuesta en `AUTH_SESSION_TIMEOUT_MS` (3000 por defecto): 503 (`NTF-2003`). Con el PEP inactivo la cookie se rechaza con 401.
 - **Variables:** `AUTH_SESSION_URL`, `AUTH_SESSION_PATH`, `AUTH_SESSION_TIMEOUT_MS`.

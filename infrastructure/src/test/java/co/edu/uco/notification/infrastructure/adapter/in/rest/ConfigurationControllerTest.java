@@ -9,7 +9,6 @@ import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.port.in.ConfigurationDescription;
 import co.edu.uco.notification.core.port.in.ParameterDescription;
 import co.edu.uco.notification.core.port.in.QueryConfigurationUseCase;
-import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
@@ -44,8 +43,6 @@ class ConfigurationControllerTest {
   @Autowired private WebTestClient webTestClient;
 
   @MockitoBean private QueryConfigurationUseCase queryConfigurationUseCase;
-
-  @MockitoBean private SubscriptionTicketPort subscriptionTicketPort;
 
   @Test
   void administradorReceivesTheConfigurationWithEveryField() {

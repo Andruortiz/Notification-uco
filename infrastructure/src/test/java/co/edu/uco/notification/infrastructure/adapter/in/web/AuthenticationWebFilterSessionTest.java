@@ -10,18 +10,15 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.Role;
-import co.edu.uco.notification.core.domain.valueobject.SubscriptionTicketFingerprint;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.AuthenticationUnavailableException;
 import co.edu.uco.notification.core.exception.InvalidTokenException;
 import co.edu.uco.notification.core.port.out.SessionIdentityPort;
-import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenIssuer;
 import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,7 +47,6 @@ class AuthenticationWebFilterSessionTest {
   private final Map<String, AuthenticatedPrincipal> sessions = new ConcurrentHashMap<>();
   private final AtomicInteger resolutions = new AtomicInteger();
   private final AtomicReference<Throwable> platformFailure = new AtomicReference<>();
-  private final InMemoryTickets tickets = new InMemoryTickets();
   private final SessionIdentityPort sessionPort =
       credential -> {
         resolutions.incrementAndGet();
@@ -67,31 +63,9 @@ class AuthenticationWebFilterSessionTest {
   private final AuthenticationWebFilter filter =
       new AuthenticationWebFilter(
           new LocalJwtTokenValidationAdapter(SECRET),
-          tickets,
           new RouteAuthorizationPolicy(
               new MockEnvironment().withProperty("security.pep.enforcement.enabled", "true")),
           sessionPort);
-
-  private static final class InMemoryTickets implements SubscriptionTicketPort {
-
-    private final Map<String, AuthenticatedPrincipal> stored = new ConcurrentHashMap<>();
-
-    void issue(final String ticket, final AuthenticatedPrincipal principal) {
-      stored.put(SubscriptionTicketFingerprint.of(ticket), principal);
-    }
-
-    @Override
-    public Mono<Void> save(
-        final String fingerprint, final AuthenticatedPrincipal principal, final Instant expiresAt) {
-      stored.put(fingerprint, principal);
-      return Mono.empty();
-    }
-
-    @Override
-    public Mono<AuthenticatedPrincipal> consume(final String fingerprint) {
-      return Mono.justOrEmpty(stored.remove(fingerprint));
-    }
-  }
 
   private static AuthenticatedPrincipal principal(final String tenant) {
     return new AuthenticatedPrincipal("user-" + tenant, TenantId.of(tenant), Role.CLIENTE);
@@ -288,16 +262,14 @@ class AuthenticationWebFilterSessionTest {
   }
 
   @Test
-  void theSubscriptionTicketStillWorksWithoutBearerOrCookie() {
-    tickets.issue("ticket-0000000000000000000000000000000001", principal("tenant-a"));
+  void theStreamWithATicketAndNoBearerOrCookieIsRejectedWithoutConsultingTheSessionPort() {
     final ServerWebExchange exchange =
         MockServerWebExchange.from(
-            request(
-                    HttpMethod.GET,
-                    "/notifications/stream?ticket=ticket-0000000000000000000000000000000001")
-                .build());
+            request(HttpMethod.GET, "/notifications/stream?ticket=any-ticket-value").build());
 
-    assertEquals(principal("tenant-a"), run(exchange).get());
+    run(exchange);
+
+    assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
     assertEquals(0, resolutions.get());
   }
 
@@ -332,10 +304,10 @@ class AuthenticationWebFilterSessionTest {
   }
 
   @Test
-  void withoutTheSessionPortTheConstructorOfThreeArgumentsRejectsAnyCookie() {
+  void withoutTheSessionPortTheConstructorOfTwoArgumentsRejectsAnyCookie() {
     final AuthenticationWebFilter legacy =
         new AuthenticationWebFilter(
-            new LocalJwtTokenValidationAdapter(SECRET), tickets, new RouteAuthorizationPolicy());
+            new LocalJwtTokenValidationAdapter(SECRET), new RouteAuthorizationPolicy());
     final ServerWebExchange exchange = cookieExchange("cookie-a");
 
     StepVerifier.create(legacy.filter(exchange, chainExchange -> Mono.empty())).verifyComplete();

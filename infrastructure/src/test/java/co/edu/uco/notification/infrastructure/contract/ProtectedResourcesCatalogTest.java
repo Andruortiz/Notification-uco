@@ -48,15 +48,15 @@ class ProtectedResourcesCatalogTest {
   void theCatalogHasOneEntryPerOperationWithoutDuplicates() {
     final List<Map<String, Object>> entries = catalog();
 
-    assertEquals(17, entries.size());
+    assertEquals(16, entries.size());
     assertEquals(
-        17,
+        16,
         entries.stream()
             .map(entry -> entry.get("method") + " " + entry.get("path"))
             .collect(Collectors.toSet())
             .size());
     assertEquals(
-        12, entries.stream().filter(entry -> "available".equals(entry.get("status"))).count());
+        11, entries.stream().filter(entry -> "available".equals(entry.get("status"))).count());
   }
 
   @Test
@@ -79,7 +79,7 @@ class ProtectedResourcesCatalogTest {
 
     assertEquals(clientes, countForProfile(entries, "CLIENTE"));
     assertEquals(clientes + operadores, countForProfile(entries, "OPERADOR"));
-    assertEquals(17, countForProfile(entries, "ADMINISTRADOR"));
+    assertEquals(16, countForProfile(entries, "ADMINISTRADOR"));
     assertEquals(List.of("OPERADOR", "ADMINISTRADOR"), profilesFor("OPERADOR"));
   }
 
@@ -91,6 +91,6 @@ class ProtectedResourcesCatalogTest {
     new ObjectMapper().writerWithDefaultPrettyPrinter().writeValue(target.toFile(), catalog());
 
     final List<?> written = new ObjectMapper().readValue(target.toFile(), List.class);
-    assertEquals(17, written.size());
+    assertEquals(16, written.size());
   }
 }

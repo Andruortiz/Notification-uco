@@ -3,10 +3,8 @@ package co.edu.uco.notification.infrastructure.adapter.in.web;
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.domain.valueobject.SessionCredential;
-import co.edu.uco.notification.core.domain.valueobject.SubscriptionTicketFingerprint;
 import co.edu.uco.notification.core.exception.InvalidTokenException;
 import co.edu.uco.notification.core.port.out.SessionIdentityPort;
-import co.edu.uco.notification.core.port.out.SubscriptionTicketPort;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
@@ -44,37 +42,27 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
   private static final Logger LOGGER = LoggerFactory.getLogger(AuthenticationWebFilter.class);
   private static final String BEARER_PREFIX = "Bearer ";
   private static final String SESSION_COOKIE = "SECURITY_BASELINE_SESSION";
-  private static final String SUBSCRIBE_PATH = "/notifications/stream";
-  private static final String TICKET_PARAM = "ticket";
   private static final String ACTUATOR_PATH = "/actuator";
   private static final List<String> EXEMPT_PATHS =
       List.of("/v3/api-docs", "/swagger-ui", "/swagger-ui.html", "/openapi");
 
   private final TokenValidationPort tokenValidationPort;
-  private final SubscriptionTicketPort subscriptionTicketPort;
   private final RouteAuthorizationPolicy routeAuthorizationPolicy;
   private final SessionIdentityPort sessionIdentityPort;
 
   public AuthenticationWebFilter(
       final TokenValidationPort tokenValidationPort,
-      final SubscriptionTicketPort subscriptionTicketPort,
       final RouteAuthorizationPolicy routeAuthorizationPolicy) {
-    this(
-        tokenValidationPort,
-        subscriptionTicketPort,
-        routeAuthorizationPolicy,
-        AuthenticationWebFilter::rejectSession);
+    this(tokenValidationPort, routeAuthorizationPolicy, AuthenticationWebFilter::rejectSession);
   }
 
   @Autowired
   public AuthenticationWebFilter(
       final TokenValidationPort tokenValidationPort,
-      final SubscriptionTicketPort subscriptionTicketPort,
       final RouteAuthorizationPolicy routeAuthorizationPolicy,
       final ObjectProvider<SessionIdentityPort> sessionIdentityPort) {
     this(
         tokenValidationPort,
-        subscriptionTicketPort,
         routeAuthorizationPolicy,
         sessionIdentityPort.getIfAvailable(() -> AuthenticationWebFilter::rejectSession));
   }
@@ -90,14 +78,10 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
 
   public AuthenticationWebFilter(
       final TokenValidationPort tokenValidationPort,
-      final SubscriptionTicketPort subscriptionTicketPort,
       final RouteAuthorizationPolicy routeAuthorizationPolicy,
       final SessionIdentityPort sessionIdentityPort) {
     this.tokenValidationPort =
         Preconditions.requireNonNull(tokenValidationPort, "tokenValidationPort must not be null");
-    this.subscriptionTicketPort =
-        Preconditions.requireNonNull(
-            subscriptionTicketPort, "subscriptionTicketPort must not be null");
     this.routeAuthorizationPolicy =
         Preconditions.requireNonNull(
             routeAuthorizationPolicy, "routeAuthorizationPolicy must not be null");
@@ -120,9 +104,6 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       final SessionCredential session = sessionCredential(exchange);
       if (session != null) {
         return authenticateWithSession(exchange, chain, session);
-      }
-      if (isSubscribe(exchange)) {
-        return authenticateWithTicket(exchange, chain);
       }
     }
     final String rawToken = bearerToken(header);
@@ -155,25 +136,6 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
         Mono.defer(() -> sessionIdentityPort.resolve(credential))
             .map(Authentication::accepted)
             .onErrorResume(error -> Mono.just(Authentication.rejectedSession(error))));
-  }
-
-  private Mono<Void> authenticateWithTicket(
-      final ServerWebExchange exchange, final WebFilterChain chain) {
-    final String ticket = exchange.getRequest().getQueryParams().getFirst(TICKET_PARAM);
-    if (ticket == null || ticket.isBlank()) {
-      return reject(exchange, null, RejectionReason.MISSING_TOKEN);
-    }
-    return finishAuthentication(
-        exchange,
-        chain,
-        subscriptionTicketPort
-            .consume(SubscriptionTicketFingerprint.of(ticket))
-            .map(Authentication::accepted)
-            .onErrorResume(
-                error -> Mono.just(Authentication.rejectedFor(RejectionReason.INVALID_TICKET)))
-            .switchIfEmpty(
-                Mono.fromSupplier(
-                    () -> Authentication.rejectedFor(RejectionReason.INVALID_TICKET))));
   }
 
   private Mono<Void> finishAuthentication(
@@ -264,11 +226,6 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
     }
     return EXEMPT_PATHS.stream()
         .anyMatch(exempt -> path.equals(exempt) || path.startsWith(exempt + "/"));
-  }
-
-  private static boolean isSubscribe(final ServerWebExchange exchange) {
-    return exchange.getRequest().getMethod() == HttpMethod.GET
-        && SUBSCRIBE_PATH.equals(exchange.getRequest().getPath().value());
   }
 
   private static String bearerToken(final String header) {

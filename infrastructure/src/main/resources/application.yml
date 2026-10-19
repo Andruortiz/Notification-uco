@@ -95,8 +95,6 @@ notification:
       url: ${AUTH_SESSION_URL:http://localhost:18080}
       path: ${AUTH_SESSION_PATH:/api/v1/session}
       timeout-ms: ${AUTH_SESSION_TIMEOUT_MS:3000}
-    subscription-ticket:
-      ttl-seconds: ${AUTH_SUBSCRIPTION_TICKET_TTL_SECONDS:30}
   scheduler:
     requeue-interval-ms: ${NOTIFICATION_REQUEUE_INTERVAL_MS:30000}
     pending-orphan-threshold-ms: ${NOTIFICATION_PENDING_ORPHAN_THRESHOLD_MS:60000}

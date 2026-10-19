@@ -38,6 +38,8 @@ info:
     7. Se añade el esquema de seguridad `SessionCookie` y las respuestas 401, 403 y 503 del PEP con
     `X-Decision-Id`.
     8. Cada operación declara `x-status` y `x-minimum-role`.
+    9. HU2-111, incompatible: se retira `POST /notifications/stream/tickets` y el parámetro `ticket`
+    de `GET /notifications/stream`. El stream se autentica con Bearer o con la cookie de sesión.
 
     Tabla de migración (método y ruta v1 a método y ruta v2):
 
@@ -49,7 +51,7 @@ info:
     | GET /notifications/{id} | GET /notifications/detail?notificationId={id} |
     | POST /notifications/{id}:retry | POST /notification-retries (cuerpo notificationId; planned) |
     | GET /notifications:subscribe | GET /notifications/stream |
-    | POST /notifications:subscribeTicket | POST /notifications/stream/tickets |
+    | POST /notifications:subscribeTicket | retirado sin reemplazo (HU2-111); el stream usa Bearer o cookie |
     | POST /attachment-uploads | POST /attachment-uploads |
     | POST /attachment-uploads/{uploadId}:complete | POST /attachment-upload-completions (cuerpo uploadId) |
     | GET /attachment-uploads/{uploadId} | GET /attachment-uploads/status?uploadId={uploadId} |
@@ -271,24 +273,15 @@ paths:
         cambio relevante mientras la conexión permanezca abierta. Una reconexión (ej. tras una caída
         de red) es, para el servidor, una solicitud nueva -- siempre reproduce la foto vigente antes
         de retomar el flujo en vivo, sin necesitar ningún encabezado ni parámetro de reanudación.
-        Autenticación: con cabecera `Authorization` o, para clientes que no pueden enviar cabeceras
-        (`EventSource` nativo), con un ticket de un solo uso obtenido en
-        `POST /notifications/stream/tickets` y presentado en el parámetro `ticket`. La credencial
-        principal nunca viaja en la dirección de la conexión. Si llega la cabecera `Authorization`,
-        tiene prioridad sobre `ticket`.
+        Autenticación: con cabecera `Authorization: Bearer` o con la cookie de sesión
+        `SECURITY_BASELINE_SESSION` (HU2-111), que un `EventSource` nativo envía con
+        `withCredentials`. La credencial nunca viaja en la dirección de la conexión. Si llega la
+        cabecera `Authorization`, tiene prioridad sobre la cookie. Sin credenciales, o con una
+        sesión inválida, responde 401; si la plataforma de sesiones no responde, 503.
       operationId: subscribeToNotificationUpdates
       x-status: available
       x-minimum-role: CLIENTE
       parameters:
-        - name: ticket
-          in: query
-          required: false
-          description: >
-            Ticket de un solo uso emitido por `POST /notifications/stream/tickets`, vigente 30
-            segundos. Se consume al usarse: un segundo uso da 401. Ignorado si la cabecera
-            `Authorization` está presente.
-          schema:
-            type: string
         - name: recipientId
           in: query
           schema:
@@ -328,8 +321,7 @@ paths:
                 $ref: '#/components/schemas/NotificationLiveUpdate'
         '401':
           description: >
-            Ticket ausente, caducado, ya usado o desconocido; también cabecera `Authorization`
-            inválida.
+            Sin credenciales, cabecera `Authorization` inválida o cookie de sesión inválida.
           headers:
             X-Correlation-Id:
               $ref: '#/components/headers/CorrelationId'
@@ -342,38 +334,6 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/PepErrorResponse'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-        '503':
-          $ref: '#/components/responses/PepUnavailable'
-
-  /notifications/stream/tickets:
-    parameters:
-      - $ref: '#/components/parameters/CorrelationId'
-      - $ref: '#/components/parameters/TraceParent'
-    post:
-      tags: [Notificaciones]
-      summary: Obtener un ticket de un solo uso para abrir el panel en vivo
-      description: >
-        Devuelve un ticket opaco con vigencia corta (30 segundos) que se presenta una sola vez en
-        GET /notifications/stream?ticket=... para clientes que no pueden enviar cabeceras
-        (EventSource nativo). La credencial principal no viaja en la dirección de la conexión. Rol
-        mínimo: CLIENTE.
-      operationId: issueSubscriptionTicket
-      x-status: available
-      x-minimum-role: CLIENTE
-      responses:
-        '200':
-          headers:
-            X-Correlation-Id:
-              $ref: '#/components/headers/CorrelationId'
-          description: Ticket emitido.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SubscriptionTicketResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '503':
@@ -1404,18 +1364,6 @@ components:
         duplicate:
           type: boolean
           description: true si ya existía una notificación con el mismo (tenantId, externalId).
-
-    SubscriptionTicketResponse:
-      type: object
-      required: [ticket, expiresInSeconds]
-      properties:
-        ticket:
-          type: string
-          description: Ticket opaco de un solo uso (43 caracteres base64url).
-        expiresInSeconds:
-          type: integer
-          example: 30
-          description: Segundos de vigencia del ticket desde su emisión.
 
     SendNotificationBatchRequest:
       type: object

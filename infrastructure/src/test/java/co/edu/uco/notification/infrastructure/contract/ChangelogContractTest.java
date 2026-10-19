@@ -17,7 +17,6 @@ class ChangelogContractTest {
     V1_TO_V2.put("GET /notifications/{id}", "GET /notifications/detail");
     V1_TO_V2.put("POST /notifications/{id}:retry", "POST /notification-retries");
     V1_TO_V2.put("GET /notifications:subscribe", "GET /notifications/stream");
-    V1_TO_V2.put("POST /notifications:subscribeTicket", "POST /notifications/stream/tickets");
     V1_TO_V2.put(
         "POST /attachment-uploads/{uploadId}:complete", "POST /attachment-upload-completions");
     V1_TO_V2.put("GET /attachment-uploads/{uploadId}", "GET /attachment-uploads/status");
@@ -44,6 +43,20 @@ class ChangelogContractTest {
           assertTrue(description.contains(v1), v1);
           assertTrue(description.contains(v2), v2);
         });
+  }
+
+  @Test
+  void theChangelogDocumentsTheRetiredTicketAndTheContractNoLongerServesIt() {
+    assertTrue(description().contains("POST /notifications/stream/tickets"));
+    assertTrue(description().contains("HU2-111"));
+    assertTrue(
+        ApiContract.operations().stream()
+            .noneMatch(operation -> operation.path().equals("/notifications/stream/tickets")));
+    final Map<String, Object> stream =
+        ApiContract.map(
+            ApiContract.map(ApiContract.document().get("paths")).get("/notifications/stream"));
+    final String serialized = String.valueOf(stream.get("get"));
+    assertTrue(!serialized.contains("name=ticket"), serialized);
   }
 
   @Test

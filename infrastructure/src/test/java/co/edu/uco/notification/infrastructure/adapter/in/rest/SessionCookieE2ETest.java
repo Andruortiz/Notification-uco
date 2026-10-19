@@ -241,6 +241,43 @@ class SessionCookieE2ETest {
   }
 
   @Test
+  void theStreamRejectsMissingCredentialsTicketsAndInvalidSessionsAndSignalsPlatformOutage() {
+    client.get().uri("/notifications/stream").exchange().expectStatus().isUnauthorized();
+    client
+        .get()
+        .uri("/notifications/stream?ticket=any-ticket-value")
+        .exchange()
+        .expectStatus()
+        .isUnauthorized();
+    assertEquals(0, PLATFORM.sessionCalls());
+
+    client
+        .get()
+        .uri("/notifications/stream")
+        .cookie(COOKIE, "never-issued")
+        .exchange()
+        .expectStatus()
+        .isUnauthorized();
+
+    client
+        .post()
+        .uri("/notifications/stream/tickets")
+        .cookie(COOKIE, "cookie-a")
+        .exchange()
+        .expectStatus()
+        .is4xxClientError();
+
+    PLATFORM.failSessionWith(500);
+    client
+        .get()
+        .uri("/notifications/stream")
+        .cookie(COOKIE, "cookie-a")
+        .exchange()
+        .expectStatus()
+        .isEqualTo(503);
+  }
+
+  @Test
   void aRequestWithoutCredentialIsRejectedBeforeTheSecurityPlatformIsConsulted() {
     client
         .get()
@@ -339,20 +376,6 @@ class SessionCookieE2ETest {
         .expectStatus()
         .isUnauthorized();
     assertEquals(sessionCallsBefore, PLATFORM.sessionCalls());
-  }
-
-  @Test
-  void aTicketCanBeIssuedWithTheSessionCookie() {
-    client
-        .post()
-        .uri("/notifications/stream/tickets")
-        .cookie(COOKIE, "cookie-a")
-        .exchange()
-        .expectStatus()
-        .is2xxSuccessful()
-        .expectBody()
-        .jsonPath("$.ticket")
-        .isNotEmpty();
   }
 
   private static void pause(final Duration duration) {

@@ -35,8 +35,7 @@ class ApiContractLiteralPathsTest {
   @Test
   void validatorAcceptsLiteralPaths() {
     assertTrue(
-        violations(List.of("/notifications", "/notifications/stream/tickets", "/a.b_c~d-e"))
-            .isEmpty());
+        violations(List.of("/notifications", "/notifications/stream", "/a.b_c~d-e")).isEmpty());
   }
 
   @Test
@@ -49,7 +48,7 @@ class ApiContractLiteralPathsTest {
 
   @Test
   void contractDeclaresSeventeenOperationsOnThirteenPaths() {
-    assertEquals(17, ApiContract.operations().size());
-    assertEquals(13, ApiContract.paths().size());
+    assertEquals(16, ApiContract.operations().size());
+    assertEquals(12, ApiContract.paths().size());
   }
 }

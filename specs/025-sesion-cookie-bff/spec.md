@@ -27,9 +27,9 @@ tenant), V (commits), VI (aprobación), VII (sin atajos: lo provisional se regis
 - De la credencial el servicio necesita tenant, identificador de usuario y rol (`AuthenticatedPrincipal`); el aislamiento
   por tenant de todo el servicio depende de ese principal.
 - `CorsConfig` no declara credenciales, así que un navegador no puede enviar la cookie en una llamada entre orígenes.
-- El PDP expone `GET /api/v1/session`; según el frontend de referencia de la plataforma devuelve, dentro de un sobre
-  `ApiResponse`, `subject`, `name`, `email` y `tenantId`, sin roles. Esta forma NO está verificada contra el PDP real
-  (sin cookie responde 401 y no hay contrato publicado en el entorno local).
+- El PDP expone `GET /api/v1/session`; con una cookie válida (verificado por el usuario el 2026-10-19) responde
+  `{"code":"SESSION_ACTIVE","message":"Authenticated session","data":{"subject","name","email","tenantId"},...}`. `name` puede
+  venir vacío, no hay roles y el tenant efectivo es `data.tenantId`. Sin cookie responde 401.
 - El panel envía la cookie con `credentials: 'include'` y hoy pasa por el proxy de Vite (mismo origen), de modo que CORS
   solo es necesario si se llama al servicio directamente desde otro origen.
 
@@ -37,17 +37,20 @@ tenant), V (commits), VI (aprobación), VII (sin atajos: lo provisional se regis
 
 ### Session 2026-10-19
 
-Preguntas abiertas que no se pueden resolver con la evidencia disponible; se dejan sin adivinar para el equipo de seguridad
-(el análisis de opciones está en `research.md`):
+Resueltas con la aprobación del plan (2026-10-19; análisis en `research.md`):
 
-- [NEEDS CLARIFICATION: ¿De dónde sale la identidad (tenant, usuario, roles) de una petición autenticada solo por cookie?
-  Opciones: A) el PEP/PDP la entrega al autorizar (requiere cambio del starter, hoy no la expone); B) el BFF reenvía un
-  Bearer; C) el servicio consulta `GET /api/v1/session` al PDP con la cookie. Hoy solo C es viable sin cambios ajenos.]
-- [NEEDS CLARIFICATION: ¿Qué rol interno tiene una sesión de cookie, dado que `GET /api/v1/session` no devuelve roles?
-  Opciones: rol mínimo fijo con la autorización fina delegada al PEP, rol derivado de un dato adicional que el PDP aporte,
-  o rechazar cookie en operaciones que exigen rol superior.]
-- [NEEDS CLARIFICATION: ¿Qué tolerancia hay entre el cierre de sesión o revocación en el PDP y el rechazo en el servicio?
-  Determina si se admite cachear la identidad resuelta y por cuánto tiempo.]
+- Q: ¿De dónde sale la identidad de una petición autenticada solo por cookie? A: opción C, el servicio consulta
+  `GET /api/v1/session` al PDP con la cookie, como puente documentado como excepción; la opción A (el starter expone la
+  identidad) es el objetivo.
+- Q: ¿Qué rol tiene una sesión de cookie? A: `CLIENTE`, igual que el Bearer con el PEP activo; la autorización fina por ruta
+  y rol la hace el PEP y la cookie solo se acepta con el PEP activo.
+
+Siguen abiertas con el equipo de seguridad:
+
+- Si el backend puede llamar `GET /api/v1/session` servicio a servicio y si exige `X-Application-Credential`.
+- Tolerancia entre el cierre de sesión o revocación en el PDP y el rechazo en el servicio. Mientras no se confirme no se
+  cachea la identidad (cada petición con cookie consulta la sesión).
+- Fecha de la opción A.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -151,8 +154,8 @@ El contrato y el README dejan de decir que el modo interino solo acepta Bearer y
   o la sesión es inválida, expirada o revocada.
 - **FR-005**: El servicio MUST distinguir "sesión inválida" (401) de "plataforma de sesiones no disponible" (503 con error
   documentado), sin dejar la petición colgada: debe haber un tiempo límite acotado.
-- **FR-006**: Una sesión por cookie MUST quedar sujeta a la misma autorización por ruta y rol que el Bearer, conforme a la
-  decisión sobre el rol [NEEDS CLARIFICATION: rol de una sesión de cookie, ver Clarifications].
+- **FR-006**: Una sesión por cookie MUST quedar sujeta a la misma autorización por ruta y rol que el Bearer, con el rol
+  `CLIENTE` y la autorización fina delegada al PEP, que debe estar activo.
 - **FR-007**: El servicio MUST registrar los rechazos por cookie con el mismo formato de log de rechazos de autenticación
   (motivo categórico, tenant si se conoce) y MUST NOT registrar el valor de la cookie.
 - **FR-008**: El servicio MUST permitir CORS con credenciales únicamente para los orígenes explícitamente configurados, MUST
@@ -166,7 +169,7 @@ El contrato y el README dejan de decir que el modo interino solo acepta Bearer y
 - **FR-012**: La resolución de identidad por cookie MUST estar detrás de un puerto de salida de `core` sin dependencias de
   framework; el adaptador vive en `infrastructure`.
 - **FR-013**: Si se cachea la identidad resuelta, el servicio MUST acotarla por tiempo y MUST NOT servir una sesión cerrada
-  más allá de la tolerancia acordada [NEEDS CLARIFICATION: tolerancia de revocación, ver Clarifications].
+  más allá de la tolerancia acordada; mientras no esté confirmada, no se cachea.
 
 ### Key Entities
 

@@ -44,12 +44,13 @@ resuelve la pregunta del rol para la cookie con el mismo criterio que el Bearer.
 `/v3/api-docs`, `/swagger-ui.html` y `/api/v1/session/openapi` también dan 401. No se dispone de una cookie válida ni de
 credenciales, y no se intentó iniciar sesión. Por tanto la forma de la respuesta 200 NO se pudo observar.
 
-### E5. Forma esperada de la sesión (no verificada)
+### E5. Forma de la sesión (verificada por el usuario el 2026-10-19)
 
-El frontend de referencia de la plataforma (`securityBaseline-vue/src/api/contracts.ts`) tipa la respuesta como
-`ApiResponse<Session>`, con `ApiResponse = {code, message, data, timestamp, requestId, correlationId}` y
-`Session = {subject, name, email, tenantId}`. No hay roles. El cierre de sesión es `GET /api/v1/session/logout` y el inicio es
-`/oauth2/authorization/keycloak` (Keycloak). Es evidencia de segunda mano.
+Con una cookie válida, `GET /api/v1/session` responde (observado por el usuario en el navegador):
+`{"code":"SESSION_ACTIVE","message":"Authenticated session","data":{"subject":"<uuid>","name":"","email":"<correo>","tenantId":"universidad-uco"},"timestamp":"...","requestId":"...","correlationId":"..."}`.
+`name` puede venir vacío, no hay roles y el tenant efectivo es `data.tenantId`. Sin cookie responde 401. Coincide con los tipos
+del frontend de referencia (`securityBaseline-vue/src/api/contracts.ts`). El cierre de sesión es `GET /api/v1/session/logout`
+y el inicio es `/oauth2/authorization/keycloak` (Keycloak).
 
 ### E6. Alcance del navegador
 
@@ -66,7 +67,7 @@ credenciales solo importa si el panel llama directamente al servicio desde otro 
 |---|---|---|---|---|
 | A | Tomar la identidad de lo que el PEP/PDP entrega al autorizar | No viable con 0.1.3 (E1). Requiere que seguridad publique un starter que deje la identidad en un atributo del exchange o en cabeceras | Mínimo en este servicio una vez exista; una sola llamada al PDP por petición | Dependencia externa sin fecha; contrato nuevo |
 | B | El BFF reenvía un Bearer | Requiere un BFF que convierta cookie en token. El proxy de Vite no lo hace; no hay evidencia de que el PDP emita tokens para el navegador | Ninguno en el servicio (ya funciona) | Fuera de nuestro control; mueve el problema a otro equipo y a la infraestructura |
-| C | El servicio consulta `GET /api/v1/session` al PDP con la cookie | Viable con lo que existe, si la respuesta 200 coincide con E5 (no verificado) | Un adaptador de salida y un puerto; una llamada extra por petición al PDP (además de la del PEP) | Forma del contrato sin verificar; acoplamiento a un endpoint pensado para el frontend; latencia y disponibilidad |
+| C | El servicio consulta `GET /api/v1/session` al PDP con la cookie | Viable con lo que existe, con la forma E5, ya verificada | Un adaptador de salida y un puerto; una llamada extra por petición al PDP (además de la del PEP) | Acoplamiento a un endpoint pensado para el frontend; latencia y disponibilidad |
 
 ### Decisión: C como puente, A como objetivo
 
@@ -76,9 +77,8 @@ adaptador de sesión se reemplaza sin tocar `core` ni los controladores, porque 
 
 ### Condiciones de la decisión (se deben cumplir antes de implementar)
 
-1. Que seguridad confirme la forma de `GET /api/v1/session` (campos exactos, estado en sesión inválida, tiempos). Hasta
-   entonces el adaptador se escribe contra la forma E5 y su prueba de integración usa un servidor simulado cuyo cuerpo está
-   fijado en `contracts/session-response.md`; es una suposición declarada, no una verificación.
+1. Forma de `GET /api/v1/session`: resuelta (E5, verificada por el usuario). La prueba de integración del adaptador usa un
+   servidor simulado cuyo cuerpo reproduce esa respuesta (`contracts/session-response.md`).
 2. Que confirmen que `/api/v1/session` es un endpoint de servicio a servicio aceptable para el backend (hoy está pensado para el
    frontend) y no requiere `X-Application-Credential` ni origen.
 
@@ -128,7 +128,7 @@ respuesta. Se mantiene el filtro CORS en `HIGHEST_PRECEDENCE`.
 
 | Qué | Por qué es provisional | Dueño | Fecha límite |
 |---|---|---|---|
-| Resolver la identidad consultando `GET /api/v1/session` al PDP | El starter 0.1.3 no expone la identidad; se sustituye por la opción A | Equipo de Seguridad (starter) con Notification-uco (adaptador) | Por acordar con seguridad; propuesta: antes del cierre de HU2-055 |
+| Resolver la identidad consultando `GET /api/v1/session` al PDP | El starter 0.1.3 no expone la identidad; se sustituye por la opción A | Equipo de Seguridad (starter) con Notification-uco (adaptador) | Antes del cierre de HU2-055 (fijado el 2026-10-19) |
 
 ## Preguntas abiertas para el equipo de seguridad
 

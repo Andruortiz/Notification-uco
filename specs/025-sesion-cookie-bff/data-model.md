@@ -12,7 +12,7 @@ Sin persistencia nueva.
 
 Transiciones: ninguna. La sesión vive en la plataforma de Seguridad; el servicio no la guarda.
 
-Mapeo de la respuesta de sesión (forma esperada, no verificada) a principal:
+Mapeo de la respuesta de sesión (forma verificada, ver contracts/session-response.md) a principal:
 
 | Campo de sesión | Principal |
 |---|---|

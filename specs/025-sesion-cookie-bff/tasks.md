@@ -15,16 +15,16 @@ Rutas base: `API` = `infrastructure/src/main/resources/static/openapi/api-notifi
 
 ## Phase 1: Setup
 
-- [ ] T001 Obtener del equipo de seguridad la confirmación de la forma de `GET /api/v1/session` (200 y errores), si el backend puede llamarlo servicio a servicio y la tolerancia de revocación; actualizar `specs/025-sesion-cookie-bff/contracts/session-response.md` y las secciones de Clarifications de `spec.md`; si la forma difiere, ajustar T008 y T009 antes de empezar. Bloqueante para T008
-- [ ] T002 Registrar la excepción de la opción C (dueño, fecha límite, condición de retiro por la opción A) en `specs/025-sesion-cookie-bff/research.md` con la fecha acordada en T001
+- [x] T001 Forma de `GET /api/v1/session` resuelta y documentada (verificada por el usuario el 2026-10-19). Siguen abiertas con seguridad: llamada servicio a servicio y `X-Application-Credential`, tolerancia de revocación y la opción A
+- [x] T002 Excepción de la opción C registrada en `research.md`: dueño Seguridad (starter) con Notification-uco (adaptador), fecha límite antes del cierre de HU2-055, condición de retiro: el starter expone la identidad (opción A)
 
 ## Phase 2: Foundational
 
 - [ ] T003 [P] Prueba `CTest/domain/valueobject/SessionCredentialTest.java`: rechaza nulo y vacío, `toString` no contiene el valor; verla fallar
 - [ ] T004 [P] `CMain/domain/valueobject/SessionCredential.java`, `CMain/port/out/SessionIdentityPort.java` y `CMain/exception/AuthenticationUnavailableException.java` sin dependencias de framework
 - [ ] T005 [P] `IMain/config/AuthSessionProperties.java` (`url`, `path`, `timeout`) y claves `notification.auth.session.*` en `infrastructure/src/main/resources/application.yml` con variables de entorno `AUTH_SESSION_URL`, `AUTH_SESSION_PATH`, `AUTH_SESSION_TIMEOUT`, sin secretos
-- [ ] T006 Contrato `API` primero (Principio II): actualizar la descripción de `SessionCookie` y de la seguridad global (el servicio acepta la cookie, precedencia Bearer sobre cookie, rol efectivo `CLIENTE`, requiere PEP activo), añadir la respuesta `AuthenticationUnavailable` (503, `ErrorResponse`, código `AUTHENTICATION_UNAVAILABLE`) a las operaciones protegidas, sin rutas nuevas
-- [ ] T007 Añadir `AUTHENTICATION_UNAVAILABLE` a `utils/src/main/java/co/edu/uco/notification/utils/ErrorCode.java` y a `ErrorResponseContractTest` si enumera los códigos; `spotless:apply`
+- [ ] T006 Contrato `API` primero (Principio II): actualizar la descripción de `SessionCookie` y de la seguridad global (el servicio acepta la cookie, precedencia Bearer sobre cookie, rol efectivo `CLIENTE`, requiere PEP activo), añadir la respuesta `AuthenticationUnavailable` (503, `ErrorResponse`, código `AUTHENTICATION_UNAVAILABLE` (NTF-2003)) a las operaciones protegidas, sin rutas nuevas
+- [ ] T007 Añadir `AUTHENTICATION_UNAVAILABLE` (NTF-2003) a `utils/src/main/java/co/edu/uco/notification/utils/ErrorCode.java` y a `ErrorResponseContractTest` si enumera los códigos; `spotless:apply`
 
 ## Phase 3: User Story 1 - Operar con la cookie de sesión (P1)
 
@@ -32,8 +32,8 @@ Rutas base: `API` = `infrastructure/src/main/resources/static/openapi/api-notifi
 
 - [ ] T008 [US1] Prueba de integración `ITest/adapter/out/security/session/PdpSessionIdentityAdapterTest.java` con un servidor HTTP simulado del PDP (cuerpo fijado en `contracts/session-response.md`): 200 produce principal con `CLIENTE`, el tenant y el sujeto de la sesión; reenvía solo la cookie de sesión y `X-Correlation-Id`; 401, 403, cuerpo sin `tenantId` o sin `subject` dan sesión inválida; 5xx, conexión rechazada y respuesta lenta dan indisponible; afirma con `Duration` que el tiempo agotado responde en menos de 5 s; verla fallar
 - [ ] T009 [US1] `IMain/adapter/out/security/session/PdpSessionIdentityAdapter.java` (`WebClient`, condicionado a `PepDelegation.isActive`, no registra el valor de la cookie)
-- [ ] T010 [US1] Prueba unitaria `ITest/adapter/in/web/AuthenticationWebFilterSessionTest.java`: solo cookie válida continúa con el principal; sin credencial 401 `AUTHENTICATION_REQUIRED`; cookie inválida 401; PDP indisponible 503 `AUTHENTICATION_UNAVAILABLE`; cookie con nombre parecido (`XSECURITY_BASELINE_SESSION`) o valor vacío no cuenta; cookie con PEP inactivo 401; el log de rechazo no contiene el valor de la cookie; verla fallar
-- [ ] T011 [US1] `IMain/adapter/in/web/AuthenticationWebFilter.java`: nuevo camino de cookie con `SessionIdentityPort`, nuevos `RejectionReason`, respuesta 503 con `Retry-After` omitido y cuerpo `AUTHENTICATION_UNAVAILABLE`; el principal resultante pasa por el mismo `RouteAuthorizationPolicy` y el mismo atributo `PRINCIPAL_ATTRIBUTE`
+- [ ] T010 [US1] Prueba unitaria `ITest/adapter/in/web/AuthenticationWebFilterSessionTest.java`: solo cookie válida continúa con el principal; sin credencial 401 `AUTHENTICATION_REQUIRED`; cookie inválida 401; PDP indisponible 503 `AUTHENTICATION_UNAVAILABLE` (NTF-2003); cookie con nombre parecido (`XSECURITY_BASELINE_SESSION`) o valor vacío no cuenta; cookie con PEP inactivo 401; el log de rechazo no contiene el valor de la cookie; verla fallar
+- [ ] T011 [US1] `IMain/adapter/in/web/AuthenticationWebFilter.java`: nuevo camino de cookie con `SessionIdentityPort`, nuevos `RejectionReason`, respuesta 503 con `Retry-After` omitido y cuerpo `AUTHENTICATION_UNAVAILABLE` (NTF-2003); el principal resultante pasa por el mismo `RouteAuthorizationPolicy` y el mismo atributo `PRINCIPAL_ATTRIBUTE`
 - [ ] T012 [US1] E2E `ITest/adapter/in/rest/SessionCookieE2ETest.java` (`@SpringBootTest(RANDOM_PORT)`, Mongo y RabbitMQ en Testcontainers, PDP simulado, `WebTestClient`): enviar y buscar con solo cookie; tenant A y tenant B con cookies distintas sin cruce (control positivo: cada tenant sí ve lo suyo; la consulta por identificador del otro tenant es indistinguible de uno inexistente); sin credencial 401; sesión revocada en el PDP simulado 401 en la petición siguiente; PDP simulado caído 503 con aserciones de `Duration` (< 2 s para 401, < 5 s para 503)
 
 ## Phase 4: User Story 2 - Bearer con precedencia y ticket intactos (P1)

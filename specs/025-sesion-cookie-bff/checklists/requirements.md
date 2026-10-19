@@ -12,7 +12,7 @@
 
 ## Requirement Completeness
 
-- [ ] Sin marcadores [NEEDS CLARIFICATION] (quedan 3 a propósito: fuente de identidad, rol de la cookie, tolerancia de revocación; requieren al equipo de seguridad)
+- [x] Sin marcadores [NEEDS CLARIFICATION] (resueltos con la aprobacion del plan; quedan preguntas de seguimiento para seguridad en Clarifications)
 - [x] Requisitos verificables
 - [x] Criterios de éxito medibles
 - [x] Escenarios de aceptación y casos borde definidos

@@ -109,6 +109,18 @@ Si el token trae varios roles, gana el de mayor privilegio; si ninguno es valido
 
 **Pendiente de acordar con el equipo de seguridad:** los nombres reales de los claims, la tabla de roles, el emisor y la audiencia, y como se garantiza que la peticion llega a traves del PEP (red privada, mTLS o firma). Esos valores se ajustan por configuracion.
 
+### Cookie de sesion (BFF/PDP) y CORS con credenciales
+
+Con el PEP activo (`security.enabled` y `security.pep.enforcement.enabled`), el servicio acepta tambien la cookie `SECURITY_BASELINE_SESSION` como alternativa al Bearer:
+
+- **Precedencia:** si la peticion trae `Authorization`, manda el Bearer y, si es invalido, responde 401 sin probar la cookie. Sin `Authorization`, se usa la cookie; sin ninguna de las dos, en `GET /notifications/stream` se usa el ticket.
+- **Identidad:** el servicio consulta `GET {AUTH_SESSION_URL}{AUTH_SESSION_PATH}` (por defecto `http://localhost:18080/api/v1/session`) reenviando solo esa cookie. Toma `data.subject` y `data.tenantId` de la respuesta; el rol efectivo es `CLIENTE` y la autorizacion por ruta la hace el PEP. No se cachea la identidad: cada peticion con cookie consulta la sesion, de modo que un cierre de sesion se refleja de inmediato.
+- **Errores:** sesion inexistente, expirada, revocada o con una forma inesperada: 401 (`NTF-2001`). Plataforma de sesiones caida, con error 5xx o sin respuesta en `AUTH_SESSION_TIMEOUT_MS` (3000 por defecto): 503 (`NTF-2003`). Con el PEP inactivo la cookie se rechaza con 401.
+- **Variables:** `AUTH_SESSION_URL`, `AUTH_SESSION_PATH`, `AUTH_SESSION_TIMEOUT_MS`.
+- **CORS:** `NOTIFICATION_CORS_ALLOWED_ORIGINS` lista los origenes con permiso para llamar con credenciales; el servicio devuelve el origen exacto y `Access-Control-Allow-Credentials: true`, y no arranca si la lista contiene un comodin. Si el panel pasa por el proxy de Vite (mismo origen) CORS no interviene.
+
+Esta resolucion de identidad es provisional (excepcion registrada en `specs/025-sesion-cookie-bff/research.md`): el dueno es Seguridad (starter) con Notification-uco (adaptador) y debe retirarse antes del cierre de HU2-055, cuando el starter exponga la identidad que ya verifica. Siguen abiertos con seguridad: si la consulta de sesion se puede hacer de servicio a servicio y si exige `X-Application-Credential`, y la tolerancia de revocacion que permitiria una cache.
+
 ## Credenciales de GitHub Packages (starter del PEP)
 
 El starter `security-pep-integration-spring-boot-starter` se publica en GitHub Packages (`https://maven.pkg.github.com/seguridad-uco/securitybaseline`), que exige autenticacion incluso para leer. El repositorio y la dependencia estan declarados en `infrastructure/pom.xml` con el identificador de servidor `github`.

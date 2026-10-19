@@ -1,5 +1,16 @@
 <!--
 Sync Impact Report
+Version change: 1.2.2 -> 2.0.0
+Rationale: MAJOR -- Principle II is redefined incompatibly. The pattern `recurso:accion` and the path variable
+`GET /notifications/{id}` are retired: the PDP resolves protected resources by exact match on method and literal path
+and rejects `:` and `{}`, so every route must be literal. HU2-098 publishes contract 2.0.0 under this rule.
+Modified principles: II. Contract-first (routes are literal; identifiers travel in the query string or the body).
+Added sections: none.
+Removed sections: none.
+-->
+
+<!--
+Sync Impact Report
 Version change: 1.2.1 -> 1.2.2
 Rationale: PATCH -- clarification of the platform version in "Restricciones tecnicas": Spring Boot 3 becomes
 Spring Boot 4 (ADR-0012, which replaces ADR-0002) as part of HU2-106. No principle changed.
@@ -62,13 +73,16 @@ enforcing tool configured yet (Principle IV notes this explicitly as pending, pe
 build con `HexagonalArchitectureTest` — un principio no verificado no es un principio, es una
 intención. (ADR-0004.)
 
-### II. Contract-first, API orientada a acciones
+### II. Contract-first, rutas literales
 Cualquier endpoint nuevo se define primero en `api-notificaciones.yaml` — el controller se escribe
-para cumplir el contrato, no al revés. Las operaciones que representan una acción de negocio
-explícita (no CRUD natural) usan el patrón `recurso:accion` en el path (ej. `/notifications:retry`);
-las que sí son CRUD natural usan REST estándar (ej. `POST /notifications`, `GET /notifications/{id}`).
-El contrato puede contener operaciones planificadas/bloqueadas, siempre que estén identificadas como
-tales.
+para cumplir el contrato, no al revés. Toda ruta del contrato es literal: solo `/`, letras, dígitos
+y `. _ ~ -`, sin `:`, `{}` ni comodines, porque el PDP resuelve el recurso protegido por igualdad
+exacta de método y ruta. Los identificadores de recurso viajan en la query string (consultas, ej.
+`GET /notifications/detail?notificationId=...`) o en el cuerpo (comandos, ej.
+`POST /attachment-upload-completions`). Las acciones de negocio se modelan como recurso (ej.
+`POST /notification-retries`). Cada operación declara `x-status` y `x-minimum-role`. El contrato
+puede contener operaciones planificadas/bloqueadas (`x-status: planned`), siempre que estén
+identificadas como tales y no estén servidas.
 
 ### III. Cero comentarios explicativos
 El código nuevo no lleva comentarios `//` que expliquen huecos, decisiones o trade-offs — el nombre
@@ -206,4 +220,4 @@ propio seguimiento — esta constitución no les asigna una ubicación formal ni
 herramienta externa como fuente de verdad. Lo único vinculante para el proceso de desarrollo asistido
 por IA es lo que está escrito en este archivo y en `specs/<historia>/`.
 
-**Version**: 1.2.2 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-10-16
+**Version**: 2.0.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-10-19

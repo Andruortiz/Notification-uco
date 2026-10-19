@@ -34,7 +34,7 @@ Rutas base: `API` = `infrastructure/src/main/resources/static/openapi/api-notifi
 - [ ] T009 [US1] `IMain/adapter/out/security/session/PdpSessionIdentityAdapter.java` (`WebClient`, condicionado a `PepDelegation.isActive`, no registra el valor de la cookie)
 - [ ] T010 [US1] Prueba unitaria `ITest/adapter/in/web/AuthenticationWebFilterSessionTest.java`: solo cookie válida continúa con el principal; sin credencial 401 `AUTHENTICATION_REQUIRED`; cookie inválida 401; PDP indisponible 503 `AUTHENTICATION_UNAVAILABLE`; cookie con nombre parecido (`XSECURITY_BASELINE_SESSION`) o valor vacío no cuenta; cookie con PEP inactivo 401; el log de rechazo no contiene el valor de la cookie; verla fallar
 - [ ] T011 [US1] `IMain/adapter/in/web/AuthenticationWebFilter.java`: nuevo camino de cookie con `SessionIdentityPort`, nuevos `RejectionReason`, respuesta 503 con `Retry-After` omitido y cuerpo `AUTHENTICATION_UNAVAILABLE`; el principal resultante pasa por el mismo `RouteAuthorizationPolicy` y el mismo atributo `PRINCIPAL_ATTRIBUTE`
-- [ ] T012 [US1] E2E `ITest/e2e/SessionCookieE2ETest.java` (`@SpringBootTest(RANDOM_PORT)`, Mongo y RabbitMQ en Testcontainers, PDP simulado, `WebTestClient`): enviar y buscar con solo cookie; tenant A y tenant B con cookies distintas sin cruce (control positivo: cada tenant sí ve lo suyo; la consulta por identificador del otro tenant es indistinguible de uno inexistente); sin credencial 401; sesión revocada en el PDP simulado 401 en la petición siguiente; PDP simulado caído 503 con aserciones de `Duration` (< 2 s para 401, < 5 s para 503)
+- [ ] T012 [US1] E2E `ITest/adapter/in/rest/SessionCookieE2ETest.java` (`@SpringBootTest(RANDOM_PORT)`, Mongo y RabbitMQ en Testcontainers, PDP simulado, `WebTestClient`): enviar y buscar con solo cookie; tenant A y tenant B con cookies distintas sin cruce (control positivo: cada tenant sí ve lo suyo; la consulta por identificador del otro tenant es indistinguible de uno inexistente); sin credencial 401; sesión revocada en el PDP simulado 401 en la petición siguiente; PDP simulado caído 503 con aserciones de `Duration` (< 2 s para 401, < 5 s para 503)
 
 ## Phase 4: User Story 2 - Bearer con precedencia y ticket intactos (P1)
 
@@ -42,7 +42,7 @@ Rutas base: `API` = `infrastructure/src/main/resources/static/openapi/api-notifi
 
 - [ ] T013 [US2] Ampliar `ITest/adapter/in/web/AuthenticationWebFilterSessionTest.java`: Bearer válido de A con cookie válida de B resuelve a A y el puerto de sesión no se invoca; Bearer inválido con cookie válida da 401 sin invocar el puerto; `GET /notifications/stream` con `ticket` y sin Bearer ni cookie sigue funcionando; con cookie autentica por cookie; verlas fallar donde corresponda
 - [ ] T014 [US2] Ajustar el orden de decisión en `IMain/adapter/in/web/AuthenticationWebFilter.java` para cumplir la precedencia Bearer > cookie > ticket; ejecutar la clase de pruebas existente del filtro sin modificar aserciones
-- [ ] T015 [US2] En `ITest/e2e/SessionCookieE2ETest.java` añadir el caso Bearer más cookie de tenants distintos y la suscripción en vivo (`/notifications/stream`) con cookie y con ticket, ambas afirmando que solo llegan eventos del tenant de la credencial usada
+- [ ] T015 [US2] En `ITest/adapter/in/rest/SessionCookieE2ETest.java` añadir el caso Bearer más cookie de tenants distintos y la suscripción en vivo (`/notifications/stream`) con cookie y con ticket, ambas afirmando que solo llegan eventos del tenant de la credencial usada
 
 ## Phase 5: User Story 3 - CORS con credenciales (P2)
 

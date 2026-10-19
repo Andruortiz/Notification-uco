@@ -30,7 +30,8 @@ public final class FakePdpAdmin implements AutoCloseable {
   private static final Set<String> METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE");
   private static final Pattern APPLICATION_RESOURCES =
       Pattern.compile("^/api/v1/applications/([^/]+)/resources$");
-  private static final Pattern ROLE_RESOURCES = Pattern.compile("^/api/v1/roles/([^/]+)/resources$");
+  private static final Pattern ROLE_RESOURCES =
+      Pattern.compile("^/api/v1/roles/([^/]+)/resources$");
   private static final Pattern PROFILE_ROLES = Pattern.compile("^/api/v1/profiles/([^/]+)/roles$");
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
@@ -134,7 +135,9 @@ public final class FakePdpAdmin implements AutoCloseable {
     }
     if (!"GET".equals(method)) {
       final String header = exchange.getRequestHeaders().getFirst(CSRF_HEADER);
-      if (header == null || !cookies.contains(CSRF_COOKIE + "=" + header) || !header.equals(csrfToken)) {
+      if (header == null
+          || !cookies.contains(CSRF_COOKIE + "=" + header)
+          || !header.equals(csrfToken)) {
         send(exchange, 403, Map.of("detail", "CSRF"));
         return;
       }
@@ -236,7 +239,8 @@ public final class FakePdpAdmin implements AutoCloseable {
     }
     final boolean duplicate =
         store.stream()
-            .anyMatch(r -> name.equals(r.get("name")) && applicationId.equals(r.get("applicationId")));
+            .anyMatch(
+                r -> name.equals(r.get("name")) && applicationId.equals(r.get("applicationId")));
     if (duplicate) {
       send(exchange, 409, Map.of("detail", "nombre duplicado"));
       return;

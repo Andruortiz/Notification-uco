@@ -98,7 +98,8 @@ class PdpProvisioningScriptTest {
       builder.environment().put("PDP_ADMIN_SESSION", SESSION);
     }
     final Process process = builder.start();
-    final String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    final String output =
+        new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
     assertTrue(process.waitFor(180, TimeUnit.SECONDS), "el script no termino a tiempo");
     return new Result(process.exitValue(), output);
   }
@@ -187,7 +188,9 @@ class PdpProvisioningScriptTest {
             "PERFIL_CLIENTE", List.of("CLIENTE"),
             "PERFIL_OPERADOR", List.of("CLIENTE", "OPERADOR"),
             "PERFIL_ADMINISTRADOR", List.of("CLIENTE", "OPERADOR", "ADMINISTRADOR"));
-    assertEquals(expected.keySet(), profiles.stream().map(p -> (String) p.get("name")).collect(Collectors.toSet()));
+    assertEquals(
+        expected.keySet(),
+        profiles.stream().map(p -> (String) p.get("name")).collect(Collectors.toSet()));
     for (final Map.Entry<String, List<String>> entry : expected.entrySet()) {
       final Map<String, Object> profile = byName(profiles, entry.getKey());
       final Set<String> roleIds =
@@ -207,13 +210,17 @@ class PdpProvisioningScriptTest {
     final List<Map<String, Object>> roles = pdp.roles(FakePdpAdmin.APPLICATION_ID);
     for (final String profile : ProtectedResourcesCatalog.ROLES) {
       final Set<String> viaRoles = new LinkedHashSet<>();
-      for (final String member : ProtectedResourcesCatalog.ROLES.subList(0, ProtectedResourcesCatalog.ROLES.indexOf(profile) + 1)) {
+      for (final String member :
+          ProtectedResourcesCatalog.ROLES.subList(
+              0, ProtectedResourcesCatalog.ROLES.indexOf(profile) + 1)) {
         viaRoles.addAll(grantedKeys(byName(roles, member)));
       }
       final Set<String> viaCatalog =
           keysOf(
               available().stream()
-                  .filter(op -> ProtectedResourcesCatalog.profilesFor(op.minimumRole()).contains(profile))
+                  .filter(
+                      op ->
+                          ProtectedResourcesCatalog.profilesFor(op.minimumRole()).contains(profile))
                   .toList());
       assertEquals(viaCatalog, viaRoles, profile);
     }
@@ -249,11 +256,18 @@ class PdpProvisioningScriptTest {
 
     assertEquals(0, result.exitCode(), result.output());
     assertEquals(keysOf(available()), registeredKeys());
-    assertEquals(1, pdp.roles(FakePdpAdmin.APPLICATION_ID).stream().filter(r -> "CLIENTE".equals(r.get("name"))).count());
-    assertEquals(existing.get("id"), byName(pdp.roles(FakePdpAdmin.APPLICATION_ID), "CLIENTE").get("id"));
+    assertEquals(
+        1,
+        pdp.roles(FakePdpAdmin.APPLICATION_ID).stream()
+            .filter(r -> "CLIENTE".equals(r.get("name")))
+            .count());
+    assertEquals(
+        existing.get("id"), byName(pdp.roles(FakePdpAdmin.APPLICATION_ID), "CLIENTE").get("id"));
     assertEquals(
         available().size() - 1L,
-        pdp.mutations().stream().filter(m -> m.endsWith("/resources") && m.contains("applications")).count());
+        pdp.mutations().stream()
+            .filter(m -> m.endsWith("/resources") && m.contains("applications"))
+            .count());
   }
 
   @Test
@@ -273,7 +287,8 @@ class PdpProvisioningScriptTest {
   }
 
   @Test
-  void aResourceOutsideTheCanonicalListIsReportedAndKept() throws IOException, InterruptedException {
+  void aResourceOutsideTheCanonicalListIsReportedAndKept()
+      throws IOException, InterruptedException {
     pdp.seedResource(FakePdpAdmin.APPLICATION_ID, "GET", "/legacy-endpoint");
 
     final Result result = run(true);
@@ -314,7 +329,8 @@ class PdpProvisioningScriptTest {
     assertTrue(pdp.requests().stream().allMatch(request -> request.startsWith("GET ")));
     assertTrue(pdp.resources(FakePdpAdmin.APPLICATION_ID).isEmpty());
     assertTrue(result.output().contains("[CREAR] recurso"), result.output());
-    assertTrue(result.output().contains("[VINCULAR] perfil PERFIL_ADMINISTRADOR -> rol ADMINISTRADOR"));
+    assertTrue(
+        result.output().contains("[VINCULAR] perfil PERFIL_ADMINISTRADOR -> rol ADMINISTRADOR"));
   }
 
   @Test
@@ -378,7 +394,8 @@ class PdpProvisioningScriptTest {
 
   @Test
   void aPathThePdpCannotRegisterIsRejectedBeforeAnyCall() throws IOException, InterruptedException {
-    for (final String badPath : List.of("/notifications/{id}", "/notifications:search", "/notifications/*")) {
+    for (final String badPath :
+        List.of("/notifications/{id}", "/notifications:search", "/notifications/*")) {
       final List<Map<String, Object>> entries = ProtectedResourcesCatalog.entries();
       final Map<String, Object> tampered = new LinkedHashMap<>(entries.get(0));
       tampered.put("path", badPath);

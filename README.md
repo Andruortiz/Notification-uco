@@ -121,6 +121,15 @@ Con el PEP activo (`security.enabled` y `security.pep.enforcement.enabled`), el 
 
 Esta resolucion de identidad es provisional (excepcion registrada en `specs/025-sesion-cookie-bff/research.md`): el dueno es Seguridad (starter) con Notification-uco (adaptador) y debe retirarse antes del cierre de HU2-055, cuando el starter exponga la identidad que ya verifica. Siguen abiertos con seguridad: si la consulta de sesion se puede hacer de servicio a servicio y si exige `X-Application-Credential`, y la tolerancia de revocacion que permitiria una cache.
 
+## Aprovisionar el PDP (recursos, roles y perfiles)
+
+`scripts/provision-pdp.ps1` (PowerShell 5.1 o 7) deja en el PDP los recursos `available` de `infrastructure/target/contract/protected-resources.json`, los roles `CLIENTE`, `OPERADOR`, `ADMINISTRADOR` (cada uno con los recursos de su rol minimo) y los perfiles acumulativos `PERFIL_CLIENTE`, `PERFIL_OPERADOR`, `PERFIL_ADMINISTRADOR`. Es idempotente, no borra nada (informa huerfanos) y acepta `--dry-run`.
+
+- Orden: recursos, roles, vinculos rol-recurso, perfiles, vinculos perfil-rol.
+- Credencial: variable de entorno `PDP_ADMIN_SESSION` con el valor de la cookie `SECURITY_BASELINE_SESSION` de un administrador de la aplicacion (el PDP local no ofrece otra); nunca se imprime ni se guarda.
+- La aplicacion debe existir en el PDP; la **asignacion de perfiles a usuarios sigue siendo manual** en la consola.
+- Detalle, endpoints verificados y preguntas abiertas: `specs/028-aprovisionar-pdp/`.
+
 ## Credenciales de GitHub Packages (starter del PEP)
 
 El starter `security-pep-integration-spring-boot-starter` se publica en GitHub Packages (`https://maven.pkg.github.com/seguridad-uco/securitybaseline`), que exige autenticacion incluso para leer. El repositorio y la dependencia estan declarados en `infrastructure/pom.xml` con el identificador de servidor `github`.

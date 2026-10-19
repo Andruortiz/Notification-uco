@@ -39,8 +39,7 @@ WebTestClient. Sin dependencias nuevas.
 
 **Constraints**: Rutas aptas para `ResourcePath` del PDP; cero comentarios en código nuevo; estados y cuerpos sin cambio
 
-**Scale/Scope**: 17 operaciones, 16 rutas -> 16 rutas literales (+1 por separar `/recipients/preferences` GET/PUT en una
-ruta); 2 controladores con `@PathVariable`, 1 `Location`, 1 política de rutas, ~23 clases de prueba con llamadas a rutas
+**Scale/Scope**: 17 operaciones sobre 13 rutas literales (16 rutas en v1); 2 controladores con `@PathVariable`, 1 `Location`, 1 política de rutas, ~23 clases de prueba con llamadas a rutas
 v1, README y 4 documentos de `docs/`.
 
 ## Dimensionamiento con datos del código (verificado)
@@ -48,8 +47,8 @@ v1, README y 4 documentos de `docs/`.
 - Controladores con variable de ruta: `NotificationController.getStatus` (`@GetMapping("/{id}")`) y
   `AttachmentUploadController.get` (`@GetMapping("/{uploadId}")`). No hay otros `@PathVariable` en `infrastructure`.
 - `Location` con ruta v1: `AttachmentUploadController` línea 55 (`"/attachment-uploads/" + uploadId`).
-- `RouteAuthorizationPolicy`: 17 reglas; 6 con `matches` de regex (3 de las cuales apuntan a operaciones no implementadas:
-  `:retry`, `:register` x2, `:updatePreferences`, preferencias).
+- `RouteAuthorizationPolicy`: 17 reglas; 5 usan regex (`/notifications/{id}`, `:retry`, `/attachment-uploads/{id}` y las dos
+  de preferencias) y 5 apuntan a operaciones sin controlador (`:retry`, `:register` x2, preferencias x2).
 - Pruebas con rutas v1: 32 llamadas `uri("/notifications/{id}", ...)` en 18 clases, ~8 referencias a
   `/attachment-uploads/<id>` y concatenaciones `"/notifications/" + id` (p. ej. `AttachmentUploadE2ETest:737`,
   `NotificationAttachmentE2ETest:597`), más `RouteAuthorizationPolicyTest` y `AuthenticationWebFilterTest`.
@@ -127,7 +126,7 @@ canónica en [contracts/rutas-v1-v2.md](contracts/rutas-v1-v2.md).
 | 16 | GET | `/recipients/{recipientId}/preferences` | `/recipients/preferences?recipientId=` | query | CLIENTE | planned | no |
 | 17 | POST | `/recipients/{recipientId}:updatePreferences` | PUT `/recipients/preferences?recipientId=` | query + cuerpo | CLIENTE | planned | no |
 
-Resultado: 12 available, 5 planned; 17 operaciones sobre 14 rutas literales distintas (`/notifications`, `/channels`,
+Resultado: 12 available, 5 planned; 17 operaciones sobre 13 rutas literales distintas (`/notifications`, `/channels`,
 `/providers`, `/attachment-uploads` y `/recipients/preferences` se comparten entre métodos).
 
 ## Orden de cambio

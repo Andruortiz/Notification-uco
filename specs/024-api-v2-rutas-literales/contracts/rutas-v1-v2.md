@@ -66,6 +66,10 @@ ADMINISTRADOR, todas. Las rutas de esta lista son exactamente las que se registr
 | GET | `/recipients/preferences` | CLIENTE | planned |
 | PUT | `/recipients/preferences` | CLIENTE | planned |
 
+Actualización HU2-111: `POST /notifications/stream/tickets` y el parámetro `ticket` se retiraron (ver
+`specs/026-stream-sin-ticket/`); el catálogo vigente tiene 12 rutas y 16 operaciones. Las cifras y la nota siguientes son
+históricas.
+
 Nota para HU2-099: `GET /notifications/stream` también admite `?ticket=` sin cabecera `Authorization` (el ticket lo valida
 el filtro de autenticación del servicio); cómo lo trata el PEP queda a decidir en HU2-055, porque el starter reenvía solo
 las credenciales que recibe.

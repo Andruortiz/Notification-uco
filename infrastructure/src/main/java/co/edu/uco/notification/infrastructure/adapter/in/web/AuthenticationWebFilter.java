@@ -70,12 +70,12 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       final TokenValidationPort tokenValidationPort,
       final RouteAuthorizationPolicy routeAuthorizationPolicy,
       final ObjectProvider<SessionIdentityPort> sessionIdentityPort,
-      final PublicRoutes publicRoutes) {
+      final ObjectProvider<PublicRoutes> publicRoutes) {
     this(
         tokenValidationPort,
         routeAuthorizationPolicy,
         sessionIdentityPort.getIfAvailable(() -> AuthenticationWebFilter::rejectSession),
-        publicRoutes);
+        publicRoutes.getIfAvailable(PublicRoutes::documentation));
   }
 
   private static Mono<AuthenticatedPrincipal> rejectSession(final SessionCredential credential) {

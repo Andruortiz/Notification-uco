@@ -36,5 +36,6 @@ Rutas base: `API` = `infrastructure/src/main/resources/static/openapi/api-notifi
 ## Phase 4: Documentación y verificación
 
 - [x] T009 README y `specs/015-autenticacion-interina/quickstart.md` con el flujo por cookie.
-- [ ] T010 `spotless:apply`, arquitectura (`HexagonalArchitectureTest`, `ModularityTests`) y `verify` completo; grep sin
+- [x] T010 `spotless:apply`, arquitectura (`HexagonalArchitectureTest`, `ModularityTests`) y `verify` completo; grep sin
   referencias a ticket de suscripción en `core` ni `infrastructure/src/main`.
+  Resultado: verify en verde con exclusiones (DeadLetterQueueE2ETest, RabbitRetryConfigCustomAttemptsTest, NotificationControllerSearchE2ETest, CorsConfigTest, CorsConfigCustomOriginTest) por credenciales locales de RabbitMQ/Mongo ausentes en el entorno.

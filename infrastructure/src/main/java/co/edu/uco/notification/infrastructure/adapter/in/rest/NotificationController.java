@@ -28,7 +28,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -121,11 +120,12 @@ public class NotificationController {
     }
   }
 
-  @GetMapping("/{id}")
+  @GetMapping("/detail")
   public Mono<NotificationStatusResponse> getStatus(
-      final AuthenticatedPrincipal principal, @PathVariable("id") final String id) {
+      final AuthenticatedPrincipal principal,
+      @RequestParam("notificationId") final String notificationId) {
     final GetNotificationStatusQuery query =
-        new GetNotificationStatusQuery(principal.tenantId(), NotificationId.of(id));
+        new GetNotificationStatusQuery(principal.tenantId(), NotificationId.of(notificationId));
     return getNotificationStatusUseCase.getStatus(query).map(NotificationStatusResponse::from);
   }
 

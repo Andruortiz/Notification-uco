@@ -15,11 +15,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -52,13 +53,19 @@ public class AttachmentUploadController {
         .doOnNext(issued -> log("issued", issued.upload()))
         .map(
             issued ->
-                ResponseEntity.created(URI.create("/attachment-uploads/" + uploadIdOf(issued)))
+                ResponseEntity.created(
+                        URI.create(
+                            UriComponentsBuilder.fromPath("/attachment-uploads/status")
+                                .queryParam("uploadId", uploadIdOf(issued))
+                                .build()
+                                .encode()
+                                .toUriString()))
                     .body(AttachmentUploadResponse.issued(issued)));
   }
 
-  @GetMapping("/{uploadId}")
+  @GetMapping("/status")
   public Mono<AttachmentUploadResponse> get(
-      final AuthenticatedPrincipal principal, @PathVariable("uploadId") final String uploadId) {
+      final AuthenticatedPrincipal principal, @RequestParam("uploadId") final String uploadId) {
     return Mono.defer(() -> getUseCase.get(principal.tenantId(), UploadId.of(uploadId)))
         .map(AttachmentUploadResponse::of);
   }

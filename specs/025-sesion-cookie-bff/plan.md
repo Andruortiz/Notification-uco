@@ -47,7 +47,7 @@ Constitución 2.0.0.
 | Principio | Evaluación |
 |---|---|
 | I Hexagonal | Cumple: `SessionIdentityPort` y `SessionCredential` en `core` sin Spring; el adaptador HTTP en `infrastructure`. `HexagonalArchitectureTest` debe seguir verde |
-| II Contract-first | Cumple: se edita `api-notificaciones.yaml` (descripción de `SessionCookie`, seguridad global, respuesta 503 `AUTHENTICATION_UNAVAILABLE`) antes del código. No hay rutas nuevas, todas siguen literales |
+| II Contract-first | Cumple: se edita `api-notificaciones.yaml` (descripción de `SessionCookie`, seguridad global, respuesta 503 `PepUnavailable` ampliada con NTF-2003) antes del código. No hay rutas nuevas, todas siguen literales |
 | III Sin comentarios | Cumple: ningún comentario explicativo en código nuevo |
 | IV Calidad | Cumple: E2E con cookie y dos tenants, pruebas de unidad e integración, aserciones de `Duration` para SC-004, control positivo en las pruebas de "no cruza nada" |
 | V Git | Commits de una línea, sin trailer |
@@ -75,7 +75,7 @@ No hay violaciones que justificar.
 - `AuthenticationWebFilter`: tras el chequeo de Bearer, si no hay `Authorization` y hay cookie (por nombre exacto) usa el puerto;
   si no hay ninguna y es el stream usa el ticket. Rechaza la cookie con 401 si el PEP no está activo. Nuevo
   `RejectionReason` para sesión inválida e indisponible y respuesta 503 `AUTHENTICATION_UNAVAILABLE`.
-- `CorsConfig`: `allowCredentials(true)`; `CorsOriginsGuard` falla al arrancar si `allowed-origins` contiene `*`.
+- `CorsConfig`: `allowCredentials(true)`; `CorsOrigins.requireExplicit` falla al arrancar si `allowed-origins` contiene `*`.
 - `application.yml`: `notification.auth.session.{url,path,timeout}` con variables de entorno; sin secretos.
 - `api-notificaciones.yaml` y README: descripción de la cookie, precedencia, errores 401/503.
 
@@ -93,7 +93,7 @@ infrastructure/src/main/java/co/edu/uco/notification/infrastructure/
 ├── adapter/out/security/session/PdpSessionIdentityAdapter.java
 ├── config/AuthSessionProperties.java
 ├── config/CorsConfig.java                                 (modificado)
-└── config/CorsOriginsGuard.java
+└── config/CorsOrigins.java
 infrastructure/src/main/resources/application.yml           (modificado)
 infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml (modificado)
 infrastructure/src/test/java/co/edu/uco/notification/infrastructure/

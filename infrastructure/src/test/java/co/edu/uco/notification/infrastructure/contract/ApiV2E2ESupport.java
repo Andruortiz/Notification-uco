@@ -68,14 +68,23 @@ abstract class ApiV2E2ESupport {
             .baseUrl("http://localhost:" + port)
             .responseTimeout(Duration.ofSeconds(60))
             .build();
-    final Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
-    while (Instant.now().isBefore(deadline)
-        && channelCatalogPort
-            .findActiveRoute(ChannelType.of("EMAIL"), TenantId.of("readiness-check"))
-            .blockOptional()
-            .isEmpty()) {
-      Thread.onSpinWait();
+    final Instant deadline = Instant.now().plus(Duration.ofSeconds(120));
+    while (Instant.now().isBefore(deadline) && !emailRouteIsActive()) {
+      try {
+        Thread.sleep(250);
+      } catch (final InterruptedException e) {
+        Thread.currentThread().interrupt();
+        break;
+      }
     }
+    assertTrue(emailRouteIsActive(), "el catalogo no tuvo una ruta activa para EMAIL a tiempo");
+  }
+
+  private boolean emailRouteIsActive() {
+    return channelCatalogPort
+        .findActiveRoute(ChannelType.of("EMAIL"), TenantId.of("readiness-check"))
+        .blockOptional()
+        .isPresent();
   }
 
   protected static Map<String, Object> notification(

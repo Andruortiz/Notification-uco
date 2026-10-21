@@ -3,8 +3,10 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,6 +15,7 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.domain.valueobject.AttachmentSubmission;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
@@ -44,6 +47,7 @@ import co.edu.uco.notification.utils.CorrelationId;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.slf4j.LoggerFactory;
@@ -723,5 +727,75 @@ class NotificationControllerTest {
 
     assertNotNull(echoed);
     assertFalse(echoed.contains(" "));
+  }
+
+  private static final String TEMPLATE_REQUEST_BODY =
+      """
+      {
+        "externalId": "order-43",
+        "channelType": "WHATSAPP",
+        "recipientId": "recipient-1",
+        "recipientAddress": "+573001234567",
+        "providerTemplate": {"templateId": "HX0001", "variables": {"1": "Alice"}},
+        "priority": "NORMAL"
+      }
+      """;
+
+  private WebTestClient.ResponseSpec postRaw(final String body) {
+    return webTestClient
+        .post()
+        .uri("/notifications")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(body)
+        .exchange();
+  }
+
+  @Test
+  void sendMapsTheProviderTemplateIntoTheCommandContent() {
+    when(sendNotificationUseCase.send(any()))
+        .thenReturn(
+            Mono.just(
+                new SendNotificationResult(
+                    NotificationId.newId(), NotificationStatus.PENDING, false)));
+
+    postRaw(TEMPLATE_REQUEST_BODY).expectStatus().isEqualTo(HttpStatus.ACCEPTED);
+
+    final ArgumentCaptor<SendNotificationCommand> captor =
+        ArgumentCaptor.forClass(SendNotificationCommand.class);
+    verify(sendNotificationUseCase).send(captor.capture());
+    final NotificationContent content = captor.getValue().content();
+    assertNull(content.body());
+    assertEquals("HX0001", content.providerTemplate().templateId());
+    assertEquals(Map.of("1", "Alice"), content.providerTemplate().variables());
+  }
+
+  @Test
+  void sendRejectsBodyTogetherWithAProviderTemplate() {
+    postRaw(
+            TEMPLATE_REQUEST_BODY.replace(
+                "\"providerTemplate\"", "\"body\": \"Hola\", \"providerTemplate\""))
+        .expectStatus()
+        .isBadRequest();
+
+    verify(sendNotificationUseCase, never()).send(any());
+  }
+
+  @Test
+  void sendRejectsContentWithNeitherBodyNorProviderTemplate() {
+    postRaw(
+            """
+            {
+              "externalId": "order-44",
+              "channelType": "WHATSAPP",
+              "recipientId": "recipient-1",
+              "recipientAddress": "+573001234567",
+              "priority": "NORMAL"
+            }
+            """)
+        .expectStatus()
+        .isBadRequest();
+
+    verify(sendNotificationUseCase, never()).send(any());
   }
 }

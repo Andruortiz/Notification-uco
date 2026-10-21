@@ -10,7 +10,7 @@ sembrado nuevo en el catálogo y un proveedor nuevo (configuración, no entidad)
 
 ## Dominio (`core`)
 
-### `TemplateReference` (value object nuevo)
+### `ProviderTemplateReference` (value object nuevo)
 
 | Campo | Tipo | Regla |
 |---|---|---|
@@ -21,11 +21,11 @@ Los límites de longitud y cantidad (64, 20, 1024) no son del dominio: los fija 
 
 ### `NotificationContent` (modificado)
 
-Campos: `subject`, `body`, `attachments`, **`template`** (nuevo, opcional).
+Campos: `subject`, `body`, `attachments`, **`providerTemplate`** (nuevo, opcional).
 
 | Regla | Origen |
 |---|---|
-| Exactamente uno de `body` (no vacío) o `template` | FR-005; antes `body` era siempre obligatorio |
+| Exactamente uno de `body` (no vacío) o `providerTemplate` | FR-005; antes `body` era siempre obligatorio |
 | Largo total (asunto + cuerpo) ≤ 32 768 | existente, sin cambios |
 | Una plantilla no lleva adjuntos | consecuencia del esquema WHATSAPP (sin `attachments`) |
 
@@ -34,14 +34,14 @@ conservan su firma y significado. Se añade una fábrica para plantilla.
 
 ### `ContentSchemaValidator` (modificado)
 
-- Si el contenido trae plantilla y el esquema del canal no declara la propiedad `template`, rechaza con
-  `InvalidContentException` y el motivo `channel does not accept templates` (mismo patrón que adjuntos).
-- El nodo que valida contra el esquema incluye `template` (con `templateId` y `variables`) cuando existe y
+- Si el contenido trae plantilla y el esquema del canal no declara la propiedad `providerTemplate`, rechaza con
+  `InvalidContentException` y el motivo `channel does not accept provider templates` (mismo patrón que adjuntos).
+- El nodo que valida contra el esquema incluye `providerTemplate` (con `templateId` y `variables`) cuando existe y
   omite `body` cuando es nulo, para que `maxLength`, `maxProperties` y el resto del esquema apliquen.
 
 ## Persistencia (Mongo)
 
-`NotificationDocument` gana un campo anidado **`template`** (`templateId`, `variables`), nulo en todo
+`NotificationDocument` gana un campo anidado **`providerTemplate`** (`templateId`, `variables`), nulo en todo
 documento existente. `body` pasa a poder ser nulo en documentos nuevos con plantilla. El mapper lo
 reconstruye. Los valores de las variables se persisten (como el cuerpo) y no se registran ni se publican.
 
@@ -51,7 +51,7 @@ reconstruye. Los valores de las variables se persisten (como el cuerpo) y no se 
 {
   "_id": "WHATSAPP",
   "providers": ["simulated", "twilio-whatsapp"],
-  "contentSchema": "{\"type\":\"object\",\"properties\":{\"body\":{\"type\":\"string\",\"maxLength\":1600},\"template\":{\"type\":\"object\",\"required\":[\"templateId\"],\"properties\":{\"templateId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64},\"variables\":{\"type\":\"object\",\"maxProperties\":20,\"additionalProperties\":{\"type\":\"string\",\"maxLength\":1024}}}}}}"
+  "contentSchema": "{\"type\":\"object\",\"properties\":{\"body\":{\"type\":\"string\",\"maxLength\":1600},\"providerTemplate\":{\"type\":\"object\",\"required\":[\"templateId\"],\"properties\":{\"templateId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64},\"variables\":{\"type\":\"object\",\"maxProperties\":20,\"additionalProperties\":{\"type\":\"string\",\"maxLength\":1024}}}}}}"
 }
 ```
 

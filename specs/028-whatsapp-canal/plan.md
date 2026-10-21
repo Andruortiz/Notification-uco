@@ -6,11 +6,11 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente de aprobación del usuario
+**Estado**: Aprobado por el usuario (2026-10-21)
 
 **Versión del plan**: 1
 
-No se genera `tasks.md` ni se implementa nada hasta que el usuario cambie este estado a Aceptado.
+Aprobado con `providerTemplate` y el ajuste de FR-007. Siguiente paso: `tasks.md`.
 
 ## Summary
 
@@ -113,8 +113,7 @@ Re-evaluado después de Phase 1: sin cambios, sigue en PASS (VI pendiente de apr
 - **V. Trazabilidad en git** — PASS. Rama `feature/HU2-112-whatsapp-canal`, commits de una línea en español
   sin tildes y sin trailer, artefactos de spec-kit en la misma rama; cambios ajenos fuera de los commits
   (Decisión 13).
-- **VI. Desarrollo asistido por IA, gobernado por spec-kit** — PENDIENTE. Spec con Q1–Q4 adoptadas; plan a la
-  espera de aprobación. No se genera `tasks.md` ni se implementa antes.
+- **VI. Desarrollo asistido por IA, gobernado por spec-kit** — PASS. Spec con Q1-Q4 adoptadas y plan aprobado el 2026-10-21.
 - **VII. Sin atajos** — PASS, con pendientes documentados con dueño y fecha: ventana de 24 h delegada al
   cliente (2026-12-31); webhook de estados y su validación diferidos, ADR-28 (2026-12-31); proveedor
   intermediario (2026-12-31); duplicado tras reentrega si la idempotencia no aplica (2026-11-30); canal

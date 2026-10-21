@@ -16,6 +16,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.infrastructure.config.BrevoProviderProperties;
 import co.edu.uco.notification.infrastructure.config.LogCapture;
 import co.edu.uco.notification.infrastructure.config.TwilioProviderProperties;
+import co.edu.uco.notification.infrastructure.config.TwilioWhatsAppProviderProperties;
 import java.util.List;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -97,6 +98,40 @@ class ProviderLogSanitizationTest {
 
       final String logs = capture.rendered();
       assertTrue(logs.contains("providerErrorCode"));
+      assertClean(logs, List.of(CREDENTIAL_SENTINEL, PHONE, CONTENT_SENTINEL));
+    }
+  }
+
+  @Test
+  void whatsAppNeverLogsTheProviderResponseCredentialTheFullNumberOrTheContent() {
+    final TwilioWhatsAppNotificationProvider provider =
+        new TwilioWhatsAppNotificationProvider(
+            webClient,
+            new TwilioWhatsAppProviderProperties(
+                "AC" + "0123456789abcdef0123456789abcdef",
+                CREDENTIAL_SENTINEL,
+                "+14155238886",
+                fakeServer.baseUrl(),
+                10_000L,
+                5_000L));
+    fakeServer.nextResponse(
+        400,
+        "{\"code\":63016,\"message\":\"token="
+            + CREDENTIAL_SENTINEL
+            + " to "
+            + PHONE
+            + " "
+            + CONTENT_SENTINEL
+            + "\"}");
+
+    try (LogCapture capture = LogCapture.of(TwilioWhatsAppNotificationProvider.class)) {
+      StepVerifier.create(provider.send(notification("WHATSAPP", PHONE, "subject")))
+          .expectNextCount(1)
+          .verifyComplete();
+
+      final String logs = capture.rendered();
+      assertTrue(logs.contains("providerErrorCode"));
+      assertTrue(logs.contains("reason=outside-session-window"));
       assertClean(logs, List.of(CREDENTIAL_SENTINEL, PHONE, CONTENT_SENTINEL));
     }
   }

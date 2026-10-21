@@ -100,6 +100,37 @@ final class ProviderLogs {
     }
   }
 
+  static void rejectedByProvider(
+      final Logger logger,
+      final Notification notification,
+      final ProviderId providerId,
+      final AttemptResult result,
+      final int httpStatus,
+      final String providerErrorCode,
+      final String reason) {
+    try (LogContext ignored = LogContext.of(notification)) {
+      logger.warn(
+          LogFields.failure(
+              codeOf(
+                  result,
+                  ErrorCode.PROVIDER_REJECTED_PERMANENT,
+                  ErrorCode.PROVIDER_REJECTED_RECOVERABLE),
+              "providerId",
+              providerId.value(),
+              "result",
+              result,
+              "httpStatus",
+              httpStatus,
+              "providerErrorCode",
+              LogSanitizer.safe(providerErrorCode),
+              "reason",
+              reason,
+              "recipient",
+              LogSanitizer.maskRecipient(notification.recipient().address())),
+          "Notification rejected by provider");
+    }
+  }
+
   static void dispatchFailed(
       final Logger logger,
       final Notification notification,

@@ -180,18 +180,18 @@ notificación dirigida a él no se da por entregada, no se pierde y deja rastro 
 
 ---
 
-### User Story 4 - Reintentos idempotentes y recorrido de intentos como en los demás canales (Priority: P2)
+### User Story 4 - Reintentos y recorrido de intentos como en los demás canales (Priority: P2)
 
 Como responsable de la operación, quiero que cada respuesta del proveedor se traduzca a aceptada, fallo
-recuperable o fallo permanente, y que un reintento no produzca un mensaje duplicado cuando el proveedor
-permite evitarlo, para que los reintentos se disparen solo cuando sirven.
+recuperable o fallo permanente, y que el riesgo de mensaje duplicado en un reintento esté documentado y
+acotado, para que los reintentos se disparen solo cuando sirven.
 
 **Why this priority**: Reintentar un número sin WhatsApp o una plantilla rechazada gasta cuota y termina
 igual; no reintentar un fallo temporal pierde mensajes. Depende de la entrega básica (P1).
 
 **Independent Test**: Simular cada familia de respuesta del proveedor y confirmar la categoría y el
-estado esperados; reentregar el mismo despacho y comprobar que el proveedor recibe la misma clave de
-idempotencia o que el riesgo residual queda documentado si el proveedor no la admite.
+estado esperados; confirmar que ninguna petición lleva cabecera de idempotencia y que un reintento
+reenvía el mensaje.
 
 **Acceptance Scenarios**:
 
@@ -203,10 +203,9 @@ idempotencia o que el riesgo residual queda documentado si el proveedor no la ad
    intento es fallo recuperable y entra en el camino de reintentos existente.
 4. **Given** una llamada que excede el tiempo de espera configurado o sin conexión, **When** se
    despacha, **Then** se corta en ese plazo y es fallo recuperable.
-5. **Given** un despacho reentregado, **When** se reenvía al proveedor, **Then** la petición lleva un
-   identificador de idempotencia derivado de la notificación y del número de intento, estable entre
-   reentregas del mismo intento (si el proveedor elegido no lo admite, se
-   documenta como riesgo residual).
+5. **Given** un fallo recuperable seguido de un reintento, **When** se reenvía al proveedor, **Then** el
+   mensaje se reenvía sin ninguna cabecera de idempotencia y el riesgo de duplicado queda documentado
+   (FR-011).
 6. **Given** varios intentos de una misma notificación, **When** se consulta su historial, **Then**
    aparecen en orden con proveedor, categoría y motivo, igual que en los demás canales.
 
@@ -273,8 +272,8 @@ una notificación con adjuntos y confirmar rechazo.
   fallo permanente con código registrado.
 - **Número de calidad limitada o límite de conversaciones por nivel alcanzado**: el proveedor lo
   comunica como límite de tasa o rechazo; si es límite de tasa, recuperable.
-- **Entrega duplicada tras una caída entre la aceptación del proveedor y el registro**: el mensaje puede
-  enviarse dos veces salvo que la clave de idempotencia lo evite; riesgo residual documentado.
+- **Entrega duplicada tras una caída o un tiempo de espera ambiguo**: el mensaje puede enviarse dos veces,
+  porque no hay idempotencia del proveedor; riesgo residual documentado (FR-011).
 - **Respuesta del proveedor que no encaja en ninguna familia**: rechazo atribuible a la petición →
   permanente; cualquier otro caso → recuperable.
 - **Entorno con catálogo ya sembrado**: la siembra solo actúa sobre un catálogo vacío; el canal WhatsApp
@@ -319,10 +318,10 @@ una notificación con adjuntos y confirmar rechazo.
   aceptación con motivo explícito; NUNCA DEBE truncarse.
 - **FR-010**: Toda llamada al proveedor DEBE tener un tiempo de espera explícito y configurable; una
   llamada que lo supere DEBE cortarse y clasificarse como recuperable.
-- **FR-011**: La petición al proveedor DEBE incluir una clave de idempotencia estable derivada de la
-  notificación y del intento, de modo que una reentrega del mismo intento no genere un segundo mensaje
-  cuando el proveedor lo permita. Si el proveedor elegido no la admite, DEBE documentarse como riesgo
-  residual con dueño y fecha.
+- **FR-011**: El proveedor no documenta una cabecera de idempotencia para su API de mensajes (verificado
+  2026-10-21), por lo que el adaptador NO DEBE enviar ninguna y la entrega es "al menos una vez": un
+  reintento tras un tiempo de espera ambiguo puede duplicar el mensaje. El riesgo DEBE estar documentado
+  con dueño y fecha (ver Risks).
 - **FR-012**: Antes de llamar al proveedor, el sistema DEBE comprobar que el destinatario tiene formato
   telefónico internacional; si no, el intento DEBE ser fallo permanente sin llamar al proveedor, con
   motivo que nombre el dato y no su valor.
@@ -378,8 +377,9 @@ una notificación con adjuntos y confirmar rechazo.
 - **SC-007**: Una notificación con plantilla produce una petición al proveedor sin cuerpo libre y con
   todas sus variables; una con plantilla y cuerpo, o sin ninguno, se rechaza en la aceptación con cero
   peticiones al proveedor.
-- **SC-008**: Una reentrega del mismo intento produce peticiones con la misma clave de idempotencia, y
-  intentos distintos de la misma notificación producen claves distintas, verificado automáticamente.
+- **SC-008**: El adaptador no envía ninguna cabecera de idempotencia al proveedor, y un reintento tras un
+  fallo recuperable reenvía el mensaje; ambos hechos quedan afirmados por pruebas automatizadas y el riesgo
+  de duplicado queda documentado con dueño y fecha.
 - **SC-009**: Con la configuración por defecto y sin credenciales, cero regresiones en la suite
   existente y una notificación WhatsApp se acepta y entrega por el simulado.
 - **SC-010**: Existe una prueba de punta a punta automatizada contra un servidor que simula al proveedor
@@ -428,8 +428,10 @@ una notificación con adjuntos y confirmar rechazo.
   descubrir el rechazo consultando el estado. Dueño: andrualv. Fecha de revisión: 2026-12-31.
 - **Webhook de estados diferido (Q3-A)**: sin confirmación real de entrega ni validación de webhook
   exigida por ADR-28. Dueño: andrualv. Fecha de revisión: 2026-12-31.
-- **Mensaje duplicado tras una reentrega** si el proveedor no admite idempotencia (FR-011). Dueño:
-  andrualv. Fecha de revisión: 2026-11-30.
+- **Mensaje duplicado tras una reentrega** (FR-011): el proveedor no documenta idempotencia para su API de
+  mensajes, así que un reintento tras un tiempo de espera ambiguo puede duplicar el mensaje. Mismo riesgo
+  que SMS. Dueño: andrualv. Fecha de revisión: 2026-10-21 (aceptado), a reabrir si el proveedor la
+  documenta.
 - **Costo por conversación y aprobación de plantillas por Meta**: el costo no está acotado por esta
   historia y las plantillas tardan en aprobarse. Dueño: andrualv. Fecha de revisión: 2026-11-30.
 - **Sin límite de tasa propio ni gestión de secretos de plataforma**: igual que SMS. Dueño: andrualv.

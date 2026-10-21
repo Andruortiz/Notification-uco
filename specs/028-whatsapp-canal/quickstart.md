@@ -30,7 +30,7 @@ Resultados esperados de las dos E2E:
 | Adjunto | `400` por canal que no acepta adjuntos |
 | Respuesta 400 con código de ventana cerrada | `FAILED`, sin reintentos, etiqueta `outside-session-window` en el registro |
 | 429, 5xx, tiempo agotado | recuperable; se reintenta |
-| Reentrega del mismo despacho | misma clave de idempotencia; intentos distintos, claves distintas (si aplica, Decisión 6) |
+| Reintento tras fallo recuperable | ninguna cabecera de idempotencia en las peticiones; el mensaje se reenvía (riesgo documentado, Decisión 6) |
 | Dos tenants | el tenant B no ve la notificación, la plantilla ni las variables del tenant A |
 | Sin credenciales | arranque completo, un aviso con la variable ausente, sin valores; la notificación no se marca entregada |
 | Registros y mensajes internos | sin credenciales, cuerpo, variables ni número completo; número enmascarado presente |
@@ -78,7 +78,7 @@ Resultados esperados de las dos E2E:
 
 Anotar cada ejecución (versionado; **nunca** pegar credenciales ni números completos):
 
-| Fecha | Quién | Commit | Texto libre | Plantilla | Ventana cerrada rechazada | Idempotencia observada | Notas |
+| Fecha | Quién | Commit | Texto libre | Plantilla | Ventana cerrada rechazada | Duplicado observado en reintento | Notas |
 |---|---|---|---|---|---|---|---|
 | *(pendiente)* | | | | | | | |
 

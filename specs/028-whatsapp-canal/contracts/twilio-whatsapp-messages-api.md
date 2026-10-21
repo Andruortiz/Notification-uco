@@ -1,7 +1,7 @@
 # Contrato de salida: Twilio Messages API para WhatsApp
 
 **Feature**: 028-whatsapp-canal | Contrato del tercero que consume `TwilioWhatsAppNotificationProvider`.
-Todo lo marcado **[verificar]** debe confirmarse contra la documentación vigente antes de implementar.
+Verificado el 2026-10-21: `ContentSid`, `ContentVariables` y tope de `Body` (1600). Pendientes de verificar uno a uno: los códigos de error distintos de 63016.
 
 ## Petición
 
@@ -14,11 +14,11 @@ Todo lo marcado **[verificar]** debe confirmarse contra la documentación vigent
 | `To` | `whatsapp:+<destinatario>` | igual |
 | `From` | `whatsapp:+<origen>` | igual |
 | `Body` | cuerpo de la notificación | ausente |
-| `ContentSid` | ausente | `templateId` **[verificar]** |
-| `ContentVariables` | ausente | JSON de las variables **[verificar]** |
+| `ContentSid` | ausente | `templateId` (forma `HX` + 32 hex, verificado) |
+| `ContentVariables` | ausente | JSON de las variables (verificado; exige `ContentSid`) |
 
-Cabecera de idempotencia **[verificar]**: `I-Twilio-Idempotency-Token: {notificationId}:{ciclo}:{n}`. Si no
-existe para este recurso, se omite y se documenta el riesgo (research.md, Decisión 6).
+Sin cabecera de idempotencia: Twilio no la documenta para esta API (verificado 2026-10-21); un reintento
+reenvía el mensaje (research.md, Decisión 6).
 
 El asunto de la notificación no se envía. No se envían `StatusCallback` ni `MediaUrl` (Out of Scope).
 
@@ -41,7 +41,7 @@ Decisión 5), que no cambia la categoría.
 ## Datos que nunca salen en registros
 
 Identificador de cuenta, token, la URL de la petición, el cuerpo, el valor de cualquier variable de
-plantilla, el número completo, el mensaje de error del proveedor y la clave de idempotencia.
+plantilla, el número completo y el mensaje de error del proveedor.
 
 ## Fuera de este contrato
 

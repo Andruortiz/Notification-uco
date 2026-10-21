@@ -26,7 +26,7 @@ description: "Task list for HU2-112"
 
 **Purpose**: confirmar los datos del proveedor que el diseño asumió y dejar el contrato público primero (Principio II).
 
-- [ ] T001 Verificar contra la documentación vigente de Twilio los cuatro puntos marcados **[verificar]** en `specs/028-whatsapp-canal/research.md` y anotar el resultado de cada uno (con fecha y enlace consultado, sin pegar secretos) en una sección "Verificación 2026-10-XX" de ese archivo: (1) nombre, disponibilidad y semántica de la cabecera de idempotencia de la API de mensajes, también para WhatsApp; (2) nombres `ContentSid` y `ContentVariables` y el formato aceptado de las variables; (3) códigos de error de la tabla de la Decisión 5 (63016, 63024, 63015, 63007, 63112, 21211, 20003); (4) tope de `Body` (1600) y de WhatsApp. **Si la cabecera de idempotencia no existe o no aplica a WhatsApp, DETENERSE: no seguir con T002 en adelante, documentar el hallazgo y pedir nueva aprobación al usuario** (FR-011 y SC-008 degradan a riesgo documentado y cambian T034 y T035). Si difiere cualquiera de los otros tres, ajustar research.md, `contracts/twilio-whatsapp-messages-api.md` y las tareas afectadas, y avisar al usuario antes de seguir
+- [x] T001 Verificación contra la documentación de Twilio hecha por el coordinador el 2026-10-21: `ContentSid` (HX + 32 hex) y `ContentVariables` (exige `ContentSid`) confirmados; tope de `Body` 1600 confirmado; 63016 confirmado como texto libre fuera de la ventana de sesión (la página no da estado HTTP, la categoría la decide el código HTTP); los códigos 63024, 63015, 63007, 63112, 21211 y 20003 NO se verificaron uno a uno (la etiqueta es solo diagnóstico); la cabecera `I-Twilio-Idempotency-Token` NO aparece documentada. **Decisión del usuario**: implementar sin cabecera de idempotencia; FR-011 y SC-008 pasan a riesgo residual con dueño andrualv y fecha 2026-10-21. Resultado anotado en spec.md, plan.md, research.md y contracts/. **Desviación**: T034 y T035 se ajustaron a este resultado
 - [ ] T002 Actualizar `infrastructure/src/main/resources/static/openapi/api-notificaciones.yaml` según `contracts/api-notificaciones-cambios.md`, antes de cualquier código: quitar `body` de `required` de `SendNotificationRequest`, añadir el objeto `providerTemplate` (`templateId`, `variables`), y ajustar las descripciones de `channelType`, `recipientAddress`, `subject`, `body` y `attachments`; sin endpoints nuevos. Comprobar que el archivo sigue siendo un OpenAPI válido (la prueba existente que lo carga debe seguir en verde)
 
 ---
@@ -101,16 +101,16 @@ description: "Task list for HU2-112"
 
 ---
 
-## Phase 6: User Story 4 - Reintentos idempotentes y recorrido de intentos (P2)
+## Phase 6: User Story 4 - Reintentos y recorrido de intentos (P2)
 
-**Goal**: cada respuesta se traduce a una categoría, los reintentos se disparan solo cuando sirven y una reentrega no duplica el mensaje cuando el proveedor lo permite.
+**Goal**: cada respuesta se traduce a una categoría, los reintentos se disparan solo cuando sirven.
 
 **Independent Test**: spec.md, User Story 4, escenarios 1-6.
 
 - [ ] T033 [US4] Pruebas en `provider-test/TwilioWhatsAppNotificationProviderTest.java`: `400`/`401` → `PERMANENT_FAILURE`; `429`/`500` → `RECOVERABLE_FAILURE`; conexión rechazada → `RECOVERABLE_FAILURE`; tiempo de espera de 500 ms contra retardo de 3 s → `RECOVERABLE_FAILURE` con aserción explícita de `Duration` (menor de 2 s, SC-006); cuerpo de respuesta vacío o ilegible no cambia la categoría en aceptación ni en rechazo
-- [ ] T034 [US4] Pruebas de idempotencia en `provider-test/TwilioWhatsAppNotificationProviderTest.java` (según el resultado de T001): la petición lleva la cabecera de idempotencia con `{notificationId}:{ciclo}:{n}`; dos `send` de la misma notificación sin intento nuevo registrado → misma clave; tras registrar un intento → clave distinta; la clave no aparece en ningún registro
-- [ ] T035 [US4] Implementar en `provider/TwilioWhatsAppNotificationProvider.java` el cálculo de la clave y el envío de la cabecera, y completar la clasificación y el registro de recuperables hasta pasar T033 y T034 — depende de T033, T034
-- [ ] T036 [US4] Casos E2E en `provider-test/WhatsAppDeliveryE2ETest.java`: `500` → `RECOVERABLE` y reintento posterior hasta `DELIVERED` cuando el servidor falso se recupera; el historial muestra los intentos en orden con `providerId = twilio-whatsapp` y categoría, igual que en los demás canales; las cabeceras de idempotencia recibidas por el servidor falso en los dos intentos son distintas; `400` → `FAILED` sin reintentos
+- [ ] T034 [US4] Prueba en `provider-test/TwilioWhatsAppNotificationProviderTest.java` que documenta el riesgo de FR-011 (T001: Twilio no documenta idempotencia): ninguna petición lleva cabecera cuyo nombre contenga `idempotency` (se inspeccionan las cabeceras recibidas por `FakeProviderServer`), y dos `send` de la misma notificación producen dos peticiones, es decir el reintento reenvía el mensaje
+- [ ] T035 [US4] Completar en `provider/TwilioWhatsAppNotificationProvider.java` la clasificación y el registro de recuperables hasta pasar T033 y T034; sin cabecera ni clave de idempotencia — depende de T033, T034
+- [ ] T036 [US4] Casos E2E en `provider-test/WhatsAppDeliveryE2ETest.java`: `500` → `RECOVERABLE` y reintento posterior hasta `DELIVERED` cuando el servidor falso se recupera; el historial muestra los intentos en orden con `providerId = twilio-whatsapp` y categoría, igual que en los demás canales; el servidor falso recibe una petición por intento y ninguna con cabecera de idempotencia; `400` → `FAILED` sin reintentos
 
 ---
 
@@ -120,7 +120,7 @@ description: "Task list for HU2-112"
 
 **Independent Test**: spec.md, User Story 5, escenarios 1-3.
 
-- [ ] T037 [US5] Pruebas en `provider-test/TwilioWhatsAppNotificationProviderTest.java`: registro de aceptación con `providerMessageId` y `***` + últimos 4; registro de rechazo con `providerErrorCode`, etiqueta y sin el `message` del proveedor (que contiene el número completo); sin token, SID, `base64(sid:token)`, URL, cuerpo, valores de variables ni clave de idempotencia
+- [ ] T037 [US5] Pruebas en `provider-test/TwilioWhatsAppNotificationProviderTest.java`: registro de aceptación con `providerMessageId` y `***` + últimos 4; registro de rechazo con `providerErrorCode`, etiqueta y sin el `message` del proveedor (que contiene el número completo); sin token, SID, `base64(sid:token)`, URL, cuerpo, valores de variables ni cabeceras de autorización
 - [ ] T038 [US5] Caso de no filtrado en `provider-test/WhatsAppDeliveryE2ETest.java`: `ListAppender` en el logger raíz y cola temporal no durable en el exchange de eventos (copiar el mecanismo de `TwilioSmsDeliveryE2ETest`), con un despacho de texto libre y uno de plantilla con variables; ausencia de token, SID, `base64(sid:token)`, cuerpo, valores de variables, número completo y `message` del rechazo en registros y eventos; presencia del número enmascarado y del `providerMessageId` (control positivo); también un despacho que falla
 - [ ] T039 [P] [US5] Ampliar `provider-test/ProviderLogSanitizationTest.java` con el registro del adaptador de WhatsApp (texto libre y plantilla) si la prueba recorre los adaptadores por reflexión o lista
 
@@ -150,7 +150,7 @@ description: "Task list for HU2-112"
 
 ## Dependencies & Execution Order
 
-- Phase 1 → Phase 2 → US1 → US2 → US3 → US4 → US5 → US6 → Polish. T001 bloquea todo: si la idempotencia no existe, se detiene el flujo.
+- Phase 1 → Phase 2 → US1 → US2 → US3 → US4 → US5 → US6 → Polish. T001 está hecha (2026-10-21).
 - US2 depende de US1 (adaptador y E2E ya creados) y concentra los cambios de `core`, REST y Mongo.
 - US3, US4, US5 y US6 amplían las mismas clases de prueba (`TwilioWhatsAppNotificationProviderTest`, `WhatsAppDeliveryE2ETest`), por eso no se paralelizan entre sí.
 - Dentro de US2: T014/T015 antes de T016/T017; T017 antes de T018; T015 antes de T020 y T022; T024 antes de T026; T027 antes de T028.

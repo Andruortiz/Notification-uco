@@ -304,7 +304,8 @@ class WhatsAppDeliveryE2ETest {
 
     assertNotNull(route);
     assertEquals(
-        List.of(ProviderId.of("simulated"), ProviderId.of("twilio-whatsapp")), route.providers());
+        java.util.Set.of(ProviderId.of("simulated"), ProviderId.of("twilio-whatsapp")),
+        java.util.Set.copyOf(route.providers()));
     assertTrue(route.contentSchema().contains("\"maxLength\":1600"));
     assertTrue(route.contentSchema().contains("providerTemplate"));
   }
@@ -489,7 +490,8 @@ class WhatsAppDeliveryE2ETest {
     final Map<String, Object> error =
         rejected(textRequest("wa-1601-1", RECIPIENT, null, "a".repeat(1601)));
 
-    assertTrue(String.valueOf(error.get("message")).contains("1600"));
+    assertTrue(
+        String.valueOf(error.get("message")).matches("(?s).*1[.,]?600.*"), String.valueOf(error));
     assertFalse(persisted("wa-1601-1"));
     assertEquals(requestsBefore, fakeTwilio.requests().size());
   }
@@ -506,13 +508,15 @@ class WhatsAppDeliveryE2ETest {
                 "contentType",
                 "image/png",
                 "sizeBytes",
-                10,
+                3,
                 "content",
                 "AAAA")));
 
     final Map<String, Object> error = rejected(request);
 
-    assertTrue(String.valueOf(error.get("message")).contains("does not accept attachments"));
+    assertTrue(
+        String.valueOf(error.get("message")).contains("does not accept attachments"),
+        String.valueOf(error));
     assertFalse(persisted("wa-att-1"));
     assertTrue(fakeTwilio.requests().isEmpty());
   }

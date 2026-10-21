@@ -9,12 +9,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import co.edu.uco.notification.core.domain.valueobject.Attachment;
 import co.edu.uco.notification.core.domain.valueobject.AttachmentSource;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
+import co.edu.uco.notification.core.domain.valueobject.ProviderTemplateReference;
 import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class NotificationContentTest {
@@ -118,5 +120,45 @@ class NotificationContentTest {
     assertEquals(
         NotificationContent.MAX_LENGTH,
         NotificationContent.of(null, body, List.of(FIRST)).body().length());
+  }
+
+  @Test
+  void aProviderTemplateReplacesTheBody() {
+    final ProviderTemplateReference template =
+        ProviderTemplateReference.of("HX0001", Map.of("1", "Alice"));
+
+    final NotificationContent content = NotificationContent.ofProviderTemplate(null, template);
+
+    assertNull(content.body());
+    assertTrue(content.hasProviderTemplate());
+    assertEquals(template, content.providerTemplate());
+  }
+
+  @Test
+  void rejectsBodyTogetherWithAProviderTemplate() {
+    final ProviderTemplateReference template = ProviderTemplateReference.of("HX0001", null);
+
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> NotificationContent.of(null, "Body", List.of(), template));
+  }
+
+  @Test
+  void rejectsContentWithNeitherBodyNorProviderTemplate() {
+    assertThrows(
+        IllegalArgumentException.class, () -> NotificationContent.of(null, null, List.of(), null));
+  }
+
+  @Test
+  void aBlankBodyAlongsideAProviderTemplateIsTreatedAsAbsent() {
+    final NotificationContent content =
+        NotificationContent.of(null, "  ", List.of(), ProviderTemplateReference.of("HX0001", null));
+
+    assertNull(content.body());
+  }
+
+  @Test
+  void contentWithoutATemplateReportsNoProviderTemplate() {
+    assertFalse(NotificationContent.of("Body").hasProviderTemplate());
   }
 }

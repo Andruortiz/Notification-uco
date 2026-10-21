@@ -9,8 +9,10 @@ import co.edu.uco.notification.core.domain.policy.ContentSchemaValidator;
 import co.edu.uco.notification.core.domain.valueobject.AttachmentSubmission;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
+import co.edu.uco.notification.core.domain.valueobject.ProviderTemplateReference;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
@@ -225,5 +227,70 @@ class ContentSchemaValidatorTest {
                 "{\"type\":\"object\",\"not\":{\"required\":[\"attachmentsTotalBytes\"]}}",
                 SUBJECT_AND_BODY,
                 List.of()));
+  }
+
+  private static final String TEMPLATE_SCHEMA =
+      "{\"type\":\"object\",\"properties\":{\"body\":{\"type\":\"string\",\"maxLength\":20},"
+          + "\"providerTemplate\":{\"type\":\"object\",\"required\":[\"templateId\"],"
+          + "\"properties\":{\"templateId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":8},"
+          + "\"variables\":{\"type\":\"object\",\"maxProperties\":2,"
+          + "\"additionalProperties\":{\"type\":\"string\",\"maxLength\":5}}}}}}";
+
+  private static NotificationContent templateContent(
+      final String templateId, final Map<String, String> variables) {
+    return NotificationContent.ofProviderTemplate(
+        null, ProviderTemplateReference.of(templateId, variables));
+  }
+
+  private static void validateTemplate(final String schema, final NotificationContent content) {
+    ContentSchemaValidator.validate(CHANNEL_TYPE, schema, content, List.of());
+  }
+
+  @Test
+  void aProviderTemplateIsRejectedWhenTheSchemaDoesNotDeclareIt() {
+    final InvalidContentException exception =
+        assertThrows(
+            InvalidContentException.class,
+            () ->
+                validateTemplate(
+                    "{\"type\":\"object\",\"required\":[\"body\"]}",
+                    templateContent("HX0001", Map.of())));
+
+    assertTrue(exception.getMessage().contains("channel does not accept provider templates"));
+  }
+
+  @Test
+  void aProviderTemplateIsRejectedWhenTheChannelHasNoSchema() {
+    assertThrows(
+        InvalidContentException.class,
+        () -> validateTemplate(null, templateContent("HX0001", Map.of())));
+  }
+
+  @Test
+  void aProviderTemplateWithoutBodyPassesWhenTheSchemaDeclaresIt() {
+    assertDoesNotThrow(
+        () -> validateTemplate(TEMPLATE_SCHEMA, templateContent("HX0001", Map.of("1", "Alice"))));
+  }
+
+  @Test
+  void aBodyStillPassesWhenTheSchemaAlsoDeclaresTheTemplate() {
+    assertDoesNotThrow(() -> validateTemplate(TEMPLATE_SCHEMA, NotificationContent.of("Hola")));
+  }
+
+  @Test
+  void theTemplateShapeIsValidatedAgainstTheSchema() {
+    assertThrows(
+        InvalidContentException.class,
+        () -> validateTemplate(TEMPLATE_SCHEMA, templateContent("HX0001-too-long", Map.of())));
+    assertThrows(
+        InvalidContentException.class,
+        () ->
+            validateTemplate(
+                TEMPLATE_SCHEMA, templateContent("HX0001", Map.of("1", "a", "2", "b", "3", "c"))));
+    assertThrows(
+        InvalidContentException.class,
+        () ->
+            validateTemplate(
+                TEMPLATE_SCHEMA, templateContent("HX0001", Map.of("1", "too long value"))));
   }
 }

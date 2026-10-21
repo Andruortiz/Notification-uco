@@ -3,10 +3,15 @@ management:
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
 
+springdoc:
+  swagger-ui:
+    enabled: ${SWAGGER_UI_ENABLED:true}
+
 security:
   pep:
     enforcement:
       allow-insecure-http: true
+      public-paths: ${SECURITY_PEP_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,/openapi/api-notificaciones.yaml,/v3/api-docs,/v3/api-docs/swagger-config,/swagger-ui.html,/swagger-ui/**}
 
 notification:
   auth:

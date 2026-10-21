@@ -61,6 +61,7 @@ management:
 
 springdoc:
   swagger-ui:
+    enabled: ${SWAGGER_UI_ENABLED:false}
     url: /openapi/api-notificaciones.yaml
 
 security:
@@ -73,7 +74,7 @@ security:
       environment: ${SECURITY_ENVIRONMENT:local}
       application-credential: ${PEP_REGISTRATION_TOKEN:}
       allow-insecure-http: ${SECURITY_PEP_ALLOW_INSECURE_HTTP:false}
-      public-paths: ${SECURITY_PEP_PUBLIC_PATHS:/actuator/health}
+      public-paths: ${SECURITY_PEP_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,/openapi/api-notificaciones.yaml,/v3/api-docs}
 
 notification:
   auth:

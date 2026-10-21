@@ -121,6 +121,13 @@ Con el PEP activo (`security.enabled` y `security.pep.enforcement.enabled`), el 
 
 Esta resolucion de identidad es provisional (excepcion registrada en `specs/025-sesion-cookie-bff/research.md`): el dueno es Seguridad (starter) con Notification-uco (adaptador) y debe retirarse antes del cierre de HU2-055, cuando el starter exponga la identidad que ya verifica. Siguen abiertos con seguridad: si la consulta de sesion se puede hacer de servicio a servicio y si exige `X-Application-Credential`, y la tolerancia de revocacion que permitiria una cache.
 
+### Rutas publicas con el PEP activo
+
+El starter del PEP exige credencial en toda ruta salvo las de `security.pep.enforcement.public-paths` (`SECURITY_PEP_PUBLIC_PATHS`, separadas por comas, patrones de ruta completa; `/**` final cubre el subarbol; no distingue metodo). Por defecto son solo lectura de documentacion y sondas: `GET /openapi/api-notificaciones.yaml` y `GET /v3/api-docs` (contrato, sin datos) y, en el puerto de gestion, `/actuator/health`, `/actuator/health/**` y `/actuator/prometheus`. Estan declaradas en `x-public-routes` del contrato y no son recursos que haya que registrar en el PDP.
+
+- **Swagger UI** (`/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/swagger-config`) esta deshabilitada y no es publica por defecto; el perfil `local` la habilita. Para otro entorno: `SWAGGER_UI_ENABLED=true` y anadir esas rutas a `SECURITY_PEP_PUBLIC_PATHS`. El criterio esta en `specs/027-rutas-publicas-pep/research.md`.
+- Una prueba compara el contrato, `application.yml`, `application-local.yml` y la lista del filtro del servicio.
+
 ## Credenciales de GitHub Packages (starter del PEP)
 
 El starter `security-pep-integration-spring-boot-starter` se publica en GitHub Packages (`https://maven.pkg.github.com/seguridad-uco/securitybaseline`), que exige autenticacion incluso para leer. El repositorio y la dependencia estan declarados en `infrastructure/pom.xml` con el identificador de servidor `github`.

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -33,6 +34,7 @@ import co.edu.uco.notification.utils.CorrelationId;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -607,5 +609,49 @@ class SendNotificationServiceTest {
             RecipientId.of("recipient-1"),
             Recipient.of("alice@example.com")),
         new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
+  }
+
+  private static final String TEMPLATE_SCHEMA =
+      "{\"type\":\"object\",\"properties\":{\"providerTemplate\":{\"type\":\"object\"}}}";
+
+  private static SendNotificationCommand templateCommand() {
+    return new SendNotificationCommand(
+        TENANT_ID,
+        EXTERNAL_ID,
+        CHANNEL_TYPE,
+        RecipientId.of("recipient-1"),
+        Recipient.of("alice@example.com"),
+        NotificationContent.ofProviderTemplate(
+            null, ProviderTemplateReference.of("HX0001", Map.of("1", "Alice"))),
+        Priority.NORMAL);
+  }
+
+  @Test
+  void sendKeepsTheProviderTemplateOfTheCommandInTheAcceptedNotification() {
+    givenRouteWithSchema(TEMPLATE_SCHEMA);
+    givenAcceptancePipeline();
+
+    service.send(templateCommand()).block();
+
+    final ArgumentCaptor<Notification> saved = ArgumentCaptor.forClass(Notification.class);
+    verify(notificationRepository).save(saved.capture());
+    assertNull(saved.getValue().content().body());
+    assertEquals("HX0001", saved.getValue().content().providerTemplate().templateId());
+    assertEquals(Map.of("1", "Alice"), saved.getValue().content().providerTemplate().variables());
+  }
+
+  @Test
+  void sendRejectsAProviderTemplateOnAChannelThatDoesNotDeclareIt() {
+    givenRouteWithSchema("{\"type\":\"object\",\"required\":[\"body\"]}");
+
+    StepVerifier.create(service.send(templateCommand()))
+        .expectErrorSatisfies(
+            error ->
+                assertTrue(
+                    error.getMessage().contains("channel does not accept provider templates"),
+                    error.getMessage()))
+        .verify();
+
+    verifyNothingWasStored();
   }
 }

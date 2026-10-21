@@ -37,11 +37,13 @@ class ParameterRegistryTest {
             "provider.brevo.connect-timeout-ms",
             "provider.twilio.timeout-ms",
             "provider.twilio.connect-timeout-ms",
+            "provider.twilio-whatsapp.timeout-ms",
+            "provider.twilio-whatsapp.connect-timeout-ms",
             "provider.fcm.timeout-ms",
             "provider.fcm.connect-timeout-ms",
             "requeue.interval-ms"),
         keys);
-    assertEquals(8, registry.descriptors().size());
+    assertEquals(10, registry.descriptors().size());
   }
 
   @Test
@@ -62,7 +64,7 @@ class ParameterRegistryTest {
   void providerTimeoutsAreProviderScopedWithTheirOwnScopeId() {
     final ParameterRegistry registry = new ParameterRegistry();
 
-    for (final String providerId : List.of("brevo", "twilio", "fcm")) {
+    for (final String providerId : List.of("brevo", "twilio", "twilio-whatsapp", "fcm")) {
       final ParameterDescriptor timeout =
           registry.find("provider." + providerId + ".timeout-ms").orElseThrow();
       assertEquals(10_000, timeout.defaultValue());
@@ -120,7 +122,7 @@ class ParameterRegistryTest {
     final ParameterRegistry registry = new ParameterRegistry(List.of(restart));
 
     assertEquals(AdoptionMode.RESTART, registry.find("test.restart-only").orElseThrow().adoption());
-    assertEquals(9, registry.descriptors().size());
+    assertEquals(11, registry.descriptors().size());
   }
 
   @Test

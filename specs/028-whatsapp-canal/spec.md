@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-21
 
-**Status**: Borrador — specify y clarify completos; 4 preguntas abiertas esperan respuesta del usuario (ver Clarifications). No avanzar a plan sin esas respuestas.
+**Status**: Clarify cerrado — Q1 a Q4 adoptadas con la opción A por el usuario (2026-10-21); pendiente de aprobación del plan
 
 **Input**: User description: "Como sistema cliente, quiero enviar una notificación por el canal WhatsApp,
 para llegar al destinatario por el medio con mayor penetración en Colombia."
@@ -12,7 +12,7 @@ para llegar al destinatario por el medio con mayor penetración en Colombia."
 **Trazabilidad**: CU-03 · ADR-28 (integración WhatsApp Business: API oficial detrás de un adaptador,
 validación del webhook, plantillas, reintentos e idempotencia; aún por documentar), ADR-05, ADR-23 ·
 requisito de la ventana de 24 h de WhatsApp. Misma estructura que HU2-089 (correo), HU2-090 (SMS) y
-HU2-091 (push). Si el proveedor elegido es Twilio, reutiliza la cuenta y buena parte del cliente de
+HU2-091 (push). El proveedor es Twilio (Q1); reutiliza la cuenta y buena parte del cliente de
 HU2-090. Prioridad Deseable, tamaño L, épica C, fase 5.
 
 **Directorio**: la numeración 027 ya está ocupada por `027-rutas-publicas-pep`; esta spec toma el
@@ -20,14 +20,12 @@ siguiente número libre.
 
 ## Clarifications
 
-### Session 2026-10-21 — preguntas abiertas (sin respuesta del usuario)
+### Session 2026-10-21 — respuestas adoptadas (2026-10-21)
 
-No fue posible consultar al usuario durante la redacción. Cada pregunta lleva opciones y una
-recomendación; el texto de la spec y de los requisitos usa la recomendación solo donde se indica como
-"por defecto provisional", y debe revisarse cuando el usuario responda.
+El usuario confirmó la opción A en las cuatro preguntas y todos los valores por defecto de la spec el
+2026-10-21. Cada pregunta conserva sus opciones; la **Respuesta adoptada** es la que rige.
 
-- **Q1 — ¿Qué proveedor entrega los mensajes de WhatsApp?** Decisión reservada al usuario, no se
-  decide aquí.
+- **Q1 — ¿Qué proveedor entrega los mensajes de WhatsApp?**
   - Opciones: (A) **Twilio** (WhatsApp sobre la misma cuenta y API que el SMS de HU2-090); (B) **Meta
     Cloud API directo** (proveedor oficial, sin intermediario); (C) ambos detrás del mismo puerto, con
     uno preferente.
@@ -37,7 +35,7 @@ recomendación; el texto de la spec y de los requisitos usa la recomendación so
     primaria de plantillas, ventana y estados, pero exige alta de cuenta Business verificada, número
     propio, token de sistema de larga duración, y un cliente y una clasificación de errores nuevos. C
     duplica el trabajo y excede una historia de tamaño L.
-  - **Recomendación: A (Twilio)** para esta historia: es el camino con menos piezas nuevas y menor
+  - **Respuesta adoptada: A (Twilio)**. Razonamiento: es el camino con menos piezas nuevas y menor
     riesgo, el puerto deja a B como adaptador futuro sin tocar el núcleo, y el modelo de contenido de
     esta spec (FR-004 a FR-007) no depende del proveedor. Revisar si el costo por mensaje o la
     verificación de negocio hacen inviable el intermediario.
@@ -54,8 +52,7 @@ recomendación; el texto de la spec y de los requisitos usa la recomendación so
     texto libre sin que el proveedor lo permita, y traslada al cliente el conocimiento de la
     conversación; B da la mejor experiencia pero crece a historia XL y depende de Q3; C es lo más simple
     y siempre válido, pero impide responder dentro de la conversación.
-  - **Recomendación: A**, con la plantilla siempre disponible. Es el por defecto provisional de FR-005 y
-    FR-006.
+  - **Respuesta adoptada: A**, con la plantilla siempre disponible. Rige FR-005 y FR-006.
   - Afecta a: FR-005, FR-006, User Story 2, Edge Cases, Risks.
 - **Q3 — ¿Qué alcance tiene el webhook de estado de entrega y mensajes entrantes?**
   - Opciones: (A) **fuera de alcance**: "aceptada" significa que el proveedor asumió el envío, igual que
@@ -67,7 +64,7 @@ recomendación; el texto de la spec y de los requisitos usa la recomendación so
     Principio II, y declarado como ruta pública del PEP), validación criptográfica de la firma,
     protección contra repetición y correlación con el intento. C suma lo anterior más almacenamiento de
     conversación.
-  - **Recomendación: A** en esta historia, y abrir una historia propia para B. El requisito de
+  - **Respuesta adoptada: A** en esta historia, y abrir una historia propia para B. El requisito de
     "validar webhook" de ADR-28 queda explícitamente diferido, con dueño y fecha en Risks.
   - Afecta a: FR-016, Out of Scope, SC-009, Risks.
 - **Q4 — ¿Se admiten adjuntos multimedia (imagen, documento, audio) en WhatsApp?**
@@ -79,8 +76,13 @@ recomendación; el texto de la spec y de los requisitos usa la recomendación so
     (HU2-093/094/095, que cubren correo, SMS y push) y sin que el proveedor tenga que descargar de un
     almacén propio; B exige que el archivo sea alcanzable por el proveedor y añade tipos y tamaños
     propios del canal; C añade audio, video y reglas de transcodificación.
-  - **Recomendación: A**, con los adjuntos como mejora posterior.
+  - **Respuesta adoptada: A**, con los adjuntos como mejora posterior.
   - Afecta a: FR-009, Out of Scope, Edge Cases.
+### Ajuste durante el plan (2026-10-21)
+
+- El diseño mostró que el componente no tiene registro de plantillas, así que "variable obligatoria
+  ausente" no puede detectarse en la aceptación. FR-007, la historia 2 (escenario 5) y SC-007 pasan a
+  validar solo la forma; la ausencia de una variable la rechaza el proveedor como fallo permanente.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -131,15 +133,17 @@ y sin reintentos.
 1. **Given** una notificación WhatsApp con identificador de plantilla y variables, **When** se despacha,
    **Then** la petición al proveedor lleva la plantilla y las variables, y no un cuerpo libre.
 2. **Given** una notificación WhatsApp con plantilla y también cuerpo libre, **When** se acepta, **Then**
-   se rechaza en la aceptación por ambigüedad, con motivo que nombra los dos campos (por defecto
-   provisional, Q2).
+   se rechaza en la aceptación por ambigüedad, con motivo que nombra los dos campos.
 3. **Given** una notificación de texto libre, **When** el proveedor la rechaza por estar fuera de la
    ventana, **Then** el intento se registra como fallo permanente, no se reintenta y el motivo nombra la
    causa "fuera de la ventana" sin revelar contenido ni número (Q2).
 4. **Given** una plantilla no aprobada o inexistente, **When** el proveedor la rechaza, **Then** el
    intento es fallo permanente con el código del proveedor registrado.
-5. **Given** una notificación con plantilla a la que le faltan variables obligatorias, **When** se
-   envía a aceptar, **Then** se rechaza en la aceptación con motivo que nombra la variable ausente.
+5. **Given** una notificación con plantilla cuya referencia viene vacía o cuyas variables no cumplen la
+   forma declarada por el canal (nombres vacíos, valores no textuales, más del máximo), **When** se envía
+   a aceptar, **Then** se rechaza en la aceptación con motivo que nombra el campo; si la plantilla exige
+   una variable que el cliente omitió, la rechaza el proveedor y el intento es fallo permanente con el
+   código registrado.
 
 ---
 
@@ -193,7 +197,7 @@ idempotencia o que el riesgo residual queda documentado si el proveedor no la ad
    despacha, **Then** se corta en ese plazo y es fallo recuperable.
 5. **Given** un despacho reentregado, **When** se reenvía al proveedor, **Then** la petición lleva un
    identificador de idempotencia derivado de la notificación y del número de intento, estable entre
-   reentregas del mismo intento (por defecto provisional; si el proveedor elegido no lo admite, se
+   reentregas del mismo intento (si el proveedor elegido no lo admite, se
    documenta como riesgo residual).
 6. **Given** varios intentos de una misma notificación, **When** se consulta su historial, **Then**
    aparecen en orden con proveedor, categoría y motivo, igual que en los demás canales.
@@ -240,7 +244,7 @@ una notificación con adjuntos y confirmar rechazo.
    **Then** se acepta; con un carácter más, se rechaza en la aceptación con motivo que nombra el límite,
    sin persistir ni truncar.
 2. **Given** el canal WhatsApp, **When** se envía una notificación con adjunto, **Then** se rechaza en
-   la aceptación con motivo que nombra que el canal no admite adjuntos (Q4, por defecto provisional).
+   la aceptación con motivo que nombra que el canal no admite adjuntos.
 3. **Given** el canal WhatsApp, **When** se envía una notificación con asunto, **Then** se acepta y el
    asunto no viaja al proveedor, igual que SMS.
 4. **Given** un destinatario sin formato telefónico internacional, **When** se despacha, **Then** el
@@ -287,13 +291,14 @@ una notificación con adjuntos y confirmar rechazo.
   dato afectado y el servicio DEBE seguir arrancando. La deshabilitación NUNCA DEBE ser silenciosa.
 - **FR-005**: El contenido de una notificación WhatsApp DEBE ser exactamente uno de dos: cuerpo de texto
   libre, o referencia a una plantilla aprobada con sus variables. Enviar ambos o ninguno DEBE rechazarse
-  en la aceptación con un motivo que nombre los campos (por defecto provisional, Q2).
+  en la aceptación con un motivo que nombre los campos.
 - **FR-006**: Un texto libre rechazado por el proveedor por estar fuera de la ventana de 24 h DEBE
   registrarse como fallo permanente con un motivo explícito, y NUNCA DEBE convertirse en silencio en una
-  plantilla ni reintentarse (por defecto provisional, Q2).
+  plantilla ni reintentarse.
 - **FR-007**: Una notificación con plantilla DEBE trasladar al proveedor la referencia de la plantilla y
-  sus variables, sin cuerpo libre, y DEBE rechazarse en la aceptación si falta una variable obligatoria
-  declarada para esa plantilla.
+  sus variables, sin cuerpo libre, y DEBE rechazarse en la aceptación si la referencia o la forma de las
+  variables incumplen lo declarado por el canal. La verificación de variables obligatorias de cada plantilla
+  corresponde al proveedor: el componente no mantiene un registro de plantillas.
 - **FR-008**: El sistema DEBE traducir cada respuesta del proveedor a exactamente una de las tres
   categorías existentes (aceptada, fallo recuperable, fallo permanente). Como mínimo: aceptación →
   aceptada; tiempo agotado, imposibilidad de conectar, fallo temporal y límite de tasa → recuperable;
@@ -303,7 +308,7 @@ una notificación con adjuntos y confirmar rechazo.
 - **FR-009**: El canal DEBE declarar en el catálogo su forma de contenido: cuerpo libre con longitud
   máxima configurable por entorno, asunto opcional e ignorado por el proveedor, y cero adjuntos
   admitidos. Un cuerpo que exceda el límite o una notificación con adjuntos DEBEN rechazarse en la
-  aceptación con motivo explícito; NUNCA DEBE truncarse (por defecto provisional, Q4).
+  aceptación con motivo explícito; NUNCA DEBE truncarse.
 - **FR-010**: Toda llamada al proveedor DEBE tener un tiempo de espera explícito y configurable; una
   llamada que lo supere DEBE cortarse y clasificarse como recuperable.
 - **FR-011**: La petición al proveedor DEBE incluir una clave de idempotencia estable derivada de la
@@ -323,7 +328,7 @@ una notificación con adjuntos y confirmar rechazo.
 - **FR-015**: La lista de proveedores del canal DEBE poder configurarse por entorno sin modificar código,
   con un valor por defecto seguro para un entorno sin credenciales (simulado como preferente).
 - **FR-016**: El sistema NO DEBE, en esta historia, exponer un endpoint de webhook ni consumir estados de
-  entrega ni mensajes entrantes del proveedor (por defecto provisional, Q3).
+  entrega ni mensajes entrantes del proveedor.
 - **FR-017**: Los proveedores simulado, de correo, de SMS y de push DEBEN seguir funcionando exactamente
   igual, y las pruebas de arquitectura hexagonal y de modularidad DEBEN seguir en verde.
 - **FR-018**: El aislamiento por tenant DEBE conservarse: la ruta del canal WhatsApp se resuelve por el
@@ -391,7 +396,7 @@ una notificación con adjuntos y confirmar rechazo.
 
 ## Assumptions
 
-- El usuario aporta, al elegir proveedor (Q1), una cuenta de pruebas con un número de origen habilitado
+- El usuario aporta una cuenta de Twilio, la misma de HU2-090, con WhatsApp habilitado: una cuenta de pruebas con un número de origen habilitado
   para WhatsApp y un destinatario autorizado. Sin ellos el proveedor queda deshabilitado (FR-004) y la
   historia se valida contra un servidor que lo simula.
 - "Aceptada" significa que el proveedor asumió el envío, no que el teléfono lo recibió: misma semántica
@@ -409,7 +414,7 @@ una notificación con adjuntos y confirmar rechazo.
 
 ## Risks
 
-- **Proveedor sin decidir (Q1)**: bloquea el plan. Dueño: andrualv. Fecha límite: antes de `/speckit-plan`.
+- **Proveedor intermediario (Q1-A)**: recargo por mensaje y dependencia de Twilio; Meta directo queda como adaptador futuro. Dueño: andrualv. Fecha de revisión: 2026-12-31.
 - **Ventana de 24 h delegada al cliente (Q2-A)**: el cliente puede enviar texto libre fuera de ventana y
   descubrir el rechazo consultando el estado. Dueño: andrualv. Fecha de revisión: 2026-12-31.
 - **Webhook de estados diferido (Q3-A)**: sin confirmación real de entrega ni validación de webhook

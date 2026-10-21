@@ -49,24 +49,24 @@ idioma va dentro de la plantilla y no es un campo aparte (el modelo no necesita 
 **Hallazgo**: hoy `NotificationContent` exige `body` no vacío y no existe concepto de plantilla. Sin
 ampliarlo, una notificación por plantilla no se puede representar.
 
-**Decisión**: `NotificationContent` gana un campo opcional `template` (`TemplateReference`:
+**Decisión**: `NotificationContent` gana un campo opcional `providerTemplate` (`ProviderTemplateReference`:
 `templateId` + `variables` mapa texto→texto, inmutable). Invariante en el record: **exactamente uno** de
-`body` o `template` (FR-005); ambos o ninguno lanza el error de precondición, que el controlador traduce a
+`body` o `providerTemplate` (FR-005); ambos o ninguno lanza el error de precondición, que el controlador traduce a
 `400`. Los constructores y fábricas actuales conservan su firma (cuerpo, sin plantilla), así que
 correo/SMS/push no cambian.
 
 **Quién admite plantillas**: `ContentSchemaValidator` rechaza una plantilla si el esquema del canal no
-declara la propiedad `template`, igual que ya rechaza adjuntos si no declara `attachments`. Con el catálogo
+declara la propiedad `providerTemplate`, igual que ya rechaza adjuntos si no declara `attachments`. Con el catálogo
 por defecto, solo WhatsApp la declara; un correo con plantilla se rechaza con motivo explícito.
 
 **Alternativas**: (a) plantilla serializada dentro de `body` — oculta la distinción y obliga a cada canal a
 interpretar JSON; (b) un mapa genérico `metadata` — sin forma, sin validación, riesgo de filtrar datos;
-(c) crear `TemplateNotification` como entidad aparte — duplica el ciclo de vida de `Notification`.
+(c) crear `ProviderTemplateNotification` como entidad aparte — duplica el ciclo de vida de `Notification`.
 
-**Costo asumido**: cambia `core` (`NotificationContent`, `TemplateReference`, `ContentSchemaValidator`,
+**Costo asumido**: cambia `core` (`NotificationContent`, `ProviderTemplateReference`, `ContentSchemaValidator`,
 `SendNotificationService`), el DTO REST de envío y de lote, el documento Mongo y su mapper, y el contrato.
 Es el cambio que hace de esta historia una L. Los documentos persistidos existentes no cambian (`body` ya
-existe, `template` es nuevo y nulo).
+existe, `providerTemplate` es nuevo y nulo).
 
 ## Decisión 4 — No hay registro de plantillas: la forma se valida, la semántica la valida el proveedor
 
@@ -80,7 +80,7 @@ inexistente/no aprobada las rechaza el proveedor con `400` → fallo permanente,
 proveedor registrado.
 
 **Adaptador**: antes de llamar, comprueba que `templateId` tenga la forma de `ContentSid`; si no, fallo
-permanente sin petición con `reason=invalid-template-format`, igual que el destinatario. La forma `HX…` es
+permanente sin petición con `reason=invalid-provider-template-format`, igual que el destinatario. La forma `HX…` es
 específica de Twilio, por eso vive en el adaptador y no en el esquema del canal: cambiar de proveedor no
 obliga a cambiar el catálogo.
 
@@ -147,7 +147,7 @@ hex; número de origen en formato internacional; cualquier falla → deshabilita
 **Decisión (FR-009)**: el canal `WHATSAPP` se siembra con este esquema versionado en `application.yml`
 (comillas simples YAML):
 
-`{"type":"object","properties":{"body":{"type":"string","maxLength":1600},"template":{"type":"object","required":["templateId"],"properties":{"templateId":{"type":"string","minLength":1,"maxLength":64},"variables":{"type":"object","maxProperties":20,"additionalProperties":{"type":"string","maxLength":1024}}}}}}`
+`{"type":"object","properties":{"body":{"type":"string","maxLength":1600},"providerTemplate":{"type":"object","required":["templateId"],"properties":{"templateId":{"type":"string","minLength":1,"maxLength":64},"variables":{"type":"object","maxProperties":20,"additionalProperties":{"type":"string","maxLength":1024}}}}}}`
 
 - Sin `attachments`: `ContentSchemaValidator` ya rechaza adjuntos (Q4) sin código nuevo.
 - `subject` sin restricción: se admite y se ignora, como SMS.

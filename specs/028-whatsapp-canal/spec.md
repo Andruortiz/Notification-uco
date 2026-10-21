@@ -78,11 +78,19 @@ El usuario confirmó la opción A en las cuatro preguntas y todos los valores po
     propios del canal; C añade audio, video y reglas de transcodificación.
   - **Respuesta adoptada: A**, con los adjuntos como mejora posterior.
   - Afecta a: FR-009, Out of Scope, Edge Cases.
+
 ### Ajuste durante el plan (2026-10-21)
 
 - El diseño mostró que el componente no tiene registro de plantillas, así que "variable obligatoria
   ausente" no puede detectarse en la aceptación. FR-007, la historia 2 (escenario 5) y SC-007 pasan a
   validar solo la forma; la ausencia de una variable la rechaza el proveedor como fallo permanente.
+
+### Nota de nomenclatura: plantilla del proveedor y HU2-074
+
+- El campo del contenido se llama `providerTemplate` (tipo `ProviderTemplateReference`): es una plantilla
+  aprobada por el proveedor, que este envía tal cual. Es distinta de HU2-074 (contenido resuelto por código
+  desde un catálogo de textos propio). Ambas pueden convivir. La regla de exclusión de esta historia es
+  cuerpo o `providerTemplate`; HU2-074 añadirá su propio campo más adelante, sin tocar este.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -342,8 +350,9 @@ una notificación con adjuntos y confirmar rechazo.
 - **Ruta del canal WhatsApp**: nueva entrada del catálogo (entidad existente) con lista de proveedores
   (por defecto: simulado, real) y forma de contenido propia (cuerpo libre o plantilla, límite de
   longitud, asunto ignorado, cero adjuntos).
-- **Contenido por plantilla**: referencia a una plantilla aprobada por el proveedor y un conjunto de
-  variables con nombre; viaja dentro de la notificación y no se almacena como entidad propia.
+- **Plantilla del proveedor** (`providerTemplate`, tipo `ProviderTemplateReference`): referencia a una
+  plantilla aprobada por el proveedor (`templateId`) y un conjunto de variables con nombre; viaja dentro de
+  la notificación y no se almacena como entidad propia.
 - **Resultado del intento**: entidad existente; esta historia define cómo se deriva de las respuestas del
   proveedor de WhatsApp, incluida la clave de idempotencia.
 

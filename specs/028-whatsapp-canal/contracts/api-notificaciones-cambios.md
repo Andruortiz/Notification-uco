@@ -10,19 +10,19 @@ hereda los cambios. No hay cambios en las rutas públicas del PEP.
 1. **`required`**: se quita `body`. Ahora el cuerpo y la plantilla son excluyentes y exactamente uno es
    obligatorio; OpenAPI 3.0 no lo expresa de forma limpia sin `oneOf`, así que se documenta en la
    descripción de ambos campos y la regla la aplica el servicio con `400`.
-2. **`body`**: la descripción añade "Obligatorio salvo que se envíe `template`; no puede enviarse junto con
-   `template`" y que en WHATSAPP el límite por defecto es 1600 caracteres.
-3. **Campo nuevo `template`** (opcional, `nullable: true`):
+2. **`body`**: la descripción añade "Obligatorio salvo que se envíe `providerTemplate`; no puede enviarse junto con
+   `providerTemplate`" y que en WHATSAPP el límite por defecto es 1600 caracteres.
+3. **Campo nuevo `providerTemplate`** (opcional, `nullable: true`):
 
 ```yaml
-template:
+providerTemplate:
   type: object
   nullable: true
   required: [templateId]
   description: >
     Opcional. Envía una plantilla aprobada por el proveedor en lugar de un cuerpo libre; excluyente con
     body. El canal debe declararla en su forma de contenido (GET /channels, contentSchema, propiedad
-    template); con la configuración por defecto solo WHATSAPP lo hace y cualquier otro canal rechaza la
+    providerTemplate); con la configuración por defecto solo WHATSAPP lo hace y cualquier otro canal rechaza la
     notificación con 400. Fuera de la ventana de 24 h de WhatsApp solo se admiten plantillas; un texto libre
     que el proveedor rechaza por estar fuera de la ventana termina en FAILED sin reintentos. El servicio
     valida la forma (referencia presente, a lo sumo 20 variables de hasta 1024 caracteres); que la plantilla

@@ -25,7 +25,7 @@ Resultados esperados de las dos E2E:
 | Texto libre con proveedor habilitado | una petición con `To`, `From`, `Body`; `DELIVERED`; intento con `twilio-whatsapp` |
 | Plantilla con variables | una petición con `ContentSid` y `ContentVariables`, sin `Body`; `DELIVERED` |
 | Cuerpo y plantilla juntos, o ninguno | `400`; nada persistido; cero peticiones |
-| Plantilla en el canal de correo | `400` con "channel does not accept templates" |
+| Plantilla en el canal de correo | `400` con "channel does not accept provider templates" |
 | Cuerpo de 1601 caracteres | `400` con el límite; con 1600 se acepta |
 | Adjunto | `400` por canal que no acepta adjuntos |
 | Respuesta 400 con código de ventana cerrada | `FAILED`, sin reintentos, etiqueta `outside-session-window` en el registro |
@@ -64,7 +64,7 @@ Resultados esperados de las dos E2E:
    curl -s -X POST http://localhost:8060/notifications -H 'Content-Type: application/json' \
      -H 'X-Tenant-Id: tenant-humo' \
      -d '{"externalId":"humo-wa-2","channelType":"WHATSAPP","recipientId":"humo-1",
-          "recipientAddress":"<+...>","template":{"templateId":"<HX...>","variables":{"1":"Alice"}},
+          "recipientAddress":"<+...>","providerTemplate":{"templateId":"<HX...>","variables":{"1":"Alice"}},
           "priority":"NORMAL"}'
    ```
 
@@ -91,7 +91,7 @@ db.channel_catalog.updateOne(
   { _id: "WHATSAPP" },
   { $set: {
       providers: ["simulated", "twilio-whatsapp"],
-      contentSchema: "{\"type\":\"object\",\"properties\":{\"body\":{\"type\":\"string\",\"maxLength\":1600},\"template\":{\"type\":\"object\",\"required\":[\"templateId\"],\"properties\":{\"templateId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64},\"variables\":{\"type\":\"object\",\"maxProperties\":20,\"additionalProperties\":{\"type\":\"string\",\"maxLength\":1024}}}}}}"
+      contentSchema: "{\"type\":\"object\",\"properties\":{\"body\":{\"type\":\"string\",\"maxLength\":1600},\"providerTemplate\":{\"type\":\"object\",\"required\":[\"templateId\"],\"properties\":{\"templateId\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":64},\"variables\":{\"type\":\"object\",\"maxProperties\":20,\"additionalProperties\":{\"type\":\"string\",\"maxLength\":1024}}}}}}"
   } },
   { upsert: true }
 )

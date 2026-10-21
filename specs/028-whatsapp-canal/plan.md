@@ -21,9 +21,9 @@ diferencia de ellos **no se puede hacer sin tocar `core`**: la notificación nec
 
 Piezas del plan:
 
-1. **Modelo de contenido (`core`)**. `NotificationContent` gana `template` opcional (`TemplateReference`:
+1. **Modelo de contenido (`core`)**. `NotificationContent` gana `providerTemplate` opcional (`ProviderTemplateReference`:
    `templateId` + variables); invariante: exactamente uno de cuerpo o plantilla. `ContentSchemaValidator`
-   rechaza una plantilla en un canal cuyo esquema no declare `template`, con el mismo patrón que ya usa para
+   rechaza una plantilla en un canal cuyo esquema no declare `providerTemplate`, con el mismo patrón que ya usa para
    los adjuntos. Correo, SMS y push no cambian.
 2. **Adaptador** `TwilioWhatsAppNotificationProvider` (`providerId = twilio-whatsapp`), detrás de
    `NotificationSenderPort`. Mismo endpoint de mensajes de Twilio con `whatsapp:` en origen y destino;
@@ -40,7 +40,7 @@ Piezas del plan:
    (Decisión 6). **[verificar]** que exista para esta API; si no, FR-011 y SC-008 degradan a riesgo
    documentado y se vuelve a pedir aprobación.
 6. **Canal y contrato**. Catálogo `WHATSAPP` con esquema de contenido propio (Decisión 9), contrato público
-   con el campo `template` y `body` opcional (Principio II: se edita primero), registro del proveedor en la
+   con el campo `providerTemplate` y `body` opcional (Principio II: se edita primero), registro del proveedor en la
    configuración gestionada (timeouts) y en los límites por proveedor.
 7. **Fuera de alcance (Q3-A, Q4-A)**: sin webhook, sin rastreo de ventana, sin adjuntos. Ninguna ruta
    pública nueva.
@@ -59,7 +59,7 @@ los adaptadores de correo, SMS y push **no se tocan**.
 **Primary Dependencies**: **ninguna nueva en `pom.xml`**. `WebClient`/`reactor-netty`, el validador de JSON
 Schema y el servidor de pruebas HTTP del JDK (`FakeProviderServer`) ya están.
 
-**Storage**: Mongo. Un campo anidado nuevo y nulo en el documento de notificación (`template`), `body` puede
+**Storage**: Mongo. Un campo anidado nuevo y nulo en el documento de notificación (`providerTemplate`), `body` puede
 ser nulo en documentos nuevos con plantilla; un documento sembrado nuevo en `channel_catalog`
 (`_id = WHATSAPP`). Sin migración (data-model.md).
 
@@ -96,7 +96,7 @@ documento Mongo, `ConfigurationConfig`, `ProviderContentLimits`, `ProviderLogs`,
 Re-evaluado después de Phase 1: sin cambios, sigue en PASS (VI pendiente de aprobación).
 
 - **I. Arquitectura hexagonal (NON-NEGOTIABLE)** — PASS. Cambios en `core` solo de modelo y validación, en Java
-  puro (`TemplateReference` es un record; el validador ya usaba su biblioteca de esquemas). Todo lo de Twilio
+  puro (`ProviderTemplateReference` es un record; el validador ya usaba su biblioteca de esquemas). Todo lo de Twilio
   (formulario, `ContentSid`, cabecera de idempotencia, etiquetas de error, forma `HX…`) vive en el adaptador.
   `core` no aprende qué es WhatsApp: solo que un contenido puede ser una plantilla. `HexagonalArchitectureTest`
   y `ModularityTests` deben seguir en verde.
@@ -160,8 +160,8 @@ specs/028-whatsapp-canal/
 
 ```text
 core/src/main/java/co/edu/uco/notification/core/
-├── domain/valueobject/TemplateReference.java      # NUEVO: record (templateId, variables)
-├── domain/valueobject/NotificationContent.java    # MODIFICADO: campo template + invariante cuerpo xor plantilla
+├── domain/valueobject/ProviderTemplateReference.java      # NUEVO: record (templateId, variables)
+├── domain/valueobject/NotificationContent.java    # MODIFICADO: campo providerTemplate + invariante cuerpo xor plantilla
 ├── domain/policy/ContentSchemaValidator.java      # MODIFICADO: plantilla solo si el esquema la declara
 ├── domain/configuration/ParameterRegistry.java    # MODIFICADO: MANAGED_PROVIDERS += twilio-whatsapp
 └── usecase/SendNotificationService.java           # MODIFICADO: conservar la plantilla al crear el contenido
@@ -176,9 +176,9 @@ infrastructure/src/main/java/co/edu/uco/notification/infrastructure/
 │   ├── TwilioWhatsAppNotificationProvider.java    # NUEVO: @Component, providerId twilio-whatsapp
 │   ├── WhatsAppFailureReasons.java                # NUEVO: code del proveedor -> etiqueta (pura)
 │   └── ProviderLogs.java                          # MODIFICADO: campo reason en rejectedByProvider
-├── adapter/in/rest/SendNotificationRequest.java   # MODIFICADO: template; body opcional
+├── adapter/in/rest/SendNotificationRequest.java   # MODIFICADO: providerTemplate; body opcional
 │   (+ NotificationController y NotificationBatchController: toCommand con plantilla)
-├── adapter/out/mongo/NotificationDocument.java    # MODIFICADO: campo template
+├── adapter/out/mongo/NotificationDocument.java    # MODIFICADO: campo providerTemplate
 ├── adapter/out/mongo/NotificationDocumentMapper.java # MODIFICADO
 └── config/
     ├── TwilioWhatsAppProviderProperties.java      # NUEVO: @ConfigurationProperties + disabledReason()
@@ -187,7 +187,7 @@ infrastructure/src/main/java/co/edu/uco/notification/infrastructure/
 
 infrastructure/src/main/resources/
 ├── application.yml                                # MODIFICADO: canal WHATSAPP + bloque twilio-whatsapp
-└── static/openapi/api-notificaciones.yaml         # MODIFICADO PRIMERO: template, body opcional
+└── static/openapi/api-notificaciones.yaml         # MODIFICADO PRIMERO: providerTemplate, body opcional
 
 infrastructure/src/test/java/co/edu/uco/notification/infrastructure/adapter/out/provider/
 ├── WhatsAppFailureReasonsTest.java                # NUEVO
@@ -209,7 +209,7 @@ Orden dentro de `send(notification)`:
 2. **Destinatario sin formato internacional** → `PERMANENT_FAILURE` sin llamar, `reason=invalid-recipient-format`
    (Decisión 7).
 3. **Plantilla con `templateId` sin forma de `ContentSid`** → `PERMANENT_FAILURE` sin llamar,
-   `reason=invalid-template-format` (Decisión 4).
+   `reason=invalid-provider-template-format` (Decisión 4).
 4. **Construir el formulario**: `To`, `From` con prefijo `whatsapp:`; `Body` o `ContentSid` +
    `ContentVariables`. El asunto no se usa.
 5. **Llamar** con autenticación básica y la cabecera de idempotencia (Decisión 6). Tiempos de espera del
@@ -230,7 +230,7 @@ Orden por tarea: escribir la prueba, verla fallar por la razón correcta, implem
 1. **Verificar los puntos [verificar]** de research.md (nombres de campos de plantilla, cabecera de
    idempotencia, códigos de error, máximo de cuerpo). Si algo difiere, ajustar y avisar antes de seguir.
 2. **Contrato público** — `api-notificaciones.yaml` (Principio II, antes del código).
-3. **`core`**: `TemplateReference` y `NotificationContent` con su invariante, `ContentSchemaValidator`,
+3. **`core`**: `ProviderTemplateReference` y `NotificationContent` con su invariante, `ContentSchemaValidator`,
    `SendNotificationService`, `ParameterRegistry`; correr `-pl core test` completo (los parámetros gestionados
    pasan a cuatro proveedores).
 4. **REST y Mongo**: DTO de envío, `toCommand` de envío y de lote, documento y mapper; probar el viaje de ida
@@ -251,7 +251,7 @@ Orden por tarea: escribir la prueba, verla fallar por la razón correcta, implem
 | Riesgo | Cómo lo acota el plan |
 |---|---|
 | Un dato del proveedor (campos de plantilla, cabecera de idempotencia, códigos) difiere de lo asumido. | Paso 1 obligatorio; marcas [verificar]; si la idempotencia no aplica, se degrada a riesgo documentado y se pide nueva aprobación. |
-| Relajar `body` obligatorio rompe canales existentes. | La invariante es "cuerpo xor plantilla"; el esquema de correo/SMS/push no declara `template`, así que una plantilla ahí se rechaza; SMS y push siguen exigiendo `body` por esquema. Pruebas de regresión en el paso 9. |
+| Relajar `body` obligatorio rompe canales existentes. | La invariante es "cuerpo xor plantilla"; el esquema de correo/SMS/push no declara `providerTemplate`, así que una plantilla ahí se rechaza; SMS y push siguen exigiendo `body` por esquema. Pruebas de regresión en el paso 9. |
 | Nuevo proveedor gestionado rompe pruebas que fijan tres proveedores. | Ajuste explícito en el paso 3 y 5; `ProviderViewTest` y pruebas de `ParameterRegistry`. |
 | Datos personales en variables de plantilla filtrados a logs o eventos. | Prueba de no filtrado con control positivo; las variables no se pasan a `ProviderLogs`. |
 | Dos credenciales compartidas con SMS llevan a deshabilitar el SMS por error de WhatsApp. | Propiedades independientes con motivo propio (Decisión 8). |

@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-21
 
-**Status**: Clarify cerrado — Q1 a Q4 adoptadas con la opción A por el usuario (2026-10-21); pendiente de aprobación del plan
+**Status**: Plan aprobado por el usuario (2026-10-21); Q1 a Q4 adoptadas con la opción A y ajuste de FR-007 aceptado
 
 **Input**: User description: "Como sistema cliente, quiero enviar una notificación por el canal WhatsApp,
 para llegar al destinatario por el medio con mayor penetración en Colombia."

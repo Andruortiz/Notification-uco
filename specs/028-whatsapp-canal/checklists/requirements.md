@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,5 +31,4 @@
 
 ## Notes
 
-- Las cuatro preguntas abiertas (Q1 proveedor, Q2 ventana de 24 h, Q3 webhook, Q4 multimedia) viven en la seccion Clarifications de spec.md con opciones y recomendacion; no se usan marcadores en linea. Los requisitos que dependen de ellas se marcan "por defecto provisional".
-- El primer item de Requirement Completeness queda sin marcar hasta que el usuario responda Q1 a Q4.
+- Q1 a Q4 se adoptaron con la opcion A el 2026-10-21 y viven en la seccion Clarifications de spec.md; no quedan marcadores de clarificacion ni valores por defecto provisionales.

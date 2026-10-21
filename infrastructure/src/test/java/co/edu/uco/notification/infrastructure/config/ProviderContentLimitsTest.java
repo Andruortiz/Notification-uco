@@ -23,7 +23,7 @@ class ProviderContentLimitsTest {
 
   @Test
   void containsOnlyTheValuesWithAVerifiedSource() {
-    assertEquals(1, ProviderContentLimits.entries().size());
+    assertEquals(2, ProviderContentLimits.entries().size());
     final ProviderContentLimits.Entry twilio = ProviderContentLimits.entries().get(0);
     assertEquals("twilio", twilio.providerId());
     assertEquals("SMS", twilio.channel());
@@ -31,13 +31,24 @@ class ProviderContentLimitsTest {
     assertEquals(1_600L, twilio.value());
     assertEquals("https://www.twilio.com/docs/messaging/api/message-resource", twilio.sourceUrl());
     assertEquals(LocalDate.of(2026, 10, 5), twilio.consultedOn());
+    final ProviderContentLimits.Entry whatsapp = ProviderContentLimits.entries().get(1);
+    assertEquals("twilio-whatsapp", whatsapp.providerId());
+    assertEquals("WHATSAPP", whatsapp.channel());
+    assertEquals("body.maxLength", whatsapp.limitKey());
+    assertEquals(1_600L, whatsapp.value());
   }
 
   @Test
   void byProviderGroupsTheEntriesByProviderAndChannel() {
     final Map<String, Map<String, Map<String, Long>>> table = ProviderContentLimits.byProvider();
 
-    assertEquals(Map.of("twilio", Map.of("SMS", Map.of("body.maxLength", 1_600L))), table);
+    assertEquals(
+        Map.of(
+            "twilio",
+            Map.of("SMS", Map.of("body.maxLength", 1_600L)),
+            "twilio-whatsapp",
+            Map.of("WHATSAPP", Map.of("body.maxLength", 1_600L))),
+        table);
     assertFalse(table.containsKey("brevo"));
     assertFalse(table.containsKey("fcm"));
   }

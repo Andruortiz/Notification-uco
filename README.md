@@ -130,7 +130,7 @@ Esta resolucion de identidad es provisional (excepcion registrada en `specs/025-
 - La aplicacion debe existir en el PDP; la **asignacion de perfiles a usuarios sigue siendo manual** en la consola.
 - Detalle, endpoints verificados y preguntas abiertas: `specs/028-aprovisionar-pdp/`.
 
-### Rutas publicas con el PEP activo
+## Rutas publicas con el PEP activo
 
 El starter del PEP exige credencial en toda ruta salvo las de `security.pep.enforcement.public-paths` (`SECURITY_PEP_PUBLIC_PATHS`, separadas por comas, patrones de ruta completa; `/**` final cubre el subarbol; no distingue metodo). Por defecto son solo lectura de documentacion y sondas: `GET /openapi/api-notificaciones.yaml` y `GET /v3/api-docs` (contrato, sin datos) y, en el puerto de gestion, `/actuator/health`, `/actuator/health/**` y `/actuator/prometheus`. Estan declaradas en `x-public-routes` del contrato y no son recursos que haya que registrar en el PDP.
 

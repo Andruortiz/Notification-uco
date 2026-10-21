@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationMetadata;
 import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.ProviderTemplateReference;
 import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
@@ -67,6 +68,7 @@ final class NotificationDocumentMapper {
         notification.content().attachments().stream()
             .map(attachment -> toDocument(notification.tenantId(), attachment))
             .toList(),
+        toDocument(notification.content().providerTemplate()),
         notification.priority(),
         notification.status(),
         notification.acceptedAt(),
@@ -130,7 +132,8 @@ final class NotificationDocumentMapper {
                 Objects.requireNonNullElse(document.attachments(), List.<AttachmentDocument>of())
                     .stream()
                     .map(attachment -> toDomain(tenantId, attachment))
-                    .toList()),
+                    .toList(),
+                toDomain(document.providerTemplate())),
             document.priority()),
         document.status(),
         new NotificationMetadata(
@@ -144,6 +147,18 @@ final class NotificationDocumentMapper {
             .map(NotificationDocumentMapper::toDomain)
             .toList(),
         CorrelationId.fromOrNull(document.correlationId()));
+  }
+
+  private static ProviderTemplateDocument toDocument(final ProviderTemplateReference template) {
+    return template == null
+        ? null
+        : new ProviderTemplateDocument(template.templateId(), template.variables());
+  }
+
+  private static ProviderTemplateReference toDomain(final ProviderTemplateDocument template) {
+    return template == null
+        ? null
+        : ProviderTemplateReference.of(template.templateId(), template.variables());
   }
 
   private static AttachmentDocument toDocument(final TenantId owner, final Attachment attachment) {

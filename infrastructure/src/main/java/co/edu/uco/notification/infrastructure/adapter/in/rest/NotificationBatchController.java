@@ -5,7 +5,6 @@ import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.BatchId;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
-import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.Priority;
 import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
@@ -72,7 +71,7 @@ public class NotificationBatchController {
         ChannelType.of(item.channelType()),
         RecipientId.of(item.recipientId()),
         Recipient.of(item.recipientAddress()),
-        NotificationContent.of(item.subject(), item.body()),
+        item.toContent(),
         RequestEnums.required(Priority.class, "priority", item.priority()),
         item.attachments().stream().map(AttachmentRequest::toSubmission).toList());
   }

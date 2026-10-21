@@ -388,4 +388,37 @@ class NotificationBatchControllerTest {
     verify(sendNotificationBatchUseCase).sendBatch(command.capture());
     assertNotNull(command.getValue().correlationId());
   }
+
+  private static final String TEMPLATE_ITEM =
+      """
+      {
+        "externalId": "order-3",
+        "channelType": "WHATSAPP",
+        "recipientId": "recipient-3",
+        "recipientAddress": "+573001234567",
+        "providerTemplate": {"templateId": "HX0001", "variables": {"1": "Alice"}},
+        "priority": "NORMAL"
+      }
+      """;
+
+  @Test
+  void sendBatchMapsAProviderTemplateItem() {
+    when(sendNotificationBatchUseCase.sendBatch(any()))
+        .thenReturn(
+            Mono.just(
+                new BatchAcceptedResult(
+                    BatchId.of("batch-1"),
+                    List.of(
+                        BatchItemResult.accepted(
+                            ExternalId.of("order-3"), NotificationId.newId())))));
+
+    post("{\"items\": [" + TEMPLATE_ITEM + "]}").expectStatus().isEqualTo(HttpStatus.ACCEPTED);
+
+    final ArgumentCaptor<SendNotificationBatchCommand> captor =
+        ArgumentCaptor.forClass(SendNotificationBatchCommand.class);
+    verify(sendNotificationBatchUseCase).sendBatch(captor.capture());
+    final NotificationContent content = captor.getValue().items().get(0).content();
+    assertNull(content.body());
+    assertEquals("HX0001", content.providerTemplate().templateId());
+  }
 }

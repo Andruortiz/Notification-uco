@@ -36,9 +36,9 @@ Piezas del plan:
 4. **Ventana de 24 h (Q2-A)**. El sistema no la rastrea. Un texto libre rechazado por estar fuera de ella
    termina `PERMANENT_FAILURE` sin reintentos y el adaptador registra la etiqueta `outside-session-window`
    derivada del código del proveedor (Decisión 5). La categoría sigue decidiéndola el código HTTP.
-5. **Idempotencia**. Clave `{notificationId}:{ciclo}:{n}` en la cabecera de idempotencia de Twilio
-   (Decisión 6). **[verificar]** que exista para esta API; si no, FR-011 y SC-008 degradan a riesgo
-   documentado y se vuelve a pedir aprobación.
+5. **Idempotencia**. Twilio no documenta una cabecera de idempotencia para su API de mensajes (verificado
+   2026-10-21), así que el adaptador no envía ninguna. FR-011 y SC-008 pasan a riesgo residual documentado:
+   un reintento tras un tiempo de espera ambiguo puede duplicar el mensaje (Decisión 6).
 6. **Canal y contrato**. Catálogo `WHATSAPP` con esquema de contenido propio (Decisión 9), contrato público
    con el campo `providerTemplate` y `body` opcional (Principio II: se edita primero), registro del proveedor en la
    configuración gestionada (timeouts) y en los límites por proveedor.
@@ -97,7 +97,7 @@ Re-evaluado después de Phase 1: sin cambios, sigue en PASS (VI pendiente de apr
 
 - **I. Arquitectura hexagonal (NON-NEGOTIABLE)** — PASS. Cambios en `core` solo de modelo y validación, en Java
   puro (`ProviderTemplateReference` es un record; el validador ya usaba su biblioteca de esquemas). Todo lo de Twilio
-  (formulario, `ContentSid`, cabecera de idempotencia, etiquetas de error, forma `HX…`) vive en el adaptador.
+  (formulario, `ContentSid`, etiquetas de error, forma `HX…`) vive en el adaptador.
   `core` no aprende qué es WhatsApp: solo que un contenido puede ser una plantilla. `HexagonalArchitectureTest`
   y `ModularityTests` deben seguir en verde.
 - **II. Contract-first** — PASS. Ningún endpoint nuevo. Los cambios al contrato público
@@ -116,7 +116,7 @@ Re-evaluado después de Phase 1: sin cambios, sigue en PASS (VI pendiente de apr
 - **VI. Desarrollo asistido por IA, gobernado por spec-kit** — PASS. Spec con Q1-Q4 adoptadas y plan aprobado el 2026-10-21.
 - **VII. Sin atajos** — PASS, con pendientes documentados con dueño y fecha: ventana de 24 h delegada al
   cliente (2026-12-31); webhook de estados y su validación diferidos, ADR-28 (2026-12-31); proveedor
-  intermediario (2026-12-31); duplicado tras reentrega si la idempotencia no aplica (2026-11-30); canal
+  intermediario (2026-12-31); duplicado tras un reintento por falta de idempotencia del proveedor (aceptado 2026-10-21); canal
   `WHATSAPP` ausente en entornos ya sembrados, con paso manual (Decisión 12, 2026-10-31); costo por
   conversación y aprobación de plantillas (2026-11-30); límite de tasa y gestión de secretos (2026-11-30).
   Dueño de todos: andrualv.
@@ -211,12 +211,12 @@ Orden dentro de `send(notification)`:
    `reason=invalid-provider-template-format` (Decisión 4).
 4. **Construir el formulario**: `To`, `From` con prefijo `whatsapp:`; `Body` o `ContentSid` +
    `ContentVariables`. El asunto no se usa.
-5. **Llamar** con autenticación básica y la cabecera de idempotencia (Decisión 6). Tiempos de espera del
+5. **Llamar** con autenticación básica y sin cabecera de idempotencia (Decisión 6). Tiempos de espera del
    cliente por proveedor, gestionados por parámetros.
 6. **Leer y clasificar**: el cuerpo se lee tolerante (vacío o ilegible → vacío); `classifyStatus` decide por
    HTTP; `onErrorResume` → recuperable.
 7. **Registrar**: identificadores, categoría, código HTTP, `sid` o `code`, etiqueta de motivo y número
-   enmascarado. Nunca credenciales, URL, cuerpo, variables, número completo, clave de idempotencia ni
+   enmascarado. Nunca credenciales, URL, cuerpo, variables, número completo ni
    mensajes de error.
 
 El adaptador no reintenta por su cuenta.
@@ -226,8 +226,8 @@ El adaptador no reintenta por su cuenta.
 Orden por tarea: escribir la prueba, verla fallar por la razón correcta, implementar, ejecutar la clase,
 `spotless:apply`.
 
-1. **Verificar los puntos [verificar]** de research.md (nombres de campos de plantilla, cabecera de
-   idempotencia, códigos de error, máximo de cuerpo). Si algo difiere, ajustar y avisar antes de seguir.
+1. **Verificado el 2026-10-21 (T001)**: campos de plantilla y tope de cuerpo confirmados; sin cabecera de
+   idempotencia; códigos de error pendientes de verificar uno a uno. Ver research.md.
 2. **Contrato público** — `api-notificaciones.yaml` (Principio II, antes del código).
 3. **`core`**: `ProviderTemplateReference` y `NotificationContent` con su invariante, `ContentSchemaValidator`,
    `SendNotificationService`, `ParameterRegistry`; correr `-pl core test` completo (los parámetros gestionados
@@ -249,7 +249,7 @@ Orden por tarea: escribir la prueba, verla fallar por la razón correcta, implem
 
 | Riesgo | Cómo lo acota el plan |
 |---|---|
-| Un dato del proveedor (campos de plantilla, cabecera de idempotencia, códigos) difiere de lo asumido. | Paso 1 obligatorio; marcas [verificar]; si la idempotencia no aplica, se degrada a riesgo documentado y se pide nueva aprobación. |
+| Un código de error del proveedor difiere de la tabla de etiquetas. | La etiqueta es solo diagnóstico y no cambia la categoría; los códigos se verificarán uno a uno (research.md, Decisión 5). Sin cabecera de idempotencia: duplicado posible tras un tiempo de espera ambiguo, riesgo aceptado con dueño y fecha. |
 | Relajar `body` obligatorio rompe canales existentes. | La invariante es "cuerpo xor plantilla"; el esquema de correo/SMS/push no declara `providerTemplate`, así que una plantilla ahí se rechaza; SMS y push siguen exigiendo `body` por esquema. Pruebas de regresión en el paso 9. |
 | Nuevo proveedor gestionado rompe pruebas que fijan tres proveedores. | Ajuste explícito en el paso 3 y 5; `ProviderViewTest` y pruebas de `ParameterRegistry`. |
 | Datos personales en variables de plantilla filtrados a logs o eventos. | Prueba de no filtrado con control positivo; las variables no se pasan a `ProviderLogs`. |

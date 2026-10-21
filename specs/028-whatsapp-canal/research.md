@@ -3,9 +3,9 @@
 **Feature**: 028-whatsapp-canal | **Date**: 2026-10-21
 
 Q1 a Q4 de la spec están resueltas (opción A). Aquí se resuelve lo que el diseño todavía debía decidir. Todo
-lo marcado **[verificar]** es un hecho del proveedor que no pudo confirmarse sin red desde este entorno; la
-tarea correspondiente debe confirmarlo contra la documentación vigente antes de implementar y, si difiere,
-ajustar la decisión y avisar.
+lo marcado **[verificar]** era un hecho del proveedor sin confirmar al planear. Estado al 2026-10-21: tres
+verificados (campos de plantilla, tope de cuerpo, código 63016), idempotencia no disponible y los demás
+códigos de error pendientes de verificar uno a uno.
 
 ## Decisión 1 — Un adaptador propio, `twilio-whatsapp`, y no ampliar el de SMS
 
@@ -37,7 +37,7 @@ autenticación básica). Diferencias:
 | `ContentSid` | no se envía | `templateId` de la notificación (forma `HX` + 32 hex) |
 | `ContentVariables` | no se envía | JSON `{"nombre":"valor",...}` de las variables |
 
-**[verificar]**: nombres de campo `ContentSid`/`ContentVariables` y que las variables aceptan nombres
+**Verificado 2026-10-21**: `ContentSid` (empieza por `HX` + 32 hexadecimales) y `ContentVariables`; este exige `ContentSid`. Pendiente solo: que las variables aceptan nombres
 alfanuméricos además de índices `"1","2"`. Detalle del contrato de salida en
 `contracts/twilio-whatsapp-messages-api.md`.
 
@@ -100,29 +100,24 @@ registra: `63016` → `outside-session-window`. Otros códigos relevantes se eti
 | 20003 | `invalid-credentials` | permanente |
 | otro / ausente | `unclassified` | por HTTP |
 
-**[verificar]** la lista contra la documentación de errores de Twilio al implementar. La etiqueta es solo
+**Pendiente de verificar uno a uno** (2026-10-21): 63016 está confirmado como texto libre fuera de la ventana (desde el 1 de abril de 2025 una plantilla puesta en `Body` fuera de la ventana también falla con 63016); la página no da estado HTTP, así que la categoría la sigue decidiendo el código HTTP. 63024, 63015, 63007, 63112, 21211 y 20003 no se verificaron. La etiqueta es solo
 diagnóstico: nunca cambia la categoría (coherente con la Decisión 5 de la spec 009). Se registra
 `providerErrorCode` además de la etiqueta.
 
 **Alternativa descartada**: reclasificar 63016 como recuperable para "esperar a que se abra la ventana" —
 reintentar un envío que el proveedor ya dijo que no se admite no lo habilita, y gasta cuota.
 
-## Decisión 6 — Idempotencia: cabecera de Twilio + clave derivada, con riesgo residual explícito
+## Decisión 6 — Idempotencia: sin cabecera del proveedor, riesgo residual explícito
 
-**Decisión (FR-011)**: la petición lleva la cabecera de idempotencia de Twilio con la clave
-`{notificationId}:{ciclo}:{n}` donde `n` es la cantidad de intentos ya registrados en la notificación. Una
-reentrega del mismo despacho ve la misma notificación sin intento nuevo guardado, por tanto la misma clave;
-el intento siguiente (tras un fallo recuperable persistido) lleva otra.
+**Decisión (FR-011)**: Twilio no documenta una cabecera de idempotencia para su API de mensajes
+(verificado 2026-10-21), así que el adaptador **no envía ninguna** ni calcula clave alguna. La entrega es
+"al menos una vez": un reintento tras un tiempo de espera ambiguo (el proveedor aceptó pero el componente no
+recibió la respuesta) reenvía el mensaje y puede duplicarlo. Es el mismo riesgo que ya tiene SMS. Dueño:
+andrualv. Fecha: 2026-10-21 (aceptado por el usuario); se reabre si el proveedor documenta idempotencia.
 
-**[verificar]**: nombre exacto de la cabecera (`I-Twilio-Idempotency-Token`), su disponibilidad para la API
-de mensajes y para el canal WhatsApp, su ventana de validez y que un reenvío con la misma clave devuelve la
-respuesta original. **Si no está disponible o no aplica a WhatsApp, la tarea correspondiente no la
-simula**: el adaptador no envía clave, FR-011 y SC-008 se reducen a documentar el riesgo y se avisa para
-re-aprobar. El riesgo de duplicado ya está registrado (Risks).
-
-**Alternativa**: construir la clave con el `externalId`. Descartada: el `externalId` identifica la
-notificación, no el intento; un reintento legítimo reutilizaría la clave y el proveedor lo trataría como
-repetición.
+**Alternativas descartadas**: una cabecera propia inventada (el proveedor la ignoraría y daría falsa
+seguridad); deduplicar del lado del componente con el `externalId` (no cubre el caso ambiguo, porque el
+intento aún no se persistió).
 
 ## Decisión 7 — Destinatario y formato
 
@@ -153,7 +148,7 @@ hex; número de origen en formato internacional; cualquier falla → deshabilita
 - `subject` sin restricción: se admite y se ignora, como SMS.
 - `body.maxLength` 1600 coincide con el máximo que el proveedor acepta; se registra en
   `ProviderContentLimits` (`twilio-whatsapp`, `WHATSAPP`, `body.maxLength`, 1600) para que la regla
-  `ContentLimitWithinProviderLimitRule` impida configurar un límite mayor. **[verificar]** el máximo vigente.
+  `ContentLimitWithinProviderLimitRule` impida configurar un límite mayor. Máximo de 1600 confirmado el 2026-10-21.
   WhatsApp admite hasta 4096 por mensaje, pero el intermediario limita el cuerpo; se usa el menor.
 
 ## Decisión 10 — Webhook, adjuntos y ventana: fuera de alcance, sin código

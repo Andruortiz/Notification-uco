@@ -8,6 +8,7 @@ public final class WhatsAppFailureReasons {
 
   private static final Map<Integer, String> BY_CODE =
       Map.ofEntries(
+          Map.entry(21654, "content-sid-required"),
           Map.entry(63016, "outside-session-window"),
           Map.entry(63024, "invalid-recipient"),
           Map.entry(21211, "invalid-recipient"),

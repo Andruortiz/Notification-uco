@@ -142,7 +142,9 @@ public class TwilioWhatsAppNotificationProvider implements NotificationSenderPor
           result,
           outcome.status(),
           String.valueOf(outcome.body().code()),
-          WhatsAppFailureReasons.reasonOf(outcome.body().code()));
+          WhatsAppFailureReasons.reasonOf(outcome.body().code()),
+          outcome.body().message(),
+          outcome.body().moreInfo());
     }
     return result;
   }

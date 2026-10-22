@@ -266,7 +266,8 @@ class TwilioWhatsAppNotificationProviderTest {
     final String message = LogLines.render(warnings.get(0));
     assertTrue(message.contains("reason=outside-session-window"));
     assertTrue(message.contains("providerErrorCode=63016"));
-    assertFalse(message.contains("Failed to send freeform"));
+    assertTrue(message.contains("providerMessage=Failed to send freeform message to"));
+    assertFalse(message.contains(RECIPIENT));
     assertNoSecretsIn(logs());
   }
 
@@ -476,10 +477,13 @@ class TwilioWhatsAppNotificationProviderTest {
   }
 
   @Test
-  void rejectedDispatchLogsTheProviderErrorCodeButNeverItsMessage() {
+  void rejectedDispatchLogsTheProviderErrorCodeAndItsMessageWithoutTheRecipient() {
     final String providerMessage = "The 'To' number " + RECIPIENT + " is not a valid phone number.";
     fakeServer.nextResponse(
-        400, "{\"code\":63024,\"message\":\"" + providerMessage + "\",\"status\":400}");
+        400,
+        "{\"code\":63024,\"message\":\""
+            + providerMessage
+            + "\",\"more_info\":\"https://www.twilio.com/docs/errors/63024\",\"status\":400}");
 
     StepVerifier.create(enabledProvider().send(templateTo(RECIPIENT, TEMPLATE_ID)))
         .expectNext(AttemptResult.PERMANENT_FAILURE)
@@ -490,7 +494,9 @@ class TwilioWhatsAppNotificationProviderTest {
     assertTrue(logs.contains("reason=invalid-recipient"));
     assertTrue(logs.contains("httpStatus=400"));
     assertTrue(logs.contains("recipient=***4567"));
-    assertFalse(logs.contains("is not a valid phone number"));
+    assertTrue(logs.contains("is not a valid phone number"));
+    assertTrue(logs.contains("providerMoreInfo=https://www.twilio.com/docs/errors/63024"));
+    assertFalse(logs.contains(RECIPIENT));
     assertNoSecretsIn(logs);
   }
 }

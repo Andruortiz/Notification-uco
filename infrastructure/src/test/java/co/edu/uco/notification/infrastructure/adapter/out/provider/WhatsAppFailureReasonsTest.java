@@ -10,6 +10,7 @@ class WhatsAppFailureReasonsTest {
 
   @ParameterizedTest
   @CsvSource({
+    "21654,content-sid-required",
     "63016,outside-session-window",
     "63024,invalid-recipient",
     "21211,invalid-recipient",

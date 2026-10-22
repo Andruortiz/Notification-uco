@@ -11,7 +11,8 @@ public final class ParameterRegistry {
 
   public static final String DISPATCH_MAX_ATTEMPTS = "dispatch.max-attempts";
   public static final String REQUEUE_INTERVAL_MS = "requeue.interval-ms";
-  public static final List<String> MANAGED_PROVIDERS = List.of("brevo", "twilio", "fcm");
+  public static final List<String> MANAGED_PROVIDERS =
+      List.of("brevo", "twilio", "twilio-whatsapp", "fcm");
 
   private final Map<String, ParameterDescriptor> descriptors;
   private final List<ParameterDescriptor> ordered;

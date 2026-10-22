@@ -86,7 +86,10 @@ public final class SendNotificationService implements SendNotificationUseCase {
                 command.recipient()),
             new NotificationDetails(
                 NotificationContent.of(
-                    command.content().subject(), command.content().body(), attachments),
+                    command.content().subject(),
+                    command.content().body(),
+                    attachments,
+                    command.content().providerTemplate()),
                 command.priority()),
             command.correlationId());
     final List<DomainEvent> events = notification.pullEvents();

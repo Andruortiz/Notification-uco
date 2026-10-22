@@ -126,6 +126,9 @@ notification:
       PUSH:
         providers: ${NOTIFICATION_PUSH_PROVIDERS:simulated,fcm}
         content-schema: '{"type":"object","required":["body"],"properties":{"subject":{"maxLength":100},"body":{"type":"string","maxLength":900}}}'
+      WHATSAPP:
+        providers: ${NOTIFICATION_WHATSAPP_PROVIDERS:simulated,twilio-whatsapp}
+        content-schema: '{"type":"object","properties":{"body":{"type":"string","maxLength":1600},"providerTemplate":{"type":"object","required":["templateId"],"properties":{"templateId":{"type":"string","minLength":1,"maxLength":64},"variables":{"type":"object","maxProperties":20,"additionalProperties":{"type":"string","maxLength":1024}}}}}}'
   provider:
     simulated:
       result: ${SIMULATED_PROVIDER_RESULT:ACCEPTED}
@@ -143,6 +146,13 @@ notification:
       base-url: ${TWILIO_BASE_URL:https://api.twilio.com}
       timeout-ms: ${TWILIO_TIMEOUT_MS:10000}
       connect-timeout-ms: ${TWILIO_CONNECT_TIMEOUT_MS:5000}
+    twilio-whatsapp:
+      account-sid: ${TWILIO_ACCOUNT_SID:}
+      auth-token: ${TWILIO_AUTH_TOKEN:}
+      from-number: ${TWILIO_WHATSAPP_FROM_NUMBER:}
+      base-url: ${TWILIO_WHATSAPP_BASE_URL:https://api.twilio.com}
+      timeout-ms: ${TWILIO_WHATSAPP_TIMEOUT_MS:10000}
+      connect-timeout-ms: ${TWILIO_WHATSAPP_CONNECT_TIMEOUT_MS:5000}
     fcm:
       credentials-json: ${FCM_CREDENTIALS_JSON:}
       credentials-file: ${FCM_CREDENTIALS_FILE:}

@@ -26,6 +26,7 @@ public record NotificationDocument(
     String contentSubject,
     String contentBody,
     List<AttachmentDocument> attachments,
+    ProviderTemplateDocument providerTemplate,
     Priority priority,
     NotificationStatus status,
     Instant acceptedAt,

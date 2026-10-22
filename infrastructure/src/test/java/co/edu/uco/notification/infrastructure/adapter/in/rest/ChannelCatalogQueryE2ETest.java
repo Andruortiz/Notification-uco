@@ -274,7 +274,7 @@ class ChannelCatalogQueryE2ETest {
     final JsonNode channels = channels();
 
     assertEquals(
-        List.of("EMAIL", "PUSH", "SMS"),
+        List.of("EMAIL", "PUSH", "SMS", "WHATSAPP"),
         StreamSupport.stream(channels.get("items").spliterator(), false)
             .map(channel -> channel.get("channelType").asText())
             .toList());
@@ -323,12 +323,12 @@ class ChannelCatalogQueryE2ETest {
 
   @Test
   void providersListTheUnionOfAdaptersAndCatalogWithTheChannelsWhereEachIsUsed() {
-    addChannel("WHATSAPP", "ghost", "simulated");
+    addChannel("TELEGRAM", "ghost", "simulated");
 
     final JsonNode providers = providers();
 
     assertEquals(
-        List.of("brevo", "fcm", "ghost", "simulated", "twilio"),
+        List.of("brevo", "fcm", "ghost", "simulated", "twilio", "twilio-whatsapp"),
         StreamSupport.stream(providers.get("items").spliterator(), false)
             .map(provider -> provider.get("providerId").asText())
             .toList());
@@ -337,19 +337,20 @@ class ChannelCatalogQueryE2ETest {
     assertEquals(
         "no notification sender registered for this provider", ghost.get("statusReason").asText());
     assertEquals(
-        parse("[{\"channelType\":\"WHATSAPP\",\"preferenceOrder\":1}]"), ghost.get("channels"));
+        parse("[{\"channelType\":\"TELEGRAM\",\"preferenceOrder\":1}]"), ghost.get("channels"));
     assertEquals(
         parse(
             "[{\"channelType\":\"EMAIL\",\"preferenceOrder\":1},"
                 + "{\"channelType\":\"PUSH\",\"preferenceOrder\":1},"
                 + "{\"channelType\":\"SMS\",\"preferenceOrder\":1},"
-                + "{\"channelType\":\"WHATSAPP\",\"preferenceOrder\":2}]"),
+                + "{\"channelType\":\"TELEGRAM\",\"preferenceOrder\":2},"
+                + "{\"channelType\":\"WHATSAPP\",\"preferenceOrder\":1}]"),
         provider(providers, "simulated").get("channels"));
   }
 
   @Test
   void theStateShownForEachProviderIsTheStateTheDispatchFinds() {
-    addChannel("WHATSAPP", "ghost");
+    addChannel("TELEGRAM", "ghost");
     final Set<String> seen = new HashSet<>();
 
     for (final JsonNode provider : providers().get("items")) {

@@ -16,13 +16,13 @@ Rutas base: `API` = `infrastructure/src/main/resources/static/openapi/api-notifi
 
 ## Phase 2: Pruebas
 
-- [ ] T002 `ITest/adapter/in/web/PublicRoutesTest`: patrones completos (no prefijo), exclusión de `/actuator`, lista vacía. Escrita; pendiente de verificación en CI.
-- [ ] T003 `ITest/contract/PublicRoutesConsistencyTest`: contrato, `application.yml`, `application-local.yml` y filtro coinciden;
-  el catálogo de recursos protegidos no incluye rutas públicas. Escrita; pendiente de verificación en CI.
-- [ ] T004 `ITest/adapter/in/rest/PublicRoutesPepE2ETest`: PEP activo con configuración por defecto, 200 en contrato y api-docs sin
+- [x] T002 `ITest/adapter/in/web/PublicRoutesTest`: patrones completos (no prefijo), exclusión de `/actuator`, lista vacía. Verificada 2026-10-21 en verde.
+- [x] T003 `ITest/contract/PublicRoutesConsistencyTest`: contrato, `application.yml`, `application-local.yml` y filtro coinciden;
+  el catálogo de recursos protegidos no incluye rutas públicas. Verificada 2026-10-21 en verde.
+- [x] T004 `ITest/adapter/in/rest/PublicRoutesPepE2ETest`: PEP activo con configuración por defecto, 200 en contrato y api-docs sin
   credencial, 401 en cada operación del contrato, en rutas con prefijo común y en la UI; control positivo con cookie; puerto de
-  gestión. Escrita; pendiente de verificación en CI.
-- [ ] T005 `ITest/adapter/in/rest/PublicRoutesLocalPepE2ETest`: perfil `local`, la UI responde sin credencial y el negocio sigue en 401. Escrita; pendiente de verificación en CI.
+  gestión. Verificada 2026-10-21 en verde.
+- [x] T005 `ITest/adapter/in/rest/PublicRoutesLocalPepE2ETest`: perfil `local`, la UI responde sin credencial y el negocio sigue en 401. Verificada 2026-10-21 en verde.
 
 ## Phase 3: Implementación
 

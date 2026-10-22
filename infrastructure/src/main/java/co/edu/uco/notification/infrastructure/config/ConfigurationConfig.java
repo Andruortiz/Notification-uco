@@ -41,6 +41,7 @@ import tools.jackson.databind.json.JsonMapper;
   AttachmentProperties.class,
   BrevoProviderProperties.class,
   TwilioProviderProperties.class,
+  TwilioWhatsAppProviderProperties.class,
   FcmProviderProperties.class,
   ParametersProperties.class
 })
@@ -49,6 +50,7 @@ public class ConfigurationConfig {
   private static final String SIMULATED = "simulated";
   private static final String BREVO = "brevo";
   private static final String TWILIO = "twilio";
+  private static final String TWILIO_WHATSAPP = "twilio-whatsapp";
   private static final String FCM = "fcm";
   private static final Duration DEFAULT_SCAN_TIMEOUT = Duration.ofSeconds(10);
   private static final int DEFAULT_SCAN_MAX_ATTEMPTS = 3;
@@ -73,12 +75,16 @@ public class ConfigurationConfig {
       final AttachmentProperties attachments,
       final BrevoProviderProperties brevo,
       final TwilioProviderProperties twilio,
+      final TwilioWhatsAppProviderProperties twilioWhatsApp,
       final FcmProviderProperties fcm,
       @Value("${notification.attachments.sweeper.scan-deadline:1h}") final String sweepWindow) {
     final Set<String> enabledProviders = new HashSet<>();
     enabledProviders.add(SIMULATED);
     if (brevo.disabledReason().isEmpty()) {
       enabledProviders.add(BREVO);
+    }
+    if (twilioWhatsApp.disabledReason().isEmpty()) {
+      enabledProviders.add(TWILIO_WHATSAPP);
     }
     if (twilio.disabledReason().isEmpty()) {
       enabledProviders.add(TWILIO);
@@ -88,7 +94,8 @@ public class ConfigurationConfig {
     }
     final Map<String, Set<String>> enabledByChannel = new LinkedHashMap<>();
     final Map<String, Map<String, Long>> limitsByChannel = new LinkedHashMap<>();
-    final Set<String> configuredProviders = new HashSet<>(Set.of(SIMULATED, BREVO, TWILIO, FCM));
+    final Set<String> configuredProviders =
+        new HashSet<>(Set.of(SIMULATED, BREVO, TWILIO, TWILIO_WHATSAPP, FCM));
     if (catalog.channels() != null) {
       catalog
           .channels()
@@ -126,6 +133,7 @@ public class ConfigurationConfig {
       final Environment environment,
       final BrevoProviderProperties brevo,
       final TwilioProviderProperties twilio,
+      final TwilioWhatsAppProviderProperties twilioWhatsApp,
       final FcmProviderProperties fcm,
       final Clock clock) {
     final Map<String, Long> values = new HashMap<>();
@@ -148,6 +156,9 @@ public class ConfigurationConfig {
     values.put(ParameterRegistry.connectTimeoutKey(BREVO), brevo.connectTimeoutMs());
     values.put(ParameterRegistry.timeoutKey(TWILIO), twilio.timeoutMs());
     values.put(ParameterRegistry.connectTimeoutKey(TWILIO), twilio.connectTimeoutMs());
+    values.put(ParameterRegistry.timeoutKey(TWILIO_WHATSAPP), twilioWhatsApp.timeoutMs());
+    values.put(
+        ParameterRegistry.connectTimeoutKey(TWILIO_WHATSAPP), twilioWhatsApp.connectTimeoutMs());
     values.put(ParameterRegistry.timeoutKey(FCM), fcm.timeoutMs());
     values.put(ParameterRegistry.connectTimeoutKey(FCM), fcm.connectTimeoutMs());
     final ConfigurationSnapshot defaults =

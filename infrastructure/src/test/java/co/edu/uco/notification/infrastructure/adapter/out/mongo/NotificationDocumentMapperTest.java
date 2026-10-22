@@ -17,12 +17,14 @@ import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.Priority;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.ProviderTemplateReference;
 import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class NotificationDocumentMapperTest {
@@ -73,6 +75,7 @@ class NotificationDocumentMapperTest {
             document.contentSubject(),
             document.contentBody(),
             document.attachments(),
+            document.providerTemplate(),
             document.priority(),
             document.status(),
             document.acceptedAt(),
@@ -144,6 +147,7 @@ class NotificationDocumentMapperTest {
             "Subject",
             "Body",
             null,
+            null,
             Priority.NORMAL,
             NotificationStatus.RECOVERABLE,
             acceptedAt,
@@ -176,5 +180,38 @@ class NotificationDocumentMapperTest {
     assertEquals(document.acceptedAt(), document.pendingSince());
     assertEquals(1, document.currentCycle());
     assertNull(document.dispatchReservedAt());
+  }
+
+  @Test
+  void roundTripPreservesAProviderTemplateWithoutBody() {
+    final Notification original =
+        Notification.accept(
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-43"),
+                ChannelType.of("WHATSAPP"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("+573001234567")),
+            new NotificationDetails(
+                NotificationContent.ofProviderTemplate(
+                    null, ProviderTemplateReference.of("HX0001", Map.of("1", "Alice"))),
+                Priority.NORMAL));
+
+    final NotificationDocument document = NotificationDocumentMapper.toDocument(original);
+    final Notification restored = NotificationDocumentMapper.toDomain(document);
+
+    assertNull(document.contentBody());
+    assertEquals("HX0001", document.providerTemplate().templateId());
+    assertEquals(Map.of("1", "Alice"), document.providerTemplate().variables());
+    assertNull(restored.content().body());
+    assertEquals(original.content().providerTemplate(), restored.content().providerTemplate());
+  }
+
+  @Test
+  void aDocumentWithoutAProviderTemplateIsReadAsPlainBodyContent() {
+    final NotificationDocument document = NotificationDocumentMapper.toDocument(notification(null));
+
+    assertNull(document.providerTemplate());
+    assertNull(NotificationDocumentMapper.toDomain(document).content().providerTemplate());
   }
 }

@@ -3,7 +3,6 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
-import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.Priority;
@@ -162,7 +161,7 @@ public class NotificationController {
         ChannelType.of(request.channelType()),
         RecipientId.of(request.recipientId()),
         Recipient.of(request.recipientAddress()),
-        NotificationContent.of(request.subject(), request.body()),
+        request.toContent(),
         RequestEnums.required(Priority.class, "priority", request.priority()),
         request.attachments().stream().map(AttachmentRequest::toSubmission).toList(),
         correlationId);

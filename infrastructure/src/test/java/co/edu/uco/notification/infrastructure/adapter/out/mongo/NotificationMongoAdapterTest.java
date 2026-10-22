@@ -626,6 +626,7 @@ class NotificationMongoAdapterTest {
                         INVOICE_BYTES,
                         null,
                         null)),
+                null,
                 Priority.NORMAL,
                 NotificationStatus.PENDING,
                 Instant.now(),

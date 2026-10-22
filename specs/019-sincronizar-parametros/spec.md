@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-04
 
-**Status**: Draft
+**Status**: Implementado (PR #62, 60 de 60 tareas)
 
 **Input**: User description: "HU2-073 — Como componente, quiero operar con la última configuración
 conocida si el Componente de Parámetros no está disponible."

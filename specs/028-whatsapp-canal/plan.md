@@ -1,4 +1,4 @@
-# Implementation Plan: Enviar notificaciones por el canal WhatsApp
+ # Implementation Plan: Enviar notificaciones por el canal WhatsApp
 
 **Branch**: `feature/HU2-112-whatsapp-canal` | **Date**: 2026-10-21 | **Spec**: [spec.md](./spec.md)
 

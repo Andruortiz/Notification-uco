@@ -8,6 +8,12 @@
 
 **Input**: User description: "$ARGUMENTS"
 
+<!--
+  Guía de tamaño: máximo 4 historias de usuario (si hay más, divide la historia), unos 12 FR como tope
+  sugerido y spec.md de hasta 12 KB. Las aclaraciones van en una línea por decisión, enlazando al FR
+  afectado; no copies preguntas y respuestas completas. No repitas lo que ya dice plan.md.
+-->
+
 ## User Scenarios & Testing *(mandatory)*
 
 <!--

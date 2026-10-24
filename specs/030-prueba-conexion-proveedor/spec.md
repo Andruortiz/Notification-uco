@@ -39,8 +39,8 @@ Un canal con `simulated` y un proveedor real habilitados puede probarse completo
 
 1. **Given** `simulated` en el catalogo del canal, **When** se prueba, **Then** responde sin red segun
    `SIMULATED_PROVIDER_RESULT` (`ACCEPTED` -> `OK`; cualquier otro valor -> `FAILED` con `SIMULATED_FAILURE`).
-2. **Given** el catalogo por defecto, **When** se listan los proveedores de cada canal, **Then** cada canal tiene al menos dos
-   proveedores y todos son probables (verificado por prueba automatizada).
+2. **Given** el perfil de pruebas (con `simulated` habilitado), **When** se listan los proveedores de cada canal, **Then** cada
+   canal tiene al menos dos proveedores y todos son probables (verificado por prueba automatizada).
 
 ### User Story 3 - Ningun secreto sale al navegador (Priority: P1)
 
@@ -55,9 +55,9 @@ Un canal con `simulated` y un proveedor real habilitados puede probarse completo
 
 - `providerId` o `channel` desconocidos, o proveedor que no pertenece al canal: 400 `VALIDATION_ERROR`, sin sonda.
 - Proveedor nombrado en el catalogo sin adaptador (`MISSING_ADAPTER`): 200 `FAILED` con `ADAPTER_MISSING`.
-- Pruebas concurrentes del mismo proveedor: ver Open Questions en [plan.md](plan.md#preguntas-abiertas).
-- `simulated` solo existe en perfiles local y de pruebas (decision transversal); fuera de ellos no esta en el catalogo y no
-  se puede probar.
+- Segunda prueba del mismo proveedor mientras otra sigue en vuelo en la misma replica: 429. El limite es por replica; uno
+  global queda como mejora.
+- `simulated` hoy esta por defecto en los tres canales y su adaptador no tiene perfil; restringirlo es la dependencia D-001.
 
 ## Requirements
 
@@ -70,7 +70,8 @@ Un canal con `simulated` y un proveedor real habilitados puede probarse completo
 - **FR-004**: El resultado contiene `providerId`, `channel`, `status` (`OK`|`FAILED`), `latencyMs` y, si falla, `errorCode`
   cerrado: `CREDENTIALS_MISSING`, `AUTH_REJECTED`, `UNREACHABLE`, `TIMEOUT`, `PROVIDER_ERROR`, `ADAPTER_MISSING`,
   `SIMULATED_FAILURE`.
-- **FR-005**: Ningun secreto ni cuerpo crudo del proveedor aparece en respuesta, cabeceras, logs ni metricas.
+- **FR-005**: Ningun secreto ni cuerpo crudo del proveedor aparece en respuesta, cabeceras, logs ni en las etiquetas de la
+  metrica `notification.provider.probe` (etiquetas `providerId` y `status`; verificado por prueba).
 - **FR-006**: La latencia se mide en el servidor desde el inicio de la sonda hasta su resultado, y la sonda tiene un tiempo
   limite.
 - **FR-007**: Cada prueba queda en log estructurado con `correlationId`, `providerId`, `channel`, `status`, `errorCode`,
@@ -88,12 +89,19 @@ Un canal con `simulated` y un proveedor real habilitados puede probarse completo
   del limite mas 1 s. Verificado con aserciones de `Duration`.
 - **SC-002**: En 100 % de los escenarios de fallo de las pruebas, cuerpo y logs no contienen la credencial sentinela.
 - **SC-003**: 100 % de las peticiones de CLIENTE y OPERADOR reciben 403 sin invocar ninguna sonda.
-- **SC-004**: Los tres canales del catalogo por defecto tienen al menos dos proveedores y cada uno es probable.
+- **SC-004**: Con el perfil de pruebas, los tres canales tienen al menos dos proveedores y cada uno es probable. Fuera de
+  desarrollo la cantidad depende de D-001.
+- **SC-005**: Con el modo de autorizacion realmente activo (PEP), CLIENTE y OPERADOR reciben 403 en el 100 % de los intentos.
 
 ## Assumptions
 
 - La pantalla y el boton "Probar" son trabajo del repo del front; aqui solo se fija el contrato.
 - "Antes de activarlo" se entiende como proveedor con credenciales ya configuradas en el despliegue; la activacion dinamica
   del catalogo es de la Fase 6 y no se toca.
-- Restringir `simulated` a los perfiles local y de pruebas es una decision transversal; esta historia la respeta, no la
-  implementa.
+- Roles: hay tres en el codigo (ADMINISTRADOR, OPERADOR, CLIENTE) hasta B2; solo ADMINISTRADOR prueba.
+
+## Dependencias
+
+- **D-001**: `simulated` fuera de desarrollo lo resuelve la historia E3 (propiedad `simulated.enabled`, falsa por defecto, y
+  catalogo con el proveedor real primero). Dueno: Equipo de backend. Fecha: 2026-12-15. Hasta entonces `simulated` esta en los
+  tres canales de todo perfil. La E2E corre con el perfil de pruebas, donde `simulated` esta habilitado.

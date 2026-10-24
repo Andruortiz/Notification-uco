@@ -30,7 +30,7 @@ Sobre ese rediseno E10 anade unicamente:
 - Forma de E3 (spec 031, propuesta con nombres por confirmar): `Outcome(ProviderResult last, List<FailedProvider> failedOver)`,
   `ProviderResult(AttemptResult result, ProviderId providerId)`, `Notification.mark*` con un unico `AttemptRecord`, y
   `DeliveryAttempt`, `DeliveryAttemptDocument` y su mapper construidos desde `AttemptRecord` con campos nuevos opcionales.
-- `messageId` (String, opcional) como componente nuevo de `ProviderResult`, de `AttemptRecord` y de `DeliveryAttempt`
+- `messageId` (String, opcional) como componente nuevo (por confirmar con E3) de `ProviderResult`, de `AttemptRecord` y de `DeliveryAttempt`
   (y su campo en `DeliveryAttemptDocument`), rellenado por Brevo desde `BrevoApiResponse.messageId()`; `simulated` genera uno
   sintetico. Los documentos viejos se leen sin el campo. Se persiste el del proveedor que acepto, tambien tras un failover.
 - Indice Mongo sobre `attempts.messageId` en `NotificationDocument` y consulta
@@ -52,7 +52,7 @@ Excepcion Principio VII: dueno E5, fecha de revision 2026-12-15.
 Cambios para Contrato en `api-notificaciones.yaml` (no se edita aqui). Las nuevas rutas no chocan con `/providers`
 existente (`GET`/`POST /providers` es otro path) ni con `/recipients/preferences`.
 
-- `GET /recipients/undeliverable-lookups?channel=&address=`: `x-minimum-role: OPERADOR`, `x-status: available`.
+- `POST /recipients/undeliverable-lookups`, cuerpo `{channel,address}` (la direccion no viaja en la query ni queda en logs de acceso): `x-minimum-role: OPERADOR`, `x-status: available`. Consulta sin efectos; el E2E la cubre con POST.
 - `POST /recipients/undeliverable-releases`, cuerpo `{channel,address}`: `x-minimum-role: ADMINISTRADOR`, `x-status: available`.
 - `POST /providers/brevo/bounce-events`: va en `x-public-routes` con `security: []` (no en `paths`, por lo que no necesita
   `x-minimum-role` ni `x-status` ni se registra en el PDP) y se anade a `SECURITY_PEP_PUBLIC_PATHS` (`application.yml` ~l.77)

@@ -80,7 +80,7 @@ Un operador consulta si una direccion esta marcada y un administrador puede leva
   mascara nueva de `EmailAddresses`) salvo para ADMINISTRADOR, cuyo rol se toma de la sesion del PDP en el controller.
 - **FR-009**: El webhook de Brevo MUST autenticarse con el secreto `BREVO_WEBHOOK_SECRET`; si falta o no coincide,
   responde 401 sin procesar. Ni el secreto ni cuerpos con direcciones se registran en logs.
-- **FR-010**: Consultar la marca MUST requerir OPERADOR; levantarla, ADMINISTRADOR.
+- **FR-010**: Consultar la marca MUST requerir OPERADOR; levantarla, ADMINISTRADOR. La consulta es POST con cuerpo para no exponer la direccion en la URL.
 - **FR-011**: En perfiles local y de pruebas el proveedor `simulated` MUST poder simular un rebote duro mediante el mismo
   webhook (ver plan); fuera de esos perfiles el mecanismo no existe.
 - **FR-012**: Rechazos y marcas MUST contarse en metricas por tenant y canal, sin la direccion (nombres en el plan).

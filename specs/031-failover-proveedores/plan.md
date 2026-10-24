@@ -31,26 +31,21 @@ Testcontainers para integración y E2E. Cobertura >= 80 % líneas / 70 % ramas.
 
 ### core
 
-- `DeliveryAttempt`: nuevo componente `boolean failedOver` (por defecto `false`; las fábricas `of`
-  existentes lo conservan en `false`).
-- `Notification`:
-  - nuevo `recordFailedOver(origin, providerId)`: anexa un intento `RECOVERABLE_FAILURE` con
-    `failedOver=true`, sin transición de estado ni evento.
-  - `recoverableAttemptsInCurrentCycle()` excluye los `failedOver` (FR-006).
+- `DeliveryAttempt` y `Notification`: ver "Tipos compartidos". `recoverableAttemptsInCurrentCycle()`
+  excluye los intentos con `failedOver=true` (FR-006).
 - `ProviderCircuitOpenException` (nueva, `core/exception`) con el `providerId`.
 - `DispatchNotificationService.sendThrough`: sustituye el envío al preferente por un recorrido secuencial
   (`concatMap`, no `flatMap`) sobre `route.providers()`:
-  1. Resuelve cada `ProviderId` con `registry.resolve` (sin adaptador: `ProviderNotAvailableException`,
-     igual que 007 si es el caso de todos).
+  1. Resuelve cada `ProviderId` con `registry.find`; un proveedor sin adaptador se omite sin intento si
+     hay otros invocables (FR-013) y, si ninguno lo es, aborta con `ProviderNotAvailableException`
+     como en 007.
   2. Omite el proveedor si `disabledReason()` está presente o si `send` falla con
      `ProviderCircuitOpenException` o `ProviderDisabledException` (sin intento, sin métrica de fallo).
   3. `ACCEPTED` o `PERMANENT_FAILURE`: termina con ese `Outcome`.
-  4. `RECOVERABLE_FAILURE`: si queda candidato, guarda el `providerId` fallido en una lista de la ronda y
+  4. `RECOVERABLE_FAILURE`: si queda candidato, guarda su `ProviderResult` en la lista de conmutados de la ronda y
      continúa; si es el último, termina con ese `Outcome`.
   5. Si ningún candidato fue invocable: error de configuración como hoy (`ProviderDisabledException` o
      `ProviderNotAvailableException`), que libera la reserva y sigue el camino existente.
-  - Paso 1 corregido: un `ProviderNotAvailableException` en ruta parcial (hay otros invocables) se
-    omite sin intento; si ningún candidato es invocable, aborta como en 007 (FR-013).
   - Error de transporte: toda excepción del envío salvo `ProviderDisabledException` y
     `ProviderCircuitOpenException` se mapea a `RECOVERABLE_FAILURE`, deja intento del proveedor que la
     lanzó, y cuenta `dispatchAttempted` RECOVERABLE (FR-012). Si todos terminan así, el resultado es el
@@ -63,22 +58,57 @@ Testcontainers para integración y E2E. Cobertura >= 80 % líneas / 70 % ramas.
   - Los intentos conmutados viven en memoria (`Outcome`) hasta `persistAndPublish`; si el guardado
     falla se pierden y la reentrega puede repetir el envío por el proveedor A (FR-015).
 
-### Forma extensible de los tipos compartidos
+### Tipos compartidos (nombres finales)
 
-Esta historia hace el rediseño único; G3, G2, E10 y E5 solo añaden campos, en ese orden
+Esta historia hace el rediseño único; G3, G2, E10 y E5 solo rellenan campos, en ese orden
 (E3 -> G3 -> G2 -> E10 -> E5), y no se implementan aquí.
 
-- `Outcome` pasa a `record Outcome(ProviderResult last, List<FailedProvider> failedOver)`;
-  `ProviderResult(AttemptResult result, ProviderId providerId)` y
-  `FailedProvider(ProviderId providerId, AttemptResult result)` son records donde las historias
-  posteriores añaden componentes opcionales (latencia, causa, correlationId, messageId).
-- `Notification.mark*` pasan a recibir un único parámetro de registro (`AttemptRecord`: origen,
-  proveedor, y campos opcionales) en lugar de listas crecientes de argumentos; `recordFailedOver` usa el
-  mismo tipo.
-- `DeliveryAttempt`, `DeliveryAttemptDocument` y `NotificationDocumentMapper` se construyen desde
-  `AttemptRecord`; los campos nuevos nacen nulos/opcionales y los documentos viejos se leen sin ellos.
-- `AttemptResult` queda como enum cerrado; un valor nuevo (p. ej. INVALID_RECIPIENT en E5) es cambio
-  aditivo, con `applyOutcome` tratando cualquier valor no reconocido como fallo permanente.
+`core.port.out`:
+
+- `ProviderResult(AttemptResult result, ProviderId providerId, Long latencyMillis, String messageId,
+  FailureCause cause)`: resultado de envío. Los tres últimos son opcionales (nulos) hasta que G3
+  (latencia, causa) y E10 (messageId) los rellenen. Fábricas: `ProviderResult.of(result, providerId)` y
+  `ProviderResult.of(result)` (proveedor nulo; lo completa el servicio que conoce el sender).
+- `NotificationSenderPort.send(Notification)` pasa a `Mono<ProviderResult>`. Cambian
+  `BrevoNotificationProvider`, `TwilioNotificationProvider`, `FcmNotificationProvider`,
+  `SimulatedNotificationProvider`, `ObservedNotificationSender` y `CircuitBreakerNotificationSender`.
+  Los `*ResponseClassifier` siguen devolviendo `AttemptResult` y el adaptador los envuelve con
+  `ProviderResult.of(result)`, así sus pruebas no cambian. Las pruebas de adaptador que afirman
+  `expectNext(AttemptResult.X)` pasan a `.map(ProviderResult::result)`; las que mockean el puerto
+  (`DispatchNotificationServiceTest`) devuelven `ProviderResult.of(X)`.
+- `AttemptRecord(AttemptResult result, AttemptOrigin origin, ProviderId providerId, boolean failedOver,
+  Long latencyMillis, FailureCause failureCause, String correlationId, String messageId)`. Los cuatro
+  últimos opcionales: `latencyMillis`, `failureCause` y `correlationId` reservados a G3, `messageId` a
+  E10; `failedOver` lo fija E3. Fábricas `AttemptRecord.of(result, origin, providerId)` (failedOver falso,
+  resto nulo) y `AttemptRecord.from(ProviderResult, origin)`.
+
+`core.domain.valueobject`:
+
+- `FailureCause` (enum nuevo) con `TRANSPORT_ERROR` y `PROVIDER_ERROR`; G3 añade los que necesite.
+
+`core.domain`:
+
+- `DeliveryAttempt(Instant occurredOn, AttemptResult result, AttemptOrigin origin, ProviderId providerId,
+  int cycle, boolean failedOver, Long latencyMillis, FailureCause failureCause, String correlationId,
+  String messageId)`. Se conservan las fábricas `of(...)` de cuatro y cinco argumentos (`failedOver`
+  falso, opcionales nulos) y se añade `DeliveryAttempt.of(Instant, AttemptRecord, int cycle)`.
+- `Notification.markDelivered/markRecoverable/markRetriesExhausted/markFailed(AttemptRecord)` y
+  `recordFailedOver(AttemptRecord)` (intento recuperable con `failedOver=true`, sin transición ni
+  evento). Cada `mark*` fija el resultado que le corresponde; `Notification` no recibe un `AttemptResult`
+  suelto (E5 asume esto). G2 aporta `origin` por el mismo registro; E5 añade un `mark*` nuevo si lo
+  necesita.
+- `DispatchNotificationService` (privado): `Outcome(ProviderResult last, List<ProviderResult> failedOver)`.
+  `FailedProvider` no existe: los conmutados conservan latencia, causa y messageId.
+
+Infraestructura:
+
+- `DeliveryAttemptDocument` gana `failedOver`, `latencyMillis`, `failureCause`, `correlationId` y
+  `messageId`; `NotificationDocumentMapper` los copia en ambos sentidos. Un documento viejo sin esos
+  campos se lee con `failedOver=false` y opcionales nulos.
+- `AttemptResult` sigue enum cerrado; E5 añade `INVALID_RECIPIENT`. Se deben revisar TODOS los `switch`
+  y mapeos sobre `AttemptResult`, entre ellos `MicrometerNotificationMetrics.resultLabel` (exhaustivo
+  sin `default`), `ProviderLogs`, `applyOutcome` (lo no reconocido se trata como fallo permanente) y
+  `DeliveryAttemptDocument`.
 
 ### infrastructure
 
@@ -99,13 +129,16 @@ Esta historia hace el rediseño único; G3, G2, E10 y E5 solo añaden campos, en
 - Los circuitos son por `providerId` y globales por réplica, no por tenant.
 - Catálogo por defecto reordenado: `${NOTIFICATION_EMAIL_PROVIDERS:brevo,simulated}`,
   `${NOTIFICATION_SMS_PROVIDERS:twilio,simulated}`, `${NOTIFICATION_PUSH_PROVIDERS:fcm,simulated}`
-  (FR-014). Si el catálogo ya está sembrado en Mongo, `ChannelCatalogSeeder` compara y actualiza; se
-  verifica en la implementación.
+  (FR-014).
+- `ChannelCatalogSeeder` hoy solo registra las diferencias de un catálogo ya almacenado. Tarea del plan:
+  si la lista almacenada de un canal es exactamente el orden antiguo por defecto (`simulated,<real>`) y
+  la configurada es el nuevo, el seeder la actualiza; cualquier otra divergencia se sigue solo
+  registrando. Pruebas en `ChannelCatalogSeederTest` (antiguo se actualiza; personalizado no se toca) y
+  cobertura en `ChannelCatalogE2ETest`.
 - `application.yml`: `notification.provider.simulated.enabled: ${SIMULATED_PROVIDER_ENABLED:false}`;
   `application-local.yml`: `enabled: true`. Las pruebas existentes que dependen de `simulated` pasan a
   habilitarlo (propiedad de prueba o `@ActiveProfiles`), ver Riesgos.
-- `DeliveryAttemptDocument` y `NotificationDocumentMapper`: campo `failedOver`; los documentos viejos
-  sin el campo se leen como `false`. `DeliveryAttemptResponse`: expone `failedOver`.
+- `DeliveryAttemptResponse`: expone `failedOver` (petición de contrato).
 
 ## Pruebas
 

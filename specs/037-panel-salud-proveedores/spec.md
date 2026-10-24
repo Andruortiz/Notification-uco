@@ -8,7 +8,7 @@
 ## Clarifications
 
 - Q1: Vista propia ligera: una tabla por proveedor leída de Prometheus, con enlace a Grafana. No es un tablero nuevo ni un motor de alertas.
-- Q2: Sin métricas nuevas ni cambios a 020. Todo se deriva de `notification_dispatched_total{channel,provider,result}` y `notification_provider_duration_seconds{provider,result}`. `notification_errors_total` NO sirve para proveedores: solo registra errores de despacho sin proveedor (`provider=none`) y de reencolado.
+- Q2: Sin métricas nuevas ni cambios a 020. Todo se deriva de `notification_dispatched_total{channel,provider,result}` y `notification_provider_duration_seconds{provider,result}`. `notification_errors_total` NO sirve para proveedores: registra errores de despacho (unos con `provider=none` y otros, como `DISPATCH_EVENTS_NOT_PUBLISHED`, con proveedor) y de reencolado, pero no los fallos de la llamada al proveedor.
 - Q3: Las métricas no llevan `tenantId` ([020 FR-008](../020-observabilidad-completa/spec.md)). La salud es global de plataforma (A1).
 - Q4: "Último error" se limita a lo derivable de `result` (`recoverable` o `failed`) y su instante aproximado. No hay código `NTF-n` de proveedor ni texto del proveedor. El esquema deja `code` y `category` opcionales para cuando una historia posterior instrumente errores por proveedor.
 - Q5: Rol mínimo `OPERADOR` (el código tiene 3 roles hasta que B2 cambie el modelo).
@@ -27,12 +27,12 @@ Como OP quiero ver, por proveedor y canal, estado, tasa de éxito, latencia y ú
 1. **Given** despachos recientes, **When** el OP consulta, **Then** ve una fila por proveedor/canal con estado, tasa de éxito y latencia p95.
 2. **Given** un proveedor con intentos `recoverable` o `failed` recientes, **When** se consulta, **Then** el estado es `DEGRADED` o `DOWN` y `lastError` indica `result` (`recoverable` o `failed`) y el instante.
 3. **Given** un proveedor sin volumen suficiente en la ventana, **When** se consulta, **Then** el estado es `UNKNOWN` y tasa y latencia son nulas.
-4. **Given** un proveedor desactivado por configuración o falta de credenciales, **When** se consulta, **Then** no cuenta como `DOWN` (ver FR-003).
+4. **Given** un proveedor desactivado por configuración o falta de credenciales, **When** se consulta, **Then** sale `DOWN` si tiene tráfico: límite documentado, porque la métrica no distingue `ProviderDisabledException` de un fallo (ver FR-003); vence 2026-12-15 (A6).
 5. **Given** el contrato, **When** se inspecciona, **Then** ningún campo contiene texto crudo del proveedor, destinatario, `tenantId` ni credenciales.
 
 ### User Story 2 - Saltar a Grafana (Priority: P2)
 
-1. **Given** Grafana configurado, **When** se consulta, **Then** la respuesta incluye la URL del tablero `notification-service` (021) con el proveedor codificado en la URL.
+1. **Given** Grafana configurado, **When** se consulta, **Then** la respuesta incluye la URL del tablero `notification-service` (021), única para todo el panel.
 2. **Given** Grafana no configurado, **When** se consulta, **Then** `grafanaUrl` es nulo y la tabla funciona.
 
 ### User Story 3 - Degradación ordenada si Prometheus no responde (Priority: P2)
@@ -49,7 +49,7 @@ Como OP quiero ver, por proveedor y canal, estado, tasa de éxito, latencia y ú
 
 - **FR-001**: El servicio MUST exponer `GET /provider-health` con, por proveedor/canal: `provider`, `channel`, `status` (`HEALTHY`, `DEGRADED`, `DOWN`, `UNKNOWN`; `CIRCUIT_OPEN` reservado), `successRate`, `sampleCount`, `latencyP95Millis`, `lastError` (`result`, `at`; `code` y `category` opcionales reservados) y `windowSeconds`. `failedOver` reservado como extensión.
 - **FR-002**: Todo valor MUST calcularse con consultas a Prometheus sobre las métricas de Q2; no se registran métricas ni se persiste estado.
-- **FR-003**: Semántica de la tasa: `delivered / (delivered + failed)` por `provider,channel` en la ventana; los intentos `recoverable` se excluyen del denominador porque son reintentos de la misma notificación y no un veredicto del proveedor, pero cuentan como señal de degradación (si `recoverable` supera el umbral configurable de la proporción de intentos, el estado baja a `DEGRADED`). El volumen es `delivered + failed`. Los fallos por proveedor desactivado (`ProviderDisabledException`) no se distinguen en la métrica; se excluyen si el plan encuentra una señal para hacerlo; si no, queda como límite documentado y el estado `DOWN` de un proveedor desactivado se anota en el contrato (D3 del plan).
+- **FR-003**: Semántica de la tasa: `delivered / (delivered + failed)` por `provider,channel` en la ventana; los intentos `recoverable` se excluyen del denominador porque son reintentos de la misma notificación y no un veredicto del proveedor, pero cuentan como señal de degradación (si `recoverable` supera el umbral configurable de la proporción de intentos, el estado baja a `DEGRADED`). El volumen es `delivered + failed`; si es menor que `minSamples`, el estado es `UNKNOWN` aunque `recoverable` sea alto (UNKNOWN prevalece sobre DEGRADED). Los fallos por proveedor desactivado (`ProviderDisabledException`) no se distinguen en la métrica; se excluyen si el plan encuentra una señal para hacerlo; si no, queda como límite documentado y el estado `DOWN` de un proveedor desactivado se anota en el contrato (D3 del plan).
 - **FR-004**: `lastError` MUST derivarse solo de `result` y el instante; nunca mensaje de excepción ni cuerpo del proveedor.
 - **FR-005**: La consulta MUST pasar por un puerto de salida de `core`; el adaptador HTTP vive en `infrastructure`; `core` sin Spring.
 - **FR-006**: El endpoint MUST requerir rol `OPERADOR` mediante la regla de ruta del PEP/PDP (`RouteAuthorizationPolicy`); la identidad llega por la sesión del PDP y no de parámetros. El panel no usa `tenantId` porque la salud es global.

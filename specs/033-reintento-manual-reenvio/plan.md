@@ -40,7 +40,7 @@ Java 25, Spring Boot 4.1 (WebFlux), Reactor, Spring AMQP, Mongo reactivo. **Sin 
 
 ## Dependencias entre historias
 
-El orden acordado es E3 -> G3 -> G2 -> E10 -> E5. E3 hace un rediseño único de `DeliveryAttempt`, `Notification.mark*`, `AttemptResult` y `Outcome`/`dispatch`; esta historia **se monta encima** y no lo redefine: solo añade el origen MANUAL a `dispatch(id, origin)` y `enqueueForDispatch(n, origin)` con las firmas que E3 deje. Las firmas de este plan son provisionales hasta que E3 se fusione. Roles: tres en el código (CLIENTE, OPERADOR, ADMINISTRADOR) hasta B2.
+El orden acordado es E3 -> G3 -> G2 -> E10 -> E5. E3 deja la forma extensible de los tipos compartidos (propuesta en `specs/031-failover-proveedores/plan.md`; nombres `AttemptRecord`, `ProviderResult` y `FailedProvider` por confirmar): `Outcome(last, failedOver)`, `Notification.mark*` y `recordFailedOver` con un único `AttemptRecord` (origen, proveedor, resultado), y `DeliveryAttempt`, su documento y el mapper construidos desde él. Esta historia **se monta encima** y no redefine nada: MANUAL es solo el valor de `origin` que `dispatch` pone en el `AttemptRecord`, sin firmas paralelas. Lo propio de G2 en `core` es que `dispatch` reciba el origen (`dispatch(id, origin)`) y que `enqueueForDispatch(n, origin)` lo lleve al encabezado `x-attempt-origin`. Las firmas de este plan son provisionales hasta que E3 se fusione. Roles: tres en el código (CLIENTE, OPERADOR, ADMINISTRADOR) hasta B2.
 
 ## Decisiones de la revisión
 

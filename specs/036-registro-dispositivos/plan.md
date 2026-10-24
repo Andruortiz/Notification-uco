@@ -6,90 +6,117 @@
 
 **Estado**: Pendiente de aprobación
 
-**Versión del plan**: 1
+**Versión del plan**: 2
 
 ## Summary
 
-Agregado nuevo `RecipientIdentity` (con sus `Device`) en `core`, tres casos de uso (registrar, listar, dar de baja) y uno interno
-(eliminar dispositivo inválido) invocado por el despacho cuando el proveedor reporta token no registrado. Persistencia Mongo con
-token cifrado y huella HMAC; controlador REST con rutas literales. No se tocan `Recipient`, `RecipientId` ni el envío por dirección.
+Agregado `RecipientIdentity` + `Device` en `core`, casos de uso de registrar, listar, dar de baja y borrar por titular, y un único
+puerto `DeviceLifecyclePort` que el despacho usa para limpiar tokens inválidos y refrescar `lastSeenAt`. Persistencia Mongo con
+token cifrado (AES-GCM con AAD) y huella HMAC. El token PUSH de `notifications.recipientAddress` también se cifra.
+
+## Orden de integración y base
+
+Integra al final: E3 -> G3 -> G2 -> E10 -> E5. El código parte de las formas que deja E3 (spec 031, `Outcome(ProviderResult last,
+List<FailedProvider> failedOver)`, `Notification.mark*` con un único `AttemptRecord`, `DeliveryAttempt`/documento/mapper desde
+`AttemptRecord`). `INVALID_RECIPIENT` se añade encima como valor de `AttemptResult`; no se rediseña ningún tipo compartido aquí.
+Las tareas se escriben tras rebasar sobre ese estado; si la forma de E3 cambia, solo cambian los puntos de contacto (Decisión 7).
 
 ## Technical Context
 
-Java 25, Spring Boot 4, WebFlux, Mongo reactivo. Cifrado con `javax.crypto` del JDK (AES-256-GCM y HmacSHA256): sin dependencias
-nuevas. Pruebas: JUnit 5 + Mockito + StepVerifier (core), Testcontainers Mongo (adaptador), `@SpringBootTest` + `WebTestClient` (E2E).
+Java 25, Spring Boot 4, WebFlux, Mongo reactivo. `javax.crypto` del JDK (AES-256-GCM, HmacSHA256), sin dependencias nuevas.
 
 ## Constitution Check (2.0.1)
 
-- I Hexagonal: modelo y puertos en `core` sin frameworks; cifrado y Mongo en adaptadores. `HexagonalArchitectureTest` y `ModularityTests` se mantienen verdes. Cumple.
-- II Contrato primero: las operaciones se piden a Contrato (ver "Cambios para Contrato") antes del controlador; la tarea del controlador depende de ese cambio. Rutas literales. Cumple.
-- III Sin comentarios en código nuevo. Cumple.
-- IV Tarea E2E explícita (`DeviceRegistryE2ETest`) más pruebas dirigidas por SC-001 a SC-005; `verify` completo una vez al cierre. Cumple.
-- V Commits de una línea. VII Excepciones en "Excepciones registradas". VIII/IX: ver abajo.
-- Consumidores RabbitMQ: no se agregan; la limpieza ocurre en el despacho existente. No aplica.
+- I Hexagonal: modelo y puertos en `core`; cifrado y Mongo en adaptadores; `HexagonalArchitectureTest` y `ModularityTests` verdes.
+- II Contrato primero: operaciones pedidas a Contrato (tabla abajo) antes del controlador. Rutas literales.
+- III Sin comentarios. IV Tarea E2E explícita (`DeviceRegistryE2ETest`) y `verify` completo al cierre. V Commits de una línea.
+- VII Excepciones en su sección. VIII/IX: Decisiones 8 y 10. Sin consumidores RabbitMQ nuevos.
 
 ## Decisiones
 
-1. **Identidad separada**: `RecipientIdentity(recipientId, tenantId, subject?, createdAt)`. `recipientId` es UUID generado por el
-   servicio. Es un tipo nuevo (`DeviceOwnerId` o `RecipientIdentityId`, a decidir en tasks) para no chocar con `RecipientId` actual,
-   que sigue siendo la dirección. Índice único `(tenantId, subject)` parcial (solo si `subject` existe).
-2. **Dispositivo**: `Device(deviceId, tenantId, recipientIdentityId, platform, protectedToken, tokenFingerprint, originComponent,
-   createdAt, lastSeenAt)`. `platform` enum (`ANDROID`, `IOS`, `WEB`). Índice único `(tenantId, tokenFingerprint)`.
-3. **Token protegido**: puerto `TokenProtectionPort` (`protect`, `reveal`, `fingerprint`); adaptador AES-256-GCM con IV aleatorio y
-   HMAC-SHA256 con clave separada; claves por variables `DEVICE_TOKEN_KEY` y `DEVICE_FINGERPRINT_KEY` (nunca en repositorio). Arranque
-   falla si faltan en perfiles no `test`. `reveal` solo lo usa el mapeo para ADMINISTRADOR.
-4. **Máscara**: calculada en el controlador a partir del rol de `AuthenticatedPrincipal`; el caso de uso devuelve el dominio con el token revelable solo si se pide.
-5. **Registro idempotente**: inserción con índice único; ante `DuplicateKeyException` se lee el existente y se compara el
-   destinatario (mismo: 200; distinto: 409).
-6. **Baja**: `POST /device-removals` `{deviceId}`; borrado físico filtrado por `(tenantId, deviceId)`; 404 si no borró nada.
-7. **Token inválido**: `AttemptResult` gana el valor `INVALID_RECIPIENT`, tratado como fallo permanente en `Notification`. El
-   `FcmNotificationProvider` lo devuelve solo para 410 o 404 cuyo `FcmErrorResponse` tenga estado `UNREGISTERED`/`NOT_FOUND` con
-   `errorCode` `UNREGISTERED`. `DispatchNotificationService` llama a `RemoveInvalidDeviceUseCase` (fire-and-continue con
-   `onErrorResume`, un fallo de limpieza nunca altera el resultado del intento) con `(tenantId, address)`; el caso de uso calcula la huella y borra.
-   Alternativa descartada: que el adaptador FCM borre directo; acopla proveedor y registro.
-8. **`lastSeenAt`**: el despacho llama a `TouchDeviceUseCase` tras `ACCEPTED` en PUSH; mismo patrón de tolerancia a fallos.
-9. **Retención**: índice TTL de Mongo sobre `lastSeenAt` con `expireAfter` desde `notification.devices.retention-days` (270). La
-   creación del índice vive en el adaptador, junto a los demás índices.
-10. **Extensibilidad**: `RecipientIdentity` no contiene dispositivos embebidos; F1, F6 y E10 referencian `recipientIdentityId`.
-11. **Observabilidad (IX)**: logs con `tenantId`, `deviceId` y `recipientId`; la huella solo con 8 caracteres; contadores `devices.registered`,
-    `devices.removed{reason=manual|invalid|retention}`.
-12. **Confiabilidad (VIII)**: registro y baja son operaciones atómicas de un solo documento; la limpieza por token inválido es
-    idempotente y su fallo se registra en log sin perder el estado del intento.
+1. **Identidad**: `RecipientIdentity(recipientIdentityId UUID, tenantId, subject?, createdAt)`; tipo nuevo, distinto de `RecipientId`
+   (la dirección). Único parcial `(tenantId, subject)`. Se crea al primer registro de la sesión; CLIENTE/OPERADOR siempre usan el
+   `subject` de la sesión (si el cuerpo trae otro, 403). ADMINISTRADOR puede indicar `subject`.
+2. **Dispositivo**: `Device(deviceId, tenantId, recipientIdentityId, platform {ANDROID, IOS, WEB}, protectedToken, tokenFingerprint,
+   keyVersion, fingerprintKeyVersion, originComponent, createdAt, lastSeenAt)`. Único `(tenantId, tokenFingerprint)`.
+3. **Registro sin sondeo**: upsert atómico por `(tenantId, tokenFingerprint)` que fija la identidad de la sesión; la respuesta es
+   la misma tanto si el token era nuevo para la sesión como si era de otra identidad (200/201 según creado o no, nunca 409).
+   Baja y borrado filtran por `(tenantId, deviceId, recipientIdentityId)`; 404 uniforme para ajeno, de otro tenant o inexistente.
+4. **Cifrado**: `TokenProtectionPort` (`protect`, `reveal`, `fingerprint`, `mask`). AES-256-GCM con IV aleatorio y AAD
+   `tenantId|deviceId` (el token de la notificación usa `tenantId|notificationId`); HMAC-SHA256 con clave aparte. Claves
+   `DEVICE_TOKEN_KEY` y `DEVICE_FINGERPRINT_KEY`; el arranque falla si faltan en cualquier perfil excepto `test`, y la E2E corre
+   con perfil `test` y claves fijas de prueba. Rotación: `keyVersion` y `fingerprintKeyVersion` por documento; una huella con otra
+   clave no coincide con el índice único, así que la rotación de la clave HMAC exige recalcular todas las huellas (excepción).
+5. **Token en `notifications.recipientAddress`**: el `NotificationDocumentMapper` cifra la dirección cuando el canal es PUSH
+   (prefijo `enc:v1:`, AAD `tenantId|notificationId`) y la descifra al leer; `core` ve siempre la dirección real, así que el
+   despacho y los reintentos (manual y automático) funcionan aunque el `Device` ya no exista. Se guarda además la huella para búsquedas.
+   Los documentos sin prefijo se leen en claro y se cifran al siguiente guardado. Las respuestas de consulta enmascaran la dirección
+   PUSH salvo para ADMINISTRADOR; el evento y el log nunca llevan el token.
+6. **Clasificador FCM**: `FcmResponseClassifier.classifyStatus(int)` pasa a `classify(int status, FcmErrorResponse error)` (instancia o
+   estático con ambos parámetros). Devuelve `INVALID_RECIPIENT` si `status == 410` o `error.errorCode() == "UNREGISTERED"`; cualquier
+   otro 404 y el 400 `INVALID_ARGUMENT` siguen como `PERMANENT_FAILURE` y nunca limpian. Se ajustan los llamadores y pruebas
+   existentes de spec 010.
+7. **`INVALID_RECIPIENT` en el código**: valor nuevo de `AttemptResult`, tratado como fallo permanente donde hoy se trata
+   `PERMANENT_FAILURE` (`DispatchNotificationService`; `Notification` no recibe `AttemptResult`, solo el `AttemptRecord` ya existente).
+   `MicrometerNotificationMetrics.resultLabel` (switch exhaustivo sin default) se actualiza y `providerCalled`/`dispatchAttempted` lo
+   mapean a `failed`. Tras la tarea 1 se revisa todo `switch` sobre `AttemptResult` con una búsqueda acotada.
+8. **Un solo puerto en el despacho**: `DeviceLifecyclePort` con `invalidate(tenantId, address)` y `touch(tenantId, address)`;
+   `DispatchNotificationService` recibe solo ese puerto, con `onErrorResume` (un fallo de limpieza se registra y no cambia el
+   resultado del intento). Los casos de uso de usuario no pasan por él. Implementación en `infrastructure` sobre el repositorio.
+9. **`lastSeenAt` acotado**: `touch` actualiza con filtro `lastSeenAt < ahora - 24 h`, una escritura condicionada como máximo al día.
+10. **Retención**: índice TTL sobre `lastSeenAt` con `notification.devices.retention-days` (270). Cambiar la propiedad no modifica un
+    TTL existente, así que al arrancar el adaptador compara y ejecuta `collMod` si difiere. Mongo no informa de las expiraciones,
+    por lo que el contador `devices.removed{reason}` solo cubre `manual`, `invalid` y `erasure`; la retención se observa por el
+    conteo periódico de documentos (gauge `devices.active`). Logs con `tenantId`, `deviceId` y huella de 8 caracteres.
+11. **Borrado por titular**: `POST /device-erasures {subject}`, ADMINISTRADOR; borra la identidad y sus dispositivos, 204 también
+    si no existían (el administrador ya ve todo el tenant).
+12. **Cifrado de histórico**: barrido único idempotente (comando de arranque desactivado por defecto y activado por propiedad) que
+    cifra las `recipientAddress` PUSH sin prefijo; es tarea de esta historia, sin excepción.
+13. **Extensibilidad**: `Device` referencia la identidad; la identidad no embebe dispositivos y su documento tolera atributos desconocidos.
 
 ## Project Structure
 
-- `core`: `domain/RecipientIdentity`, `domain/Device`, `domain/valueobject/{DevicePlatform,DeviceId,DeviceToken,RecipientIdentityId}`,
-  `port/in/{RegisterDevice,ListDevices,RemoveDevice,RemoveInvalidDevice,TouchDevice}UseCase`, `port/out/{DeviceRegistryPort,TokenProtectionPort}`,
-  `usecase/*Service`. Modifica `AttemptResult`, `Notification` (transición permanente) y `DispatchNotificationService`.
-- `infrastructure`: `adapter/out/mongo/{DeviceDocument,RecipientIdentityDocument,DeviceMongoAdapter}`, `adapter/out/security/AesGcmTokenProtection`,
-  `adapter/in/rest/{DeviceController,RegisterDeviceRequest,DeviceResponse,RemoveDeviceRequest}`, `config/DeviceProperties`. Modifica `FcmNotificationProvider`/`FcmResponseClassifier`.
+- `core`: `domain/{RecipientIdentity,Device}`, `domain/valueobject/{DeviceId,DevicePlatform,RecipientIdentityId,DeviceToken}`,
+  `port/in/{RegisterDevice,ListDevices,RemoveDevice,EraseRecipientDevices}UseCase`, `port/out/{DeviceRegistryPort,TokenProtectionPort,DeviceLifecyclePort}`,
+  `usecase/*Service`. Modifica `AttemptResult` y `DispatchNotificationService`.
+- `infrastructure`: `adapter/out/mongo/{DeviceDocument,RecipientIdentityDocument,DeviceMongoAdapter}` y cifrado en `NotificationDocumentMapper`,
+  `adapter/out/security/AesGcmTokenProtection`, `adapter/in/rest/{DeviceController,...Request,DeviceResponse}`, `config/DeviceProperties`.
+  Modifica `FcmNotificationProvider`/`FcmResponseClassifier`, `MicrometerNotificationMetrics`, respuestas de consulta de notificaciones.
 
 ## Cambios para Contrato (api-notificaciones.yaml; no se editan aquí)
 
 | Operación | Ruta | x-status | x-minimum-role |
 |---|---|---|---|
 | registerDevice | POST /devices | available | CLIENTE |
-| listDevices | GET /devices?recipientId= | available | CLIENTE |
+| listDevices | GET /devices | available | CLIENTE |
 | removeDevice | POST /device-removals | available | CLIENTE |
+| eraseRecipientDevices | POST /device-erasures | available | ADMINISTRADOR |
 
-- Esquemas: `RegisterDeviceRequest {platform, token, recipientId?, subject?}`, `DeviceResponse {deviceId, recipientId, platform, token (enmascarado salvo ADMINISTRADOR), originComponent, createdAt, lastSeenAt}`, `RemoveDeviceRequest {deviceId}`.
-- Respuestas: 201/200 registro, 204 baja, 400, 401, 403, 404, 409, 503 `PepUnavailable`. Cabeceras `CorrelationId` y `TraceParent` como el resto.
-- Regeneración de `protected-resources.json` y aprovisionamiento del PDP (spec 028) cubrirán las rutas nuevas.
+- Esquemas: `RegisterDeviceRequest {platform, token, subject? (solo ADMINISTRADOR)}`, `DeviceResponse {deviceId, recipientId, platform,
+  token (enmascarado salvo ADMINISTRADOR), originComponent, createdAt, lastSeenAt}`, `RemoveDeviceRequest {deviceId}`,
+  `EraseDevicesRequest {subject}`. `GET /devices` acepta `subject` solo para ADMINISTRADOR.
+- Respuestas: 201/200 registro, 204 baja y borrado, 400, 401, 403, 404, 503 `PepUnavailable`. Sin 409.
+- Las consultas de notificaciones existentes documentan que la dirección PUSH sale enmascarada salvo ADMINISTRADOR.
+- Regenerar `protected-resources.json` y aprovisionar el PDP (spec 028).
 
 ## Pendientes fuera de esta rama
 
-- Wiring en `UseCaseConfig` y propiedades en `application.yml`: lo hace quien tenga esa restricción levantada; las tareas lo listan como paso explícito.
-- Claves `DEVICE_TOKEN_KEY` y `DEVICE_FINGERPRINT_KEY` en el gestor de secretos y en `.env.example` del despliegue.
+- Wiring en `UseCaseConfig` y propiedades de `application.yml`: lo hace quien tenga esa restricción levantada; tarea explícita.
+- Claves `DEVICE_TOKEN_KEY` y `DEVICE_FINGERPRINT_KEY` en el gestor de secretos y en `.env.example`.
 
 ## Excepciones registradas
 
-- Rotación de claves de cifrado no incluida: excepción con dueño Seguridad (por asignar) y fecha límite 2026-12-15. Se guarda `keyVersion` en el documento para habilitarla.
-- Base legal sujeta a confirmación del responsable de datos antes del paso a producción.
+- Rotación de claves de cifrado y de huella: dueño Seguridad, fecha 2026-12-15.
+- Confirmación de base legal y retención de 270 días por el responsable de datos: dueño Equipo de backend, fecha 2026-12-15 (antes de producción).
 
 ## Pruebas planeadas
 
-- Unitarias (`StepVerifier`): registro idempotente y 409, baja por tenant, eliminación por token inválido incluso con token no registrado, tolerancia a fallo de limpieza.
-- Integración Mongo (Testcontainers): índice único con 20 registros concurrentes (SC-005), TTL configurado, dos tenants con el mismo token.
-- Clasificación FCM: 404 `UNREGISTERED` y 410 devuelven `INVALID_RECIPIENT`; 404 de configuración y 429 no.
-- Máscara y logs: ADMINISTRADOR ve el token, CLIENTE no; captura de logs sin el token (SC-004).
-- **E2E** `DeviceRegistryE2ETest` (Mongo + RabbitMQ + `WebTestClient`, FCM simulado): registrar, listar, enviar PUSH al token con 410 y comprobar que el dispositivo desaparece en menos de 5 s; baja manual; dos tenants (SC-001 a SC-003).
+- Unitarias (`StepVerifier`): registro con tokens propio/ajeno (misma respuesta), 403 por `subject` ajeno, baja 404 uniforme, `invalidate`
+  con token no registrado, tolerancia a fallo del puerto, `touch` condicionado, `AttemptResult.INVALID_RECIPIENT` en `MicrometerNotificationMetrics`.
+- Clasificador FCM: 410 y 404 `UNREGISTERED` -> `INVALID_RECIPIENT`; 404 de configuración, 400 `INVALID_ARGUMENT`, 429 y 5xx no.
+- Integración Mongo (Testcontainers): 20 registros concurrentes (SC-005), mismo token en dos tenants, `collMod` al cambiar la retención,
+  identidad sin `subject` con atributos extra (FR-011), documento de notificación PUSH cifrado y descifrado con reintento sin `Device`.
+- Seguridad: máscara por rol; captura de logs con control positivo (SC-004).
+- Rendimiento: 50 iteraciones y cálculo de p95 en la prueba (SC-001).
+- **E2E** `DeviceRegistryE2ETest` (perfil `test`, Mongo + RabbitMQ + `WebTestClient`, FCM simulado): registrar, listar, enviar PUSH
+  al token con 410 y comprobar que el dispositivo desaparece en menos de 5 s; baja manual; borrado por titular; dos tenants y dos sujetos (SC-002, SC-003).

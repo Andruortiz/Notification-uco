@@ -1,5 +1,8 @@
 package co.edu.uco.notification.infrastructure.architecture;
 
+import static com.tngtech.archunit.base.DescribedPredicate.not;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideInAPackage;
+import static com.tngtech.archunit.core.domain.JavaClass.Predicates.simpleName;
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 import com.tngtech.archunit.core.domain.JavaClasses;
@@ -29,8 +32,7 @@ class HexagonalArchitectureTest {
             .resideInAPackage("co.edu.uco.notification.core..")
             .should()
             .dependOnClassesThat()
-            .resideInAPackage("co.edu.uco.notification.infrastructure..")
-            .allowEmptyShould(true);
+            .resideInAPackage("co.edu.uco.notification.infrastructure..");
     rule.check(classes);
   }
 
@@ -42,8 +44,7 @@ class HexagonalArchitectureTest {
             .resideInAPackage("co.edu.uco.notification.core..")
             .should()
             .dependOnClassesThat()
-            .resideInAPackage("org.springframework..")
-            .allowEmptyShould(true);
+            .resideInAPackage("org.springframework..");
     rule.check(classes);
   }
 
@@ -55,8 +56,32 @@ class HexagonalArchitectureTest {
             .resideInAPackage("co.edu.uco.notification.core.port..")
             .should()
             .dependOnClassesThat()
-            .resideInAPackage("co.edu.uco.notification.infrastructure.adapter..")
-            .allowEmptyShould(true);
+            .resideInAPackage("co.edu.uco.notification.infrastructure.adapter..");
+    rule.check(classes);
+  }
+
+  @Test
+  void domainMustNotDependOnUseCases() {
+    final ArchRule rule =
+        noClasses()
+            .that()
+            .resideInAPackage("co.edu.uco.notification.core.domain..")
+            .should()
+            .dependOnClassesThat()
+            .resideInAPackage("co.edu.uco.notification.core.usecase..");
+    rule.check(classes);
+  }
+
+  @Test
+  void inboundAdaptersMustNotDependOnOutboundAdapters() {
+    final ArchRule rule =
+        noClasses()
+            .that()
+            .resideInAPackage("co.edu.uco.notification.infrastructure.adapter.in..")
+            .should()
+            .dependOnClassesThat(
+                resideInAPackage("co.edu.uco.notification.infrastructure.adapter.out..")
+                    .and(not(simpleName("AttachmentScanRequest"))));
     rule.check(classes);
   }
 }

@@ -45,3 +45,6 @@ secrets/
 # spec-kit / Claude Code runtime state (local-only, not part of the versioned governance artifact)
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
+
+# Diagramas generados por archify (regenerables)
+.archify/

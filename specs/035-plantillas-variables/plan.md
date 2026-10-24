@@ -6,7 +6,7 @@
 
 **Estado**: Pendiente de aprobacion
 
-**Versión del plan**: 1
+**Versión del plan**: 2
 
 ## Summary
 

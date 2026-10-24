@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-24
 
-**Status**: Draft
+**Status**: Pendiente de aprobacion
 
 ## Contexto
 
@@ -17,7 +17,9 @@ dependen de esta (vista previa, envio por `templateId`, localizacion): el modelo
 ### Session 2026-10-24
 
 - Q: Motor de variables -> A: sustitucion textual de `{{nombre}}`, sin condicionales, bucles ni expresiones; el valor se inserta como
-  texto y nunca se evalua. Nombre valido: `[A-Za-z][A-Za-z0-9_]*` (max 40). Espacios dentro de las llaves se toleran (`{{ nombre }}`).
+  texto y nunca se evalua. Nombre valido: `[A-Za-z][A-Za-z0-9_]*` (max 40). Se toleran hasta 5 espacios dentro de las llaves a cada lado (`{{ nombre }}`);
+  con mas de 5 (`{{      nombre}}`) la sintaxis es invalida y responde 400 `INVALID_TEMPLATE_SYNTAX`.
+- Q: Render en esta historia -> A: `POST /template-renders` se expone en D1 (decision del coordinador); D2 lo enriquece.
 - Q: Categoria (F1) -> A: valor cerrado `ACADEMICO`, `ADMINISTRATIVO`, `MARKETING`, `SEGURIDAD`; `SEGURIDAD` es critica. Obligatoria.
 - Q: Idioma -> A: etiqueta BCP 47 corta (`es`, `en`, `es-CO`), obligatoria, sin idioma por defecto implicito.
 - Q: Identidad -> A: una plantilla es unica por `(tenant, clave, canal, idioma)`; la clave agrupa las variantes de canal e idioma.
@@ -144,7 +146,6 @@ Rutas literales; identificadores en query o cuerpo. Errores con el formato de er
 
 ## Preguntas abiertas
 
-- **P2**: Exponer `/template-renders` en esta historia para poder cumplir el 422 por HTTP. Recomendacion: si, minimo; D2 lo enriquece.
 - **P3**: Variable opcional sin valor: cadena vacia o valor por defecto declarado. Recomendacion: cadena vacia ahora; el valor por
   defecto cabe despues en `Variable` sin romper el contrato.
 - **P4**: Enmascarar en el render los valores que son datos personales. Recomendacion: no en D1 (el llamador aporta los valores y

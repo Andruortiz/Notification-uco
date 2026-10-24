@@ -74,12 +74,18 @@ Un operador consulta si una direccion esta marcada y un administrador puede leva
 - **FR-005**: La marca MUST ser por `(tenantId, canal, direccion normalizada)` y MUST ser idempotente.
 - **FR-006**: El envio a una direccion marcada MUST rechazarse con 409 `RECIPIENT_UNDELIVERABLE` antes de persistir.
 - **FR-007**: El tenant de toda operacion HTTP MUST provenir de la sesion del PDP; el del evento de proveedor, de la
-  notificacion original que lo origino.
-- **FR-008**: Direcciones en respuestas, logs y eventos MUST ir enmascaradas salvo para ADMINISTRADOR.
-- **FR-009**: La entrada de eventos del proveedor MUST autenticarse con secreto compartido por variable de entorno.
+  notificacion original localizada por el `messageId` que el proveedor devolvio al aceptar el envio y que el sistema
+  MUST persistir en el intento de despacho (ver [plan.md](plan.md#messageid-del-proveedor)).
+- **FR-008**: Direcciones en respuestas, logs y eventos MUST ir enmascaradas (telefono con `PhoneNumbers.mask`, correo con
+  mascara nueva de `EmailAddresses`) salvo para ADMINISTRADOR, cuyo rol se toma de la sesion del PDP en el controller.
+- **FR-009**: El webhook de Brevo MUST autenticarse con el secreto `BREVO_WEBHOOK_SECRET`; si falta o no coincide,
+  responde 401 sin procesar. Ni el secreto ni cuerpos con direcciones se registran en logs.
 - **FR-010**: Consultar la marca MUST requerir OPERADOR; levantarla, ADMINISTRADOR.
-- **FR-011**: El proveedor `simulated` MUST poder emitir rebotes solo en perfiles local y de pruebas.
-- **FR-012**: Rechazos y marcas MUST contarse en metricas con tenant y canal, sin la direccion.
+- **FR-011**: En perfiles local y de pruebas el proveedor `simulated` MUST poder simular un rebote duro mediante el mismo
+  webhook (ver plan); fuera de esos perfiles el mecanismo no existe.
+- **FR-012**: Rechazos y marcas MUST contarse en metricas por tenant y canal, sin la direccion (nombres en el plan).
+- **FR-013**: Canales distintos de correo y SMS MUST omitir la validacion de formato y la comparacion de marcas usa la
+  direccion tal cual (recortada); solo el correo se pasa a minusculas.
 
 ## Success Criteria
 
@@ -87,8 +93,8 @@ Un operador consulta si una direccion esta marcada y un administrador puede leva
 - **SC-002**: Tras un rebote duro procesado, el siguiente envio a esa direccion se rechaza en la misma peticion, sin
   llamar al proveedor (prueba E2E).
 - **SC-003**: Ninguna marca de un tenant afecta a otro (prueba con dos tenants).
-- **SC-004**: La validacion de formato anade menos de 5 ms por envio (prueba con aserciones de `Duration`).
-
+- **SC-004**: La validacion de formato es una funcion pura sin I/O; la prueba unitaria afirma que 10 000 validaciones
+  terminan en menos de 1 s (margen amplio para CI).
 ## Assumptions
 
 - Brevo es el unico proveedor de correo con webhooks de rebote; Twilio SMS queda fuera del rebote en esta historia y

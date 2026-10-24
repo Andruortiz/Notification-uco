@@ -134,7 +134,7 @@ El histórico de intentos muestra cuáles disparó una persona (MANUAL) y cuále
 - El contrato (`api-notificaciones.yaml`) lo actualiza el carril Contrato; esta historia lista las rutas en `plan.md` y no edita el archivo.
 - La consola enmascara según el rol con los datos que reciba; el servidor no devuelve contacto en estas operaciones.
 - Mensajes ya encolados sin origen se tratan como AUTOMATIC.
-- Persiste un hueco preexistente: una PENDING con intentos y sin mensaje en la cola (encolado fallido tras guardar) no se recupera sola (ver plan, Pendiente explícito).
+- Si el encolado falla tras guardar, la PENDING se recupera sola pasado el umbral de huérfanas, pero como AUTOMATIC (ver plan, Pendientes explícitos).
 
 ## Out of Scope
 

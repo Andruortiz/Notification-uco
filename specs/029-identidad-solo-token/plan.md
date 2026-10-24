@@ -51,9 +51,10 @@ Java 25, Spring Boot 4.1, WebFlux, jjwt (ya presente). Sin dependencias nuevas. 
    README. También: el comentario de `.gitignore` (línea 39) sobre `AUTH_JWT_HS256_SECRET`, las menciones en `docs/` y en
    `docs/diagramas/secuencias/F05-autenticacion-y-panel-en-vivo.drawio`, y `.github/workflows/ci-cd.yml`.
    - **Cambio de despliegue**: `AUTH_PLATFORM_PUBLIC_KEY` pasa a ser obligatoria siempre (decisión del usuario), incluso con
-     solo cookie de sesión (spec 025). Imagen, `ci-cd.yml` (hoy no la define) y manual de despliegue deben proveerla. En CI
-     las pruebas usan el par RSA efímero; el job que arranque la imagen necesita una clave pública de prueba generada en el
-     propio job, sin versionar la privada. B1 se implementa antes que las historias que dependen de la identidad de CI.
+     solo cookie de sesión (spec 025). Los despliegues y el manual de despliegue deben proveerla. `ci-cd.yml` hoy solo ejecuta
+     `java -version` e `id -u` sobre la imagen y no arranca la app, así que no cambia; si un job llega a arrancar la imagen,
+     necesitará una clave pública de prueba generada en el propio job, sin versionar la privada. Las pruebas usan el par RSA
+     efímero. B1 se implementa antes que las historias que dependen de la identidad de CI.
 5. **Migración de pruebas.**
    - `TestTokens` genera un `KeyPair` RSA 2048 por JVM y firma RS256; expone `PUBLIC_KEY` en Base64.
    - Un `ApplicationContextInitializer` de prueba, registrado en `src/test/resources/META-INF/spring.factories`, inyecta
@@ -64,7 +65,10 @@ Java 25, Spring Boot 4.1, WebFlux, jjwt (ya presente). Sin dependencias nuevas. 
      plataforma con `AuthPlatformProperties` de prueba.
    - Se borran `AuthJwtPropertiesTest`, `NoPublishedSecretTest` y `LocalJwtTokenValidationAdapterTest`; `AuthModeSelectionTest`
      se reduce a: arranca con clave, falla sin ella.
-   - Se añade al validador de plataforma la prueba de un token HS256 con el antiguo secreto (rechazado).
+   - Se añade `LegacySharedSecretTokenRejectedTest`: un token firmado con secreto compartido es rechazado por el validador
+     de plataforma (nombre sin `hs256`, para respetar el grep de SC-003).
+   - Convención de pruebas `test.auth.no-default-key=true`: la define y documenta la tarea que crea el inicializador
+     (su Javadoc de clase y `plan.md` la nombran); las tareas de `AuthModeSelectionTest` y de arranque sin clave la citan.
 6. **Flujo de desarrollo.** `scripts/dev-token.ps1` (PowerShell 7, `RSA.ExportSubjectPublicKeyInfo`) crea
    `.dev-keys/` (ignorado en git), imprime el valor de `AUTH_PLATFORM_PUBLIC_KEY` y emite un RS256 con tenant, sujeto, rol y
    vigencia por parámetro. El perfil `local` no trae clave: se documenta exportarla. Alternativa documentada: sesión real del PDP.

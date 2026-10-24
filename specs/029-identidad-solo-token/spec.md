@@ -118,8 +118,9 @@ tokens firmados con un par de claves RSA propio.
   propiedades y la guarda del secreto HS256, la propiedad `notification.auth.mode` y todas las variables `AUTH_JWT_*`.
 - **FR-005**: El arranque DEBE fallar si falta `notification.auth.platform.public-key`, nombrando la variable. La clave es
   obligatoria SIEMPRE, también en despliegues que solo usan cookie de sesión (spec 025). Decisión intencional del producto y
-  cambio de despliegue: la imagen, `.github/workflows/ci-cd.yml` y el manual de despliegue deben proveer
-  `AUTH_PLATFORM_PUBLIC_KEY`.
+  cambio de despliegue: quien arranque la imagen (despliegues y el manual de despliegue) debe proveer
+  `AUTH_PLATFORM_PUBLIC_KEY`; `.github/workflows/ci-cd.yml` solo la necesitará si un job arranca la aplicación (hoy solo
+  ejecuta `java -version` e `id -u` sobre la imagen).
 - **FR-011**: Un token con emisor o audiencia incorrectos (`iss`/`aud`) NO es un caso de claims ausentes: responde
   `401 AUTHENTICATION_REQUIRED` (razón propia `INVALID_ISSUER_OR_AUDIENCE`), no `AUTHENTICATION_CLAIMS_MISSING`.
 - **FR-012**: El log del rechazo DEBE llevar el mismo código que la respuesta (`AUTHENTICATION_CLAIMS_MISSING` o
@@ -146,7 +147,9 @@ tokens firmados con un par de claves RSA propio.
   confirma el 401 y que no hay efectos en base de datos (FR-003).
 - **SC-003**: `grep` de `hs256`, `LocalJwt`, `AuthJwt` y `AUTH_JWT` sobre fuentes, pruebas, README, `.env.example`,
   `.gitignore`, `docs/` (incluido `docs/diagramas/secuencias/F05-autenticacion-y-panel-en-vivo.drawio`) y
-  `.github/workflows/` no devuelve resultados (FR-004, FR-009).
+  `.github/workflows/` no devuelve resultados (FR-004, FR-009). Única excepción permitida: la prueba de rechazo del token
+  firmado con el antiguo secreto compartido, que se llama `LegacySharedSecretTokenRejectedTest` y no usa el literal `hs256`
+  ni `AUTH_JWT` (arma el token con jjwt y un secreto de prueba local).
 - **SC-006**: Pruebas con nombre: `IdentityFromTokenE2ETest` (FR-001, dos tenants y `X-Tenant-Id` cruzado),
   `NoPrivateKeyInRepositoryTest` (FR-006: ningún archivo versionado contiene `BEGIN PRIVATE KEY`), unitarias de
   emisor/audiencia incorrectos que dan `AUTHENTICATION_REQUIRED` (FR-011) y del log de rechazo (FR-012).

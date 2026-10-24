@@ -73,12 +73,9 @@ que empezaron.
 
 ## Autenticacion
 
-El servicio exige un JWT en `Authorization: Bearer`. El modo se elige con `NOTIFICATION_AUTH_MODE`:
+El servicio exige un JWT de la plataforma central de seguridad en `Authorization: Bearer`, validado con **su clave publica** (RSA o EC) en el adaptador del puerto `TokenValidationPort`. `AUTH_PLATFORM_PUBLIC_KEY` es obligatoria siempre, tambien si solo se usa la cookie de sesion: sin ella el servicio no arranca. Usuario, tenant y rol salen unicamente de las claims configuradas; `X-Tenant-Id` y cualquier otro encabezado se ignoran. Todo token debe traer `exp`. Un token firmado sin sujeto, tenant o rol conocido responde `401` con `NTF-2004`; el resto de rechazos, `401` con `NTF-2001`. La claim de cliente (`azp`) es opcional.
 
-- **`local`** (por defecto): JWT firmado con un secreto compartido (`AUTH_JWT_HS256_SECRET`), que es obligatorio, de al menos 32 bytes y no tiene valor por defecto. Para desarrollo, activa el perfil `local` (`SPRING_PROFILES_ACTIVE=local`), que trae un secreto de desarrollo; el servicio no arranca con ese valor fuera del perfil `local`. Todo token debe traer la claim `exp`. Es la autenticacion interina para desarrollo y pruebas.
-- **`platform`**: tokens de la plataforma central de seguridad, validados con **su clave publica** (RSA o EC). Hay un solo adaptador activo por modo; un valor desconocido impide que la aplicacion arranque.
-
-Cada modo es un adaptador del puerto `TokenValidationPort`; el dominio y el filtro de autenticacion no cambian. En modo `platform` el arranque falla si falta la clave publica.
+Desarrollo local: `pwsh scripts/dev-token.ps1 -Tenant tenant-a -Role OPERADOR` genera un par RSA en `.dev-keys/` (ignorado en git), imprime el valor de `AUTH_PLATFORM_PUBLIC_KEY` que debes exportar antes de arrancar con `SPRING_PROFILES_ACTIVE=local` y emite un token RS256. Alternativa: una sesion real del PDP.
 
 Panel en vivo: `GET /notifications/stream` se autentica con la cabecera `Authorization: Bearer` o con la cookie de sesion `SECURITY_BASELINE_SESSION` (un `EventSource` nativo la envia con `withCredentials`). Sin credenciales o con una sesion invalida responde 401; si la plataforma de sesiones no responde, 503. Desde HU2-111 se retiraron `POST /notifications/stream/tickets` y el parametro `ticket`; `access_token` tampoco se acepta.
 
@@ -92,6 +89,7 @@ Contrato de la API (version 2.0.0): todas las rutas son literales, sin `:` ni `{
 | `AUTH_PLATFORM_SUBJECT_CLAIM` | Claim con el usuario o sistema | `sub` |
 | `AUTH_PLATFORM_TENANT_CLAIM` | Claim con el tenant | `tenantId` |
 | `AUTH_PLATFORM_ROLE_CLAIM` | Claim con el rol; puede ser un texto o una lista | `role` |
+| `AUTH_PLATFORM_CLIENT_CLAIM` | Claim opcional con el identificador del cliente | `azp` |
 | `AUTH_PLATFORM_CLOCK_SKEW_SECONDS` | Tolerancia de reloj | `30` |
 
 Los roles de la plataforma se traducen a los del servicio (`CLIENTE`, `OPERADOR`, `ADMINISTRADOR`) con una tabla, que se define en `application.yml` o en un archivo de configuracion (no en variables de entorno):
@@ -175,7 +173,7 @@ Que demuestra cada panel de RNF y que no:
 
 ## Azure Key Vault
 
-Las variables de entorno del servicio (`MONGO_PASSWORD`, `BREVO_API_KEY`, `AUTH_JWT_HS256_SECRET`, etc.)
+Las variables de entorno del servicio (`MONGO_PASSWORD`, `BREVO_API_KEY`, `AUTH_PLATFORM_PUBLIC_KEY`, etc.)
 pueden leerse tambien desde un Azure Key Vault. Los contenedores (MongoDB, RabbitMQ, MinIO, ClamAV) no
 cambian.
 

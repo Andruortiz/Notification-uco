@@ -27,10 +27,13 @@ devuelve `AttemptResult` sin id, por lo que el tenant del webhook no se puede re
 `DeliveryAttempt`, `DeliveryAttemptDocument`, `Notification.mark*`, `AttemptResult` y `Outcome`; E10 no redefine nada de eso.
 Sobre ese rediseno E10 anade unicamente:
 
-- `providerMessageId` (String, opcional) en el resultado del puerto de proveedor (el tipo que E3 deje como resultado de
-  `NotificationSenderPort.send`), rellenado por Brevo desde `BrevoApiResponse.messageId()`; `simulated` genera uno sintetico.
-- `providerMessageId` en `DeliveryAttempt` y en `DeliveryAttemptDocument`, y su paso por `Notification.mark*`.
-- Indice Mongo sobre `attempts.providerMessageId` en `NotificationDocument` y consulta
+- Forma de E3 (spec 031, propuesta con nombres por confirmar): `Outcome(ProviderResult last, List<FailedProvider> failedOver)`,
+  `ProviderResult(AttemptResult result, ProviderId providerId)`, `Notification.mark*` con un unico `AttemptRecord`, y
+  `DeliveryAttempt`, `DeliveryAttemptDocument` y su mapper construidos desde `AttemptRecord` con campos nuevos opcionales.
+- `messageId` (String, opcional) como componente nuevo de `ProviderResult`, de `AttemptRecord` y de `DeliveryAttempt`
+  (y su campo en `DeliveryAttemptDocument`), rellenado por Brevo desde `BrevoApiResponse.messageId()`; `simulated` genera uno
+  sintetico. Los documentos viejos se leen sin el campo. Se persiste el del proveedor que acepto, tambien tras un failover.
+- Indice Mongo sobre `attempts.messageId` en `NotificationDocument` y consulta
   `NotificationRepository.findTenantAndAddressByProviderMessageId` (devuelve tenant, canal y direccion).
 
 Si E3 ya incluye un identificador del proveedor, E10 reutiliza ese campo y solo agrega el indice y la consulta. Sin este
@@ -92,6 +95,6 @@ existente (`GET`/`POST /providers` es otro path) ni con `/recipients/preferences
 
 ## Riesgos
 
-- Depende de la forma final del rediseno de E3 para colocar `providerMessageId`; si cambia, se ajusta solo este plan.
+- Depende de la forma final del rediseno de E3 para colocar `messageId`; si cambia, se ajusta solo este plan.
 - Regla de correo demasiado estricta: se usa una regla pragmatica y la verificacion real queda en el proveedor.
 - El webhook es publico para el PEP y solo lo protege el secreto: rotacion por variable de entorno.

@@ -119,8 +119,9 @@ modelo solo queda extensible para ellas.
 - **FR-010**: Base legal, retención y borrado documentados en la sección siguiente.
 - **FR-011**: El modelo admite más tipos de identificador por destinatario y preferencias sin migrar dispositivos (prueba que
   persiste una identidad sin `subject` y con atributos adicionales desconocidos).
-- **FR-012**: El token PUSH de `notifications.recipientAddress` se persiste cifrado y se enmascara en toda respuesta de consulta
-  de notificaciones salvo para ADMINISTRADOR; despacho y reintentos usan la dirección real.
+- **FR-012**: Para PUSH, `notifications.recipientAddress` y `recipientId` se persisten cifrados; `recipientId` se enmascara en
+  `GET /notifications` salvo para ADMINISTRADOR y el filtro `recipientId` sigue funcionando (por huella); despacho y reintentos
+  usan la dirección real. El cifrado del histórico corre en segundo plano, por lotes, sin bloquear el arranque.
 - **FR-013**: CLIENTE y OPERADOR solo operan sobre la identidad de su propio `subject`; las respuestas no distinguen entre
   recurso ajeno e inexistente.
 

@@ -49,9 +49,17 @@ Java 25, Spring Boot 4, WebFlux, Mongo reactivo. `javax.crypto` del JDK (AES-256
    clave no coincide con el índice único, así que la rotación de la clave HMAC exige recalcular todas las huellas (excepción).
 5. **Token en `notifications.recipientAddress`**: el `NotificationDocumentMapper` cifra la dirección cuando el canal es PUSH
    (prefijo `enc:v1:`, AAD `tenantId|notificationId`) y la descifra al leer; `core` ve siempre la dirección real, así que el
-   despacho y los reintentos (manual y automático) funcionan aunque el `Device` ya no exista. Se guarda además la huella para búsquedas.
-   Los documentos sin prefijo se leen en claro y se cifran al siguiente guardado. Las respuestas de consulta enmascaran la dirección
-   PUSH salvo para ADMINISTRADOR; el evento y el log nunca llevan el token.
+   despacho y los reintentos (manual y automático) funcionan aunque el `Device` ya no exista. Hoy `recipientId` también puede ser el
+   token (el contexto lo usa como dirección) y es lo único que devuelven las consultas, no `recipientAddress`: para PUSH se aplica
+   el mismo cifrado a `recipientId` y se guarda `recipientIdFingerprint` (HMAC) con un índice `(tenantId, recipientIdFingerprint)`
+   que sustituye al de `recipientId` para PUSH; es el consumidor del filtro `recipientId` de las consultas. `recipientAddress` no
+   guarda huella (la limpieza de tokens recalcula la huella en memoria). Los documentos sin prefijo se leen en claro mientras
+   existan. Las respuestas enmascaran `recipientId` PUSH salvo para ADMINISTRADOR; el evento y el log nunca llevan el token.
+   Endpoints que lo heredan (verificado con Grep en `adapter/in/rest`): `GET /notifications` (`NotificationSearchResponse` ->
+   `NotificationHistoryItemResponse.recipientId`) y, como filtro por `recipientId`, `GET /notifications/stream`
+   (`NotificationLiveUpdatesController`; su `NotificationLiveUpdateResponse` no devuelve el destinatario). Ninguna respuesta
+   devuelve `recipientAddress`. El estado y el detalle de una notificación no exponen el campo hoy; si una historia futura lo
+   añade, hereda la máscara por `TokenProtectionPort.mask`.
 6. **Clasificador FCM**: `FcmResponseClassifier.classifyStatus(int)` pasa a `classify(int status, FcmErrorResponse error)` (instancia o
    estático con ambos parámetros). Devuelve `INVALID_RECIPIENT` si `status == 410` o `error.errorCode() == "UNREGISTERED"`; cualquier
    otro 404 y el 400 `INVALID_ARGUMENT` siguen como `PERMANENT_FAILURE` y nunca limpian. Se ajustan los llamadores y pruebas
@@ -70,8 +78,12 @@ Java 25, Spring Boot 4, WebFlux, Mongo reactivo. `javax.crypto` del JDK (AES-256
     conteo periódico de documentos (gauge `devices.active`). Logs con `tenantId`, `deviceId` y huella de 8 caracteres.
 11. **Borrado por titular**: `POST /device-erasures {subject}`, ADMINISTRADOR; borra la identidad y sus dispositivos, 204 también
     si no existían (el administrador ya ve todo el tenant).
-12. **Cifrado de histórico**: barrido único idempotente (comando de arranque desactivado por defecto y activado por propiedad) que
-    cifra las `recipientAddress` PUSH sin prefijo; es tarea de esta historia, sin excepción.
+12. **Cifrado de histórico**: barrido en segundo plano tras el arranque, activado por propiedad; no bloquea el arranque ni la
+    disponibilidad. Procesa por lotes (tamaño configurable) los documentos PUSH cuyo `recipientAddress` no empieza por `enc:v1:`,
+    cada uno con actualización condicionada a ese prefijo ausente, así que es idempotente y reanudable (al reiniciar continúa
+    donde quedó). Mientras corre, el servicio lee en claro los documentos sin prefijo y cifra los que guarda; sin carrera con
+    escrituras de despacho gracias a la condición. Cifra también `recipientId` y calcula `recipientIdFingerprint`. Tarea de esta
+    historia, sin excepción.
 13. **Extensibilidad**: `Device` referencia la identidad; la identidad no embebe dispositivos y su documento tolera atributos desconocidos.
 
 ## Project Structure

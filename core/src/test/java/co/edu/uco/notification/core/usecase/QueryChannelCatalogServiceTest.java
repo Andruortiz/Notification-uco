@@ -18,6 +18,7 @@ import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -37,8 +38,8 @@ class QueryChannelCatalogServiceTest {
       implements NotificationSenderPort {
 
     @Override
-    public Mono<AttemptResult> send(final Notification notification) {
-      return Mono.just(AttemptResult.ACCEPTED);
+    public Mono<ProviderResult> send(final Notification notification) {
+      return Mono.just(ProviderResult.of(AttemptResult.ACCEPTED));
     }
 
     @Override

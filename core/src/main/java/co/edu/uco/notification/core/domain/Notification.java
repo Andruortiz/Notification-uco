@@ -125,42 +125,50 @@ public final class Notification {
         new NotificationQueued(notificationId, tenantId, correlationId, Instant.now()));
   }
 
-  public void markDelivered(final AttemptOrigin origin, final ProviderId providerId) {
+  public void markDelivered(final AttemptRecord record) {
     transitionTo(NotificationStatus.DELIVERED);
     final Instant now = Instant.now();
     deliveryAttempts.add(
-        DeliveryAttempt.of(now, AttemptResult.ACCEPTED, origin, providerId, currentCycle));
+        DeliveryAttempt.of(now, record.withResult(AttemptResult.ACCEPTED), currentCycle));
     eventRecorder.registerEvent(
         new NotificationDelivered(notificationId, tenantId, correlationId, now));
   }
 
-  public void markRecoverable(final AttemptOrigin origin, final ProviderId providerId) {
+  public void markRecoverable(final AttemptRecord record) {
     transitionTo(NotificationStatus.RECOVERABLE);
     final Instant now = Instant.now();
     deliveryAttempts.add(
         DeliveryAttempt.of(
-            now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId, currentCycle));
+            now, record.withResult(AttemptResult.RECOVERABLE_FAILURE), currentCycle));
     eventRecorder.registerEvent(
         new NotificationRecoverable(notificationId, tenantId, correlationId, now));
   }
 
-  public void markRetriesExhausted(final AttemptOrigin origin, final ProviderId providerId) {
+  public void markRetriesExhausted(final AttemptRecord record) {
     transitionTo(NotificationStatus.FAILED);
     final Instant now = Instant.now();
     deliveryAttempts.add(
         DeliveryAttempt.of(
-            now, AttemptResult.RECOVERABLE_FAILURE, origin, providerId, currentCycle));
+            now, record.withResult(AttemptResult.RECOVERABLE_FAILURE), currentCycle));
     eventRecorder.registerEvent(
         new NotificationFailed(notificationId, tenantId, correlationId, now));
   }
 
-  public void markFailed(final AttemptOrigin origin, final ProviderId providerId) {
+  public void markFailed(final AttemptRecord record) {
     transitionTo(NotificationStatus.FAILED);
     final Instant now = Instant.now();
     deliveryAttempts.add(
-        DeliveryAttempt.of(now, AttemptResult.PERMANENT_FAILURE, origin, providerId, currentCycle));
+        DeliveryAttempt.of(now, record.withResult(AttemptResult.PERMANENT_FAILURE), currentCycle));
     eventRecorder.registerEvent(
         new NotificationFailed(notificationId, tenantId, correlationId, now));
+  }
+
+  public void recordFailedOver(final AttemptRecord record) {
+    deliveryAttempts.add(
+        DeliveryAttempt.of(
+            Instant.now(),
+            record.withResult(AttemptResult.RECOVERABLE_FAILURE).asFailedOver(),
+            currentCycle));
   }
 
   public void requeue() {
@@ -183,6 +191,7 @@ public final class Notification {
     return (int)
         deliveryAttempts.stream()
             .filter(attempt -> attempt.cycle() == currentCycle)
+            .filter(attempt -> !attempt.failedOver())
             .filter(attempt -> attempt.result() == AttemptResult.RECOVERABLE_FAILURE)
             .count();
   }

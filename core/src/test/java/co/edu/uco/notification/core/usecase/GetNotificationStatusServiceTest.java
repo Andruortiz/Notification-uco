@@ -7,8 +7,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import co.edu.uco.notification.core.domain.AttemptRecord;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.port.in.GetNotificationStatusQuery;
 import co.edu.uco.notification.core.port.in.NotificationStatusView;
@@ -47,7 +49,8 @@ class GetNotificationStatusServiceTest {
   void getStatusReturnsViewFromLastAttemptWhenAttemptsExist() {
     final Notification notification = acceptedNotification();
     notification.markQueued();
-    notification.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markDelivered(
+        AttemptRecord.of(AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
     when(notificationRepository.findById(notification.notificationId()))
         .thenReturn(Mono.just(notification));
 

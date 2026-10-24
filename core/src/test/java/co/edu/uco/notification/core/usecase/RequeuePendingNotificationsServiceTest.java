@@ -290,6 +290,45 @@ class RequeuePendingNotificationsServiceTest {
   }
 
   @Test
+  void failedOverAttemptsDoNotCountTowardsTheBackoff() {
+    final Instant now = Instant.now();
+    final List<DeliveryAttempt> attempts = new ArrayList<>();
+    for (int i = 0; i < 3; i++) {
+      attempts.add(
+          new DeliveryAttempt(
+              now.minusSeconds(61),
+              AttemptResult.RECOVERABLE_FAILURE,
+              AttemptOrigin.AUTOMATIC,
+              ProviderId.of("brevo"),
+              1,
+              true,
+              null,
+              null,
+              null,
+              null));
+    }
+    attempts.add(
+        DeliveryAttempt.of(
+            now.minusSeconds(60),
+            AttemptResult.RECOVERABLE_FAILURE,
+            AttemptOrigin.AUTOMATIC,
+            ProviderId.of("simulated"),
+            1));
+    final Notification switched =
+        reconstituteRecoverable(new NotificationMetadata(now.minusSeconds(7200), 1L), attempts);
+    when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
+        .thenReturn(Flux.just(switched));
+    when(notificationRepository.save(switched)).thenReturn(Mono.just(switched));
+    when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(switched)).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.requeuePending()).verifyComplete();
+
+    assertEquals(1, switched.recoverableAttemptsInCurrentCycle());
+    verify(eventPublisherPort).enqueueForDispatch(switched);
+  }
+
+  @Test
   void aRecoverableNotificationWithoutAttemptsIsDueImmediately() {
     final Notification released =
         reconstituteRecoverable(

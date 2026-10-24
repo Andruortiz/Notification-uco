@@ -46,6 +46,7 @@ import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.ErrorCode;
 import java.nio.charset.StandardCharsets;
@@ -180,7 +181,8 @@ class DispatchNotificationServiceTest {
     final Notification notification = pendingNotification();
     notification.pullEvents();
     stubHappyPathUpTo(notification);
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -196,7 +198,7 @@ class DispatchNotificationServiceTest {
     notification.pullEvents();
     stubHappyPathUpTo(notification);
     when(notificationSenderPort.send(notification))
-        .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.RECOVERABLE_FAILURE)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -208,7 +210,7 @@ class DispatchNotificationServiceTest {
     final Notification notification = pendingNotificationWithRecoverableAttempts(4);
     stubHappyPathUpTo(notification);
     when(notificationSenderPort.send(notification))
-        .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.RECOVERABLE_FAILURE)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -228,7 +230,7 @@ class DispatchNotificationServiceTest {
                 AttemptResult.RECOVERABLE_FAILURE));
     stubHappyPathUpTo(notification);
     when(notificationSenderPort.send(notification))
-        .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.RECOVERABLE_FAILURE)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -241,7 +243,7 @@ class DispatchNotificationServiceTest {
     notification.pullEvents();
     stubHappyPathUpTo(notification);
     when(notificationSenderPort.send(notification))
-        .thenReturn(Mono.just(AttemptResult.PERMANENT_FAILURE));
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.PERMANENT_FAILURE)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -296,7 +298,8 @@ class DispatchNotificationServiceTest {
     final Notification notification = pendingNotification();
     notification.pullEvents();
     stubHappyPathUpTo(notification);
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(serviceWithTwoSenders.dispatch(notification.notificationId()))
         .verifyComplete();
@@ -471,7 +474,8 @@ class DispatchNotificationServiceTest {
     notification.pullEvents();
     stubHappyPathUpTo(notification);
     when(notificationSenderPort.supportsAttachments()).thenReturn(false);
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -502,7 +506,8 @@ class DispatchNotificationServiceTest {
     final Notification notification = pendingNotification();
     notification.pullEvents();
     stubHappyPathUpTo(notification);
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -522,7 +527,8 @@ class DispatchNotificationServiceTest {
         .thenReturn(Mono.just(activeRoute()));
     when(notificationRepository.save(notification)).thenReturn(Mono.just(notification));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(
             Flux.range(0, 100).concatMap(i -> service.dispatch(notification.notificationId())))
@@ -537,7 +543,8 @@ class DispatchNotificationServiceTest {
     final Notification reserved = pendingNotification();
     reserved.pullEvents();
     stubHappyPathUpTo(reserved);
-    when(notificationSenderPort.send(reserved)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(reserved))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(reserved.notificationId())).verifyComplete();
 
@@ -551,7 +558,8 @@ class DispatchNotificationServiceTest {
     final Notification notification = pendingNotification();
     notification.pullEvents();
     stubHappyPathUpTo(notification);
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -568,7 +576,8 @@ class DispatchNotificationServiceTest {
     when(notificationRepository.save(notification))
         .thenReturn(Mono.error(new IllegalStateException("mongo down")))
         .thenReturn(Mono.just(notification));
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -585,7 +594,8 @@ class DispatchNotificationServiceTest {
     stubHappyPathUpTo(notification);
     when(notificationRepository.save(notification))
         .thenReturn(Mono.error(new IllegalStateException("mongo down")));
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId()))
         .expectErrorSatisfies(
@@ -609,7 +619,8 @@ class DispatchNotificationServiceTest {
     when(notificationRepository.save(notification))
         .thenReturn(
             Mono.error(new NotificationVersionConflictException(notification.notificationId())));
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId()))
         .expectError(NotificationVersionConflictException.class)
@@ -680,7 +691,7 @@ class DispatchNotificationServiceTest {
             previousCycle);
     stubHappyPathUpTo(notification);
     when(notificationSenderPort.send(notification))
-        .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.RECOVERABLE_FAILURE)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -694,7 +705,8 @@ class DispatchNotificationServiceTest {
     notification.pullEvents();
     stubHappyPathUpTo(notification);
     when(notificationSenderPort.supportsAttachments()).thenReturn(true);
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -732,7 +744,8 @@ class DispatchNotificationServiceTest {
     stubHappyPathUpTo(notification);
     when(eventPublisherPort.publish(any()))
         .thenReturn(Mono.error(new IllegalStateException("broker down")));
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     try (LogCapture logs = new LogCapture(DispatchNotificationService.class)) {
       StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
@@ -749,7 +762,8 @@ class DispatchNotificationServiceTest {
     final Notification notification = pendingNotification();
     notification.pullEvents();
     stubHappyPathUpTo(notification);
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -773,7 +787,7 @@ class DispatchNotificationServiceTest {
     notification.pullEvents();
     stubHappyPathUpTo(notification);
     when(notificationSenderPort.send(notification))
-        .thenReturn(Mono.just(AttemptResult.RECOVERABLE_FAILURE));
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.RECOVERABLE_FAILURE)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
@@ -857,7 +871,8 @@ class DispatchNotificationServiceTest {
     stubHappyPathUpTo(notification);
     when(eventPublisherPort.publish(any()))
         .thenReturn(Mono.error(new IllegalStateException("broker down")));
-    when(notificationSenderPort.send(notification)).thenReturn(Mono.just(AttemptResult.ACCEPTED));
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
 
     StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 

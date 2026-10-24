@@ -1,17 +1,22 @@
 package co.edu.uco.notification.core.usecase;
 
+import co.edu.uco.notification.core.domain.AttemptRecord;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.FailureCause;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.exception.AllProvidersCircuitOpenException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.DispatchResultNotPersistedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.exception.ProviderCircuitOpenException;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
+import co.edu.uco.notification.core.exception.ProviderNotAvailableException;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
@@ -19,11 +24,14 @@ import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
@@ -62,7 +70,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
     this.metricsPort = Preconditions.requireNonNull(metricsPort, "metricsPort must not be null");
   }
 
-  private record Outcome(AttemptResult result, ProviderId providerId) {}
+  private record Outcome(ProviderResult last, List<ProviderResult> failedOver) {}
 
   @Override
   public Mono<Void> dispatch(final NotificationId notificationId) {
@@ -105,25 +113,120 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   }
 
   private Mono<Outcome> sendThrough(final Notification notification, final ChannelRoute route) {
-    final ProviderId providerId = route.preferredProvider();
-    return Mono.fromCallable(() -> notificationSenderRegistry.resolve(providerId))
-        .flatMap(sender -> attempt(sender, notification, providerId))
-        .doOnError(
-            ProviderDisabledException.class,
-            error ->
-                metricsPort.dispatchAttempted(
-                    notification.channelType(), providerId, AttemptResult.PERMANENT_FAILURE))
-        .doOnNext(
-            result -> metricsPort.dispatchAttempted(notification.channelType(), providerId, result))
-        .map(result -> new Outcome(result, providerId));
+    return tryProviders(notification, route.providers(), 0, List.of(), new Skips());
   }
 
-  private Mono<AttemptResult> attempt(
+  private Mono<Outcome> tryProviders(
+      final Notification notification,
+      final List<ProviderId> providers,
+      final int index,
+      final List<ProviderResult> recoverables,
+      final Skips skips) {
+    if (index >= providers.size()) {
+      return recoverables.isEmpty()
+          ? Mono.error(skips.terminalError(providers.getFirst(), notification, metricsPort))
+          : Mono.just(
+              new Outcome(
+                  recoverables.getLast(), recoverables.subList(0, recoverables.size() - 1)));
+    }
+    final ProviderId providerId = providers.get(index);
+    final Optional<NotificationSenderPort> sender = notificationSenderRegistry.find(providerId);
+    if (sender.isEmpty()) {
+      skips.missing = true;
+      return tryProviders(notification, providers, index + 1, recoverables, skips);
+    }
+    final Optional<String> disabledReason = sender.get().disabledReason();
+    if (disabledReason.isPresent()) {
+      skips.disabled(providerId, disabledReason.get());
+      return tryProviders(notification, providers, index + 1, recoverables, skips);
+    }
+    return attempt(sender.get(), notification, providerId)
+        .map(Optional::of)
+        .onErrorResume(
+            ProviderCircuitOpenException.class,
+            error -> {
+              skips.circuitOpen = true;
+              return Mono.just(Optional.empty());
+            })
+        .onErrorResume(
+            ProviderDisabledException.class,
+            error -> {
+              skips.disabled(providerId, error.getMessage());
+              return Mono.just(Optional.empty());
+            })
+        .onErrorResume(
+            error ->
+                Mono.just(
+                    Optional.of(
+                        new ProviderResult(
+                            AttemptResult.RECOVERABLE_FAILURE,
+                            providerId,
+                            null,
+                            null,
+                            FailureCause.TRANSPORT_ERROR))))
+        .flatMap(
+            maybe ->
+                maybe.isEmpty()
+                    ? tryProviders(notification, providers, index + 1, recoverables, skips)
+                    : afterAttempt(
+                        notification, providers, index, recoverables, skips, maybe.get()));
+  }
+
+  private Mono<Outcome> afterAttempt(
+      final Notification notification,
+      final List<ProviderId> providers,
+      final int index,
+      final List<ProviderResult> recoverables,
+      final Skips skips,
+      final ProviderResult raw) {
+    final ProviderId providerId = providers.get(index);
+    final ProviderResult result =
+        new ProviderResult(
+            raw.result(), providerId, raw.latencyMillis(), raw.messageId(), raw.cause());
+    metricsPort.dispatchAttempted(notification.channelType(), providerId, result.result());
+    if (result.result() != AttemptResult.RECOVERABLE_FAILURE) {
+      return Mono.just(new Outcome(result, recoverables));
+    }
+    final List<ProviderResult> accumulated = new ArrayList<>(recoverables);
+    accumulated.add(result);
+    return tryProviders(notification, providers, index + 1, accumulated, skips);
+  }
+
+  private static final class Skips {
+    private boolean circuitOpen;
+    private boolean missing;
+    private ProviderId disabledProvider;
+    private String disabledReason;
+
+    private void disabled(final ProviderId providerId, final String reason) {
+      if (disabledProvider == null) {
+        disabledProvider = providerId;
+        disabledReason = reason;
+      }
+    }
+
+    private RuntimeException terminalError(
+        final ProviderId preferred,
+        final Notification notification,
+        final NotificationMetricsPort metricsPort) {
+      if (circuitOpen) {
+        return new AllProvidersCircuitOpenException();
+      }
+      if (disabledProvider != null) {
+        metricsPort.dispatchAttempted(
+            notification.channelType(), disabledProvider, AttemptResult.PERMANENT_FAILURE);
+        return new ProviderDisabledException(disabledProvider, disabledReason);
+      }
+      return new ProviderNotAvailableException(preferred);
+    }
+  }
+
+  private Mono<ProviderResult> attempt(
       final NotificationSenderPort sender,
       final Notification notification,
       final ProviderId providerId) {
     if (notification.content().hasAttachments() && !sender.supportsAttachments()) {
-      return Mono.just(AttemptResult.PERMANENT_FAILURE);
+      return Mono.just(ProviderResult.of(AttemptResult.PERMANENT_FAILURE, providerId));
     }
     return Mono.defer(
         () -> {
@@ -133,7 +236,9 @@ public final class DispatchNotificationService implements DispatchNotificationUs
               .doOnNext(
                   result ->
                       metricsPort.providerCalled(
-                          providerId, result, Duration.ofNanos(System.nanoTime() - startedAt)));
+                          providerId,
+                          result.result(),
+                          Duration.ofNanos(System.nanoTime() - startedAt)));
         });
   }
 
@@ -158,7 +263,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   }
 
   private Mono<Void> persistAndPublish(final Notification notification, final Outcome outcome) {
-    applyOutcome(notification, outcome.result(), outcome.providerId(), retryPolicy);
+    applyOutcome(notification, outcome, retryPolicy);
     final List<DomainEvent> events = notification.pullEvents();
 
     return Mono.defer(() -> notificationRepository.save(notification))
@@ -169,7 +274,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
         .onErrorMap(
             error -> !(error instanceof NotificationVersionConflictException),
             error -> new DispatchResultNotPersistedException(notification.notificationId(), error))
-        .flatMap(saved -> publishEvents(notification, outcome.providerId(), events));
+        .flatMap(saved -> publishEvents(notification, outcome.last().providerId(), events));
   }
 
   private Mono<Void> publishEvents(
@@ -194,21 +299,25 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   }
 
   private static void applyOutcome(
-      final Notification notification,
-      final AttemptResult outcome,
-      final ProviderId providerId,
-      final RetryPolicy retryPolicy) {
-    if (outcome == AttemptResult.ACCEPTED) {
-      notification.markDelivered(AttemptOrigin.AUTOMATIC, providerId);
-    } else if (outcome == AttemptResult.RECOVERABLE_FAILURE) {
+      final Notification notification, final Outcome outcome, final RetryPolicy retryPolicy) {
+    for (final ProviderResult failedOver : outcome.failedOver()) {
+      notification.recordFailedOver(
+          AttemptRecord.from(failedOver, AttemptOrigin.AUTOMATIC, failedOver.providerId()));
+    }
+    final ProviderResult last = outcome.last();
+    final AttemptRecord record =
+        AttemptRecord.from(last, AttemptOrigin.AUTOMATIC, last.providerId());
+    if (last.result() == AttemptResult.ACCEPTED) {
+      notification.markDelivered(record);
+    } else if (last.result() == AttemptResult.RECOVERABLE_FAILURE) {
       final int attemptNumber = notification.recoverableAttemptsInCurrentCycle() + 1;
       if (retryPolicy.shouldGiveUp(attemptNumber)) {
-        notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, providerId);
+        notification.markRetriesExhausted(record);
       } else {
-        notification.markRecoverable(AttemptOrigin.AUTOMATIC, providerId);
+        notification.markRecoverable(record);
       }
     } else {
-      notification.markFailed(AttemptOrigin.AUTOMATIC, providerId);
+      notification.markFailed(record);
     }
   }
 }

@@ -51,13 +51,15 @@ ese rediseño (se rebasa tras E3); no se redefine `failedOver`.
   | adjuntos no soportados | `ATTACHMENTS_UNSUPPORTED` |
   | `INVALID_RECIPIENT` (E5) | `INVALID_RECIPIENT`, que E5 agrega al enum |
 
-- `DeliveryAttempt`: incremento con `Long latencyMillis`, `FailureCause failureCause`, `CorrelationId correlationId`,
-  opcionales, sobre la forma resultante de E3; los historicos quedan en nulo.
-- `Notification.mark*`: incremento sobre las firmas de E3 (hoy 4: `markDelivered`, `markRecoverable`,
-  `markRetriesExhausted`, `markFailed`) con un `AttemptDetail(latencyMillis, failureCause)`; el `correlationId` del intento
-  es el de la notificacion.
-- `DispatchNotificationService`: mide la latencia ya calculada en `attempt(...)` (`System.nanoTime`), la propaga en
-  `Outcome` (de E3) y mapea la causa segun la tabla. Solo despacho automatico: `applyOutcome` pasa siempre `AUTOMATIC`;
+- Forma de E3 (propuesta en su plan, nombres por confirmar): `Outcome(ProviderResult last, List<FailedProvider> failedOver)`;
+  `Notification.mark*` y `recordFailedOver` reciben un unico `AttemptRecord`; `DeliveryAttempt`, `DeliveryAttemptDocument` y
+  `NotificationDocumentMapper` se construyen desde `AttemptRecord`.
+- Esta historia solo añade campos opcionales `Long latencyMillis`, `FailureCause failureCause` y `CorrelationId correlationId`
+  a `AttemptRecord`, `DeliveryAttempt`, `DeliveryAttemptDocument` y al componente de `ProviderResult` que los transporta;
+  no hay firmas nuevas de `mark*` ni `AttemptDetail`. Los historicos quedan en nulo. El `correlationId` del intento es el de
+  la notificacion.
+- `DispatchNotificationService`: mide la latencia ya calculada en `attempt(...)` (`System.nanoTime`), la pone en el
+  `ProviderResult` y mapea la causa segun la tabla al construir el `AttemptRecord`. Solo despacho automatico: `applyOutcome` pasa siempre `AUTOMATIC`;
   `retryManually()` no tiene llamadores y el registro manual queda para G2.
 - Consulta: se agrega `getTimeline(GetNotificationTimelineQuery)` a `GetNotificationStatusUseCase` y a
   `GetNotificationStatusService` (ya cableado con el repositorio; evita tocar `UseCaseConfig`). Devuelve

@@ -16,10 +16,11 @@ token cifrado (AES-GCM con AAD) y huella HMAC. El token PUSH de `notifications.r
 
 ## Orden de integración y base
 
-Integra al final: E3 -> G3 -> G2 -> E10 -> E5. El código parte de las formas que deja E3 (spec 031, `Outcome(ProviderResult last,
-List<FailedProvider> failedOver)`, `Notification.mark*` con un único `AttemptRecord`, `DeliveryAttempt`/documento/mapper desde
-`AttemptRecord`). `INVALID_RECIPIENT` se añade encima como valor de `AttemptResult`; no se rediseña ningún tipo compartido aquí.
-Las tareas se escriben tras rebasar sobre ese estado; si la forma de E3 cambia, solo cambian los puntos de contacto (Decisión 7).
+Integra al final: E3 -> G3 -> G2 -> E10 -> E5. El código parte de los tipos finales de E3 (spec 031, "Tipos compartidos"):
+`ProviderResult(result, providerId, latencyMillis, messageId, cause)`; `NotificationSenderPort.send` devuelve `Mono<ProviderResult>`;
+`AttemptRecord(result, origin, providerId, failedOver, latencyMillis, failureCause, correlationId, messageId)`; `Notification.mark*`
+reciben un `AttemptRecord`; `Outcome(ProviderResult last, List<ProviderResult> failedOver)`. E3 ya revisa todo `switch` y mapeo sobre
+`AttemptResult`. Esta historia solo añade `INVALID_RECIPIENT` al enum, el cambio del clasificador FCM y `DeviceLifecyclePort`.
 
 ## Technical Context
 
@@ -63,11 +64,12 @@ Java 25, Spring Boot 4, WebFlux, Mongo reactivo. `javax.crypto` del JDK (AES-256
 6. **Clasificador FCM**: `FcmResponseClassifier.classifyStatus(int)` pasa a `classify(int status, FcmErrorResponse error)` (instancia o
    estático con ambos parámetros). Devuelve `INVALID_RECIPIENT` si `status == 410` o `error.errorCode() == "UNREGISTERED"`; cualquier
    otro 404 y el 400 `INVALID_ARGUMENT` siguen como `PERMANENT_FAILURE` y nunca limpian. Se ajustan los llamadores y pruebas
-   existentes de spec 010.
-7. **`INVALID_RECIPIENT` en el código**: valor nuevo de `AttemptResult`, tratado como fallo permanente donde hoy se trata
-   `PERMANENT_FAILURE` (`DispatchNotificationService`; `Notification` no recibe `AttemptResult`, solo el `AttemptRecord` ya existente).
-   `MicrometerNotificationMetrics.resultLabel` (switch exhaustivo sin default) se actualiza y `providerCalled`/`dispatchAttempted` lo
-   mapean a `failed`. Tras la tarea 1 se revisa todo `switch` sobre `AttemptResult` con una búsqueda acotada.
+   existentes de spec 010. `classify` sigue devolviendo `AttemptResult`; `FcmNotificationProvider` lo envuelve con `ProviderResult.of(result)`.
+7. **`INVALID_RECIPIENT` en el código**: valor nuevo de `AttemptResult`, tratado como fallo permanente donde se trata
+   `PERMANENT_FAILURE` (`DispatchNotificationService`; `Notification` recibe el `AttemptRecord`, no el resultado suelto).
+   `MicrometerNotificationMetrics.resultLabel` (switch exhaustivo sin default) lo mapea a `failed`, igual que `providerCalled` y
+   `dispatchAttempted`. Los demás puntos (`ProviderLogs`, `applyOutcome`, `DeliveryAttemptDocument`) ya los cubre E3; al rebasar
+   se confirma con una búsqueda acotada que el valor nuevo no deja ningún `switch` sin cubrir.
 8. **Un solo puerto en el despacho**: `DeviceLifecyclePort` con `invalidate(tenantId, address)` y `touch(tenantId, address)`;
    `DispatchNotificationService` recibe solo ese puerto, con `onErrorResume` (un fallo de limpieza se registra y no cambia el
    resultado del intento). Los casos de uso de usuario no pasan por él. Implementación en `infrastructure` sobre el repositorio.

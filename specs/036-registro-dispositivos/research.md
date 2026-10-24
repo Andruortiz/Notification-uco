@@ -6,7 +6,7 @@
 - `FcmResponseClassifier.classifyStatus(int)` solo mira el status HTTP; hace falta el `errorCode` del cuerpo (`FcmErrorResponse`).
 - `NotificationDocument.recipientAddress` guarda hoy el token FCM en claro.
 - `MicrometerNotificationMetrics.resultLabel` es un switch exhaustivo sobre `AttemptResult`; agregar un valor rompe la compilación hasta mapearlo.
-- E3 (spec 031) rediseña los tipos compartidos antes que esta historia; se parte de su forma (`AttemptRecord`, `Outcome`).
+- E3 (spec 031) rediseña los tipos compartidos antes que esta historia; se parte de sus tipos finales (`ProviderResult`, `AttemptRecord`, `Outcome`).
 
 ## Decisiones tomadas (aprobadas)
 
@@ -17,5 +17,4 @@
 ## Preguntas abiertas (recomendación entre paréntesis)
 
 1. ¿Responsable de datos confirma base legal y 270 días? (Seguir con el supuesto; bloquear producción hasta confirmar.)
-2. Si E3 modifica la forma de `AttemptRecord` antes de integrar, ¿se rebasa y se ajustan los puntos de contacto? (Sí.)
-3. ¿El barrido de cifrado del histórico corre en el despliegue de esta historia? (Sí, activado por propiedad una vez.)
+2. ¿El barrido de cifrado del histórico corre en el despliegue de esta historia? (Sí, activado por propiedad una vez.)

@@ -12,8 +12,3 @@ security:
     enforcement:
       allow-insecure-http: true
       public-paths: ${SECURITY_PEP_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,/openapi/api-notificaciones.yaml,/v3/api-docs,/v3/api-docs/swagger-config,/swagger-ui.html,/swagger-ui/**}
-
-notification:
-  auth:
-    jwt:
-      hs256-secret: ${AUTH_JWT_HS256_SECRET:notification-uco-dev-only-secret-change-me-0123456789abcdef}

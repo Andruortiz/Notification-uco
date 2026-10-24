@@ -420,7 +420,7 @@ class MetricsE2ETest {
     final String text = scrapeText();
 
     final List<String> sentinels =
-        List.of(SENTINEL_RECIPIENT, SENTINEL_CONTENT, token, TestTokens.SECRET, id, run);
+        List.of(SENTINEL_RECIPIENT, SENTINEL_CONTENT, token, TestTokens.PRIVATE_KEY, id, run);
     for (final String sentinel : sentinels) {
       assertFalse(text.contains(sentinel), "metrics leaked " + sentinel);
     }

@@ -317,7 +317,7 @@ class ParametersEventSubscriptionE2ETest {
     assertFalse(rejected.isEmpty(), "no CONFIG_REJECTED event was logged");
     assertTrue(rejected.contains("param-"), rejected);
     assertFalse(rejected.contains("98765"), rejected);
-    assertFalse(rejected.contains(TestTokens.SECRET), rejected);
+    assertFalse(rejected.contains(TestTokens.PRIVATE_KEY), rejected);
     assertEquals(dlqBefore, queueDepth(DLQ));
     assertTrue(await(() -> queueDepth(QUEUE) == 0, WAIT));
   }

@@ -14,10 +14,10 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.AuthenticationUnavailableException;
 import co.edu.uco.notification.core.exception.InvalidTokenException;
 import co.edu.uco.notification.core.port.out.SessionIdentityPort;
-import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenIssuer;
-import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.adapter.out.security.platform.PlatformJwtTokenValidationAdapter;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
@@ -40,10 +40,8 @@ import reactor.test.StepVerifier;
 
 class AuthenticationWebFilterSessionTest {
 
-  private static final String SECRET = "test-only-secret-never-used-in-production-0123456789abcdef";
   private static final String COOKIE = "SECURITY_BASELINE_SESSION";
 
-  private final LocalJwtTokenIssuer issuer = new LocalJwtTokenIssuer(SECRET);
   private final Map<String, AuthenticatedPrincipal> sessions = new ConcurrentHashMap<>();
   private final AtomicInteger resolutions = new AtomicInteger();
   private final AtomicReference<Throwable> platformFailure = new AtomicReference<>();
@@ -62,7 +60,7 @@ class AuthenticationWebFilterSessionTest {
       };
   private final AuthenticationWebFilter filter =
       new AuthenticationWebFilter(
-          new LocalJwtTokenValidationAdapter(SECRET),
+          new PlatformJwtTokenValidationAdapter(TestTokens.properties()),
           new RouteAuthorizationPolicy(
               new MockEnvironment().withProperty("security.pep.enforcement.enabled", "true")),
           sessionPort);
@@ -207,7 +205,8 @@ class AuthenticationWebFilterSessionTest {
   void aValidBearerTakesPrecedenceOverAValidCookieOfAnotherTenant() {
     sessions.put("cookie-b", principal("tenant-b"));
     final String token =
-        issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "bearer-user", Duration.ofMinutes(5));
+        TestTokens.issue(
+            TenantId.of("tenant-a"), Role.CLIENTE, "bearer-user", Duration.ofMinutes(5));
     final ServerWebExchange exchange =
         MockServerWebExchange.from(
             request(HttpMethod.GET, "/notifications")
@@ -307,7 +306,8 @@ class AuthenticationWebFilterSessionTest {
   void withoutTheSessionPortTheConstructorOfTwoArgumentsRejectsAnyCookie() {
     final AuthenticationWebFilter legacy =
         new AuthenticationWebFilter(
-            new LocalJwtTokenValidationAdapter(SECRET), new RouteAuthorizationPolicy());
+            new PlatformJwtTokenValidationAdapter(TestTokens.properties()),
+            new RouteAuthorizationPolicy());
     final ServerWebExchange exchange = cookieExchange("cookie-a");
 
     StepVerifier.create(legacy.filter(exchange, chainExchange -> Mono.empty())).verifyComplete();

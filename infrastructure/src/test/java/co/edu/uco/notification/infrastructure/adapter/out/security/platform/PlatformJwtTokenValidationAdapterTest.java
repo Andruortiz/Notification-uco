@@ -50,7 +50,7 @@ class PlatformJwtTokenValidationAdapterTest {
   private static AuthPlatformProperties properties(
       final String issuer, final String audience, final Map<String, String> roleMapping) {
     return new AuthPlatformProperties(
-        pem(platformKeys), issuer, audience, null, null, null, roleMapping, null);
+        pem(platformKeys), issuer, audience, null, null, null, null, roleMapping, null);
   }
 
   private static AuthPlatformProperties defaults() {
@@ -137,7 +137,7 @@ class PlatformJwtTokenValidationAdapterTest {
   void acceptsAPublicKeyWithoutPemHeaders() {
     final String bare = Base64.getEncoder().encodeToString(platformKeys.getPublic().getEncoded());
     final var adapter =
-        adapter(new AuthPlatformProperties(bare, null, null, null, null, null, null, null));
+        adapter(new AuthPlatformProperties(bare, null, null, null, null, null, null, null, null));
 
     StepVerifier.create(adapter.validate(token(platformKeys).compact()))
         .expectNextCount(1)
@@ -222,7 +222,15 @@ class PlatformJwtTokenValidationAdapterTest {
     final var adapter =
         adapter(
             new AuthPlatformProperties(
-                pem(platformKeys), null, null, "preferred_username", "org", "roles", null, null));
+                pem(platformKeys),
+                null,
+                null,
+                "preferred_username",
+                "org",
+                "roles",
+                null,
+                null,
+                null));
     final String token =
         Jwts.builder()
             .claim("preferred_username", "maria")
@@ -290,7 +298,8 @@ class PlatformJwtTokenValidationAdapterTest {
 
   @Test
   void failsAtStartupWithoutAPublicKey() {
-    final var blank = new AuthPlatformProperties(" ", null, null, null, null, null, null, null);
+    final var blank =
+        new AuthPlatformProperties(" ", null, null, null, null, null, null, null, null);
 
     assertThrows(IllegalStateException.class, () -> new PlatformJwtTokenValidationAdapter(blank));
   }
@@ -298,7 +307,8 @@ class PlatformJwtTokenValidationAdapterTest {
   @Test
   void failsAtStartupWithAnInvalidPublicKey() {
     final var invalid =
-        new AuthPlatformProperties("no-es-una-clave", null, null, null, null, null, null, null);
+        new AuthPlatformProperties(
+            "no-es-una-clave", null, null, null, null, null, null, null, null);
 
     assertThrows(IllegalStateException.class, () -> new PlatformJwtTokenValidationAdapter(invalid));
   }
@@ -335,5 +345,78 @@ class PlatformJwtTokenValidationAdapterTest {
               assertEquals("tenant-a", rejected.tenantId());
             })
         .verify();
+  }
+
+  private static InvalidTokenException.Reason failure(
+      final PlatformJwtTokenValidationAdapter adapter, final String token) {
+    return assertThrows(InvalidTokenException.class, () -> adapter.validate(token).block())
+        .reason();
+  }
+
+  private static String without(final String claim) {
+    final var builder = Jwts.builder();
+    if (!"sub".equals(claim)) {
+      builder.subject("user-1");
+    }
+    if (!"tenantId".equals(claim)) {
+      builder.claim("tenantId", "tenant-a");
+    }
+    if (!"role".equals(claim)) {
+      builder.claim("role", "OPERADOR");
+    }
+    return builder
+        .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(5))))
+        .signWith(platformKeys.getPrivate(), Jwts.SIG.RS256)
+        .compact();
+  }
+
+  @Test
+  void eachMissingRequiredClaimIsReported() {
+    final var adapter = adapter(defaults());
+
+    assertEquals(InvalidTokenException.Reason.MISSING_CLAIMS, failure(adapter, without("sub")));
+    assertEquals(
+        InvalidTokenException.Reason.MISSING_CLAIMS, failure(adapter, without("tenantId")));
+    assertEquals(InvalidTokenException.Reason.UNKNOWN_ROLE, failure(adapter, without("role")));
+  }
+
+  @Test
+  void wrongOrAbsentIssuerAndAudienceAreNotReportedAsMissingClaims() {
+    final var issuer = adapter(properties("https://idp.example", null, null));
+    final var audience = adapter(properties(null, "notification-uco", null));
+    final var expected = InvalidTokenException.Reason.INVALID_ISSUER_OR_AUDIENCE;
+
+    assertEquals(expected, failure(issuer, token(platformKeys).issuer("https://evil").compact()));
+    assertEquals(expected, failure(issuer, token(platformKeys).compact()));
+    assertEquals(
+        expected, failure(audience, token(platformKeys).audience().add("other").and().compact()));
+    assertEquals(expected, failure(audience, token(platformKeys).compact()));
+  }
+
+  @Test
+  void theClientClaimIsOptionalAndOnlyKeptWhenTextual() {
+    final var adapter = adapter(defaults());
+
+    assertEquals(null, adapter.validate(token(platformKeys).compact()).block().clientId());
+    assertEquals(
+        "portal",
+        adapter.validate(token(platformKeys).claim("azp", "portal").compact()).block().clientId());
+    assertEquals(
+        null, adapter.validate(token(platformKeys).claim("azp", 42).compact()).block().clientId());
+  }
+
+  @Test
+  void theClientClaimNameIsConfigurable() {
+    final var adapter =
+        adapter(
+            new AuthPlatformProperties(
+                pem(platformKeys), null, null, null, null, null, "client_id", null, null));
+
+    assertEquals(
+        "portal",
+        adapter
+            .validate(token(platformKeys).claim("client_id", "portal").compact())
+            .block()
+            .clientId());
   }
 }

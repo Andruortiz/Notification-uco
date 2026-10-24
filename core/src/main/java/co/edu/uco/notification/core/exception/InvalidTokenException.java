@@ -10,6 +10,7 @@ public class InvalidTokenException extends RuntimeException {
     MISSING_EXPIRATION,
     MISSING_CLAIMS,
     UNKNOWN_ROLE,
+    INVALID_ISSUER_OR_AUDIENCE,
     INVALID_SESSION
   }
 

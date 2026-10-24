@@ -13,7 +13,6 @@ import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Date;
@@ -104,13 +103,12 @@ class AuthenticationSecurityE2ETest {
   }
 
   private static String tokenWithoutExpiration() {
-    return Jwts.builder()
-        .subject("client-1")
-        .claim("tenantId", "tenant-a")
-        .claim("role", "ADMINISTRADOR")
-        .issuedAt(new Date())
-        .signWith(Keys.hmacShaKeyFor(TestTokens.SECRET.getBytes()))
-        .compact();
+    return TestTokens.sign(
+        Jwts.builder()
+            .subject("client-1")
+            .claim("tenantId", "tenant-a")
+            .claim("role", "ADMINISTRADOR")
+            .issuedAt(new Date()));
   }
 
   @Test

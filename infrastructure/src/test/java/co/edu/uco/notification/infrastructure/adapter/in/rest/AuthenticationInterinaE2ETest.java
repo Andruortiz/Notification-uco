@@ -234,7 +234,7 @@ class AuthenticationInterinaE2ETest {
       assertTrue(lines.stream().anyMatch(line -> line.contains("MISSING_TOKEN")));
       assertTrue(lines.stream().anyMatch(line -> line.contains("INSUFFICIENT_ROLE")));
       assertFalse(lines.stream().anyMatch(line -> line.contains(token)));
-      assertFalse(lines.stream().anyMatch(line -> line.contains(TestTokens.SECRET)));
+      assertFalse(lines.stream().anyMatch(line -> line.contains(TestTokens.PRIVATE_KEY)));
     } finally {
       release(logs);
     }

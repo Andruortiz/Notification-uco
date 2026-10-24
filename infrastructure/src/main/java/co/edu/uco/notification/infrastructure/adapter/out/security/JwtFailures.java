@@ -33,8 +33,8 @@ public final class JwtFailures {
     }
     if (failure instanceof InvalidClaimException invalid) {
       return rejected(
-          "invalid claims",
-          InvalidTokenException.Reason.MISSING_CLAIMS,
+          "invalid issuer or audience",
+          InvalidTokenException.Reason.INVALID_ISSUER_OR_AUDIENCE,
           tenantOf(invalid.getClaims(), tenantClaim),
           failure);
     }

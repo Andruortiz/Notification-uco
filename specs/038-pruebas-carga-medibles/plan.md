@@ -54,8 +54,8 @@ Dos paneles en la fila de RNF-02 y RNF-03: "Última prueba de carga: p95 (s)" co
 1. `veredicto.test.js` en rojo, luego `veredicto.js`.
 2. Prueba de coherencia (Java, sin k6) que falla: lee tablero y `veredicto.js` y compara nombres `k6_*` y umbrales; control positivo con referencia inexistente.
 3. `notificaciones.js`, `run.sh`, `run.ps1`.
-4. Remote-write receiver en `docker-compose.observability.yml`; paneles; `loadtest/README.md` con el alcance "app como jar en el host" y enlace desde el README principal.
-5. **T-E2E (Principio IV, sin k6)**: `@SpringBootTest(RANDOM_PORT)` con Mongo y RabbitMQ en Testcontainers; el test envía las peticiones con `WebTestClient` a la tasa corta del escenario (10 s) y evalúa el módulo de veredicto con Node sobre las mediciones reales (p95, 202, delta de `notification_dispatched_total` leído del registro de métricas del propio contexto), con control negativo (umbral inalcanzable da veredicto de fallo). Si Node no está disponible, la tarea 1 se ejecuta en el job nocturno y la E2E se reduce a la comprobación de veredicto en Java sobre las mismas entradas (decisión en tasks).
+4. Remote-write receiver en `docker-compose.observability.yml`; paneles; `loadtest/README.md` con el prerrequisito Node 20+ y el alcance "app como jar en el host" y enlace desde el README principal.
+5. **T-E2E (Principio IV, sin k6)**: `@SpringBootTest(RANDOM_PORT)` con Mongo y RabbitMQ en Testcontainers; el test envía las peticiones con `WebTestClient` a la tasa corta del escenario (10 s) y evalúa el módulo de veredicto con Node sobre las mediciones reales (p95, 202, delta de `notification_dispatched_total` leído del registro de métricas del propio contexto), con control negativo (umbral inalcanzable da veredicto de fallo). Node 20+ es prerrequisito documentado de `verify` (ubuntu-latest lo trae preinstalado), sin fallback en Java.
 6. Prueba de ausencia de secretos en `resultado.json` con control positivo (SC-004).
 7. Cierre: `spotless:apply`, `verify` único en segundo plano, ejecución real con k6 y valores por defecto, resultado en el cuerpo del PR.
 
@@ -73,7 +73,7 @@ Workflow aparte `carga-nocturna.yml`, de quien administra CI. `ci-cd.yml` solo c
 - **Q1 - Dónde corre la app en la prueba.** Recomendación: jar en el host (única forma en que Prometheus raspa 8061 hoy); contenerizarla requiere red compartida y está fuera de alcance.
 - **Q2 - Tablero persistente vs CI efímero.** Recomendación: el criterio de visibilidad se cumple con el Prometheus local del AP; en CI la evidencia es `resultado.json`. No publicar un Prometheus de larga vida.
 - **Q3 - Tasa objetivo.** Recomendación: 700/min; si el runner no la sostiene, bajar a 600 antes que relajar el 500.
-- **Q4 - Dependencia de Node en `verify`.** Recomendación: usar Node solo si ya existe en el runner; si no, probar el veredicto en Java sobre las mismas entradas.
+- **Q4 - Dependencia de Node en `verify`.** Cerrada: Node 20+ es prerrequisito documentado en `loadtest/README.md` y en este plan; sin fallback en Java.
 - **Q5 - Etiquetas de despacho.** Resuelta con el código: `notification.dispatched` tiene `channel`, `provider` y `result` (`delivered`, `recoverable`, `failed`); se suma `result="delivered",provider="simulated"`.
 
 ## Riesgos

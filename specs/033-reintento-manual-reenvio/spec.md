@@ -105,7 +105,7 @@ El histórico de intentos muestra cuáles disparó una persona (MANUAL) y cuále
 - **FR-009**: El reenvío MUST aceptarse solo desde FAILED y con un canal distinto al original, habilitado en el catálogo y con una dirección válida para él recibida en la solicitud.
 - **FR-010**: El reenvío MUST crear una notificación nueva (mismo tenant, `recipientId` y contenido; canal y dirección recibidos) por el flujo normal de aceptación y despacho, y MUST NOT modificar la original.
 - **FR-011**: El reenvío con canal igual, desconocido o deshabilitado, o dirección inválida para el canal, MUST responder 400 con motivo, sin crear nada.
-- **FR-012**: El `externalId` de la notificación reenviada MUST derivarse de la original y del canal de forma determinista, de modo que repetir el reenvío por el mismo canal responda 409.
+- **FR-012**: El `externalId` de la notificación reenviada MUST derivarse de la original y del canal de forma determinista (máximo 255 caracteres; si se excede, 400), de modo que repetir el reenvío por el mismo canal responda 409.
 - **FR-013**: El tenant MUST salir de la sesión del PDP; ninguna operación acepta tenant en cabecera, ruta o cuerpo.
 - **FR-014**: Respuestas, mensajes de error y logs de ambas operaciones MUST NOT contener datos personales sin enmascarar, salvo lo que un ADMINISTRADOR vea en consultas de detalle ya existentes.
 - **FR-015**: Cada operación MUST emitir un log estructurado con correlación, tenant y `notificationId` (el de la original y, en reenvío, el de la nueva), sin secretos.

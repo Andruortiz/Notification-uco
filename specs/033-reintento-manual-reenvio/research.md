@@ -10,11 +10,12 @@ Parte de [specs/018-reintentar-envio-manual/research.md](../018-reintentar-envio
 - `NotificationVersionConflictException` y `NotificationAlreadyAcceptedException` ya se traducen a 409; `ChannelNotAvailableException` a 400.
 - `Recipient` guarda una sola `address`; `NotificationContent` lleva los adjuntos.
 - `RouteAuthorizationPolicy` ya tiene la regla `POST /notification-retries` (OPERADOR); falta la del reenvío.
+- `NotificationRepository.findById` no filtra por tenant; el filtro se hace en el servicio (como `GetNotificationStatusService`).
 - Los controllers obtienen el tenant de `AuthenticatedPrincipal` (sesión PDP).
 
 ## D1 — Reintento por la cola con el origen como encabezado
 
-Sin cambios respecto a 018: `RetryNotificationService` encola en la misma cola con `x-attempt-origin: MANUAL`; el consumidor lo pasa a `dispatch(id, origin)`; ausente = AUTOMATIC, valor desconocido = mensaje inválido (agota y va a la DLQ). El publicador siempre escribe el encabezado. Alternativas descartadas: despacho síncrono desde el controller, campo `nextAttemptOrigin` en el agregado (cambia el esquema; revisable si se resuelve el pendiente de huérfanos), método paralelo, cola aparte.
+Diseño de 018, pero el consumidor hoy NO lee el encabezado (`dispatch(id)` fija AUTOMATIC): leerlo y propagarlo es trabajo nuevo. `RetryNotificationService` encola en la misma cola con `x-attempt-origin: MANUAL`; el consumidor lo pasa a `dispatch(id, origin)`; ausente = AUTOMATIC, valor desconocido = mensaje inválido (agota y va a la DLQ). El publicador siempre escribe el encabezado. Alternativas descartadas: despacho síncrono desde el controller, campo `nextAttemptOrigin` en el agregado (cambia el esquema; revisable si se resuelve el pendiente de huérfanos), método paralelo, cola aparte.
 
 ## D2 — El contador no se reinicia: se usa `requeue()` y se retira `retryManually()`
 
@@ -36,7 +37,7 @@ Estado: `canTransition(status, PENDING)` antes de mutar; falso -> `NotificationS
 
 **Alternativas descartadas**: mutar el canal de la original (rompe la inmutabilidad del histórico y las garantías de auditoría); vínculo persistido `resentFrom` (cambio de esquema, sin consumidor hoy).
 
-**Riesgo**: longitud o formato máximo de `externalId` no validados en `ExternalId`; si el índice o el cliente imponen un límite, el derivado podría exceder. Verificar en la primera tarea.
+**Límite**: el derivado no puede exceder 255 caracteres; si lo hace, 400 sin crear nada (el contrato no declara `maxLength`; se pide a Contrato fijarlo en 255).
 
 ## D5 — Reenvío solo desde FAILED
 

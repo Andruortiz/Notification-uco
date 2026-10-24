@@ -34,19 +34,29 @@ Java 25, Spring Boot 4.1 (WebFlux), Reactor, Spring AMQP, Mongo reactivo. **Sin 
 | V. Git | Commits de una línea; razonamiento en `specs/033-...`. |
 | VI. spec-kit | Se detiene aquí; `tasks` e `implement` esperan aprobación. |
 | VII. Sin atajos | Excepciones con dueño y fecha abajo. |
+| Consumidor RabbitMQ | Cumple la regla: `RabbitRetryConfig` usa `AcknowledgeMode.MANUAL` con DLQ; no hay excepción. Esta historia solo añade la lectura del encabezado `x-attempt-origin`. |
 | VIII. Confiabilidad | PENDING se persiste antes de encolar y antes del 202; el reenvío usa el flujo de aceptación normal. |
 | IX. Observabilidad | Log estructurado por operación con correlación, tenant, `notificationId` original y nuevo; sin direcciones ni secretos. |
-| Consumidor RabbitMQ con ack manual y DLQ | Excepción preexistente documentada abajo. |
 
-### Excepción justificada: confirmación del consumidor
+## Dependencias entre historias
 
-`NotificationDispatchListener` usa confirmación gestionada por el contenedor (`AUTO`) con reintento con estado y DLQ (`RabbitRetryConfig`). Esta historia solo le añade la lectura de un encabezado; el mensaje se confirma tras retornar el método, es decir, tras persistir el resultado, y los agotados van a la DLQ. Migrar a ack manual es transversal y fuera de alcance. **Dueño**: andrualv. **Revisión**: 2026-11-15.
+El orden acordado es E3 -> G3 -> G2 -> E10 -> E5. E3 hace un rediseño único de `DeliveryAttempt`, `Notification.mark*`, `AttemptResult` y `Outcome`/`dispatch`; esta historia **se monta encima** y no lo redefine: solo añade el origen MANUAL a `dispatch(id, origin)` y `enqueueForDispatch(n, origin)` con las firmas que E3 deje. Las firmas de este plan son provisionales hasta que E3 se fusione. Roles: tres en el código (CLIENTE, OPERADOR, ADMINISTRADOR) hasta B2.
+
+## Decisiones de la revisión
+
+- **Carrera manual contra automático** ([spec.md#FR-006](./spec.md)): ambos hacen `requeue()` + `save` con `version`; el perdedor recibe `NotificationVersionConflictException`. El automático ya la tolera (`onErrorResume` en `recoverExpiredRecoverable`, sin tocar `requeueAndPublish`); el manual la deja propagar a 409. El encolado ocurre solo tras un `save` exitoso, así que gana quien guarda primero y se encola un único mensaje; si gana el automático, el intento es AUTOMATIC. Se añade un E2E de coincidencia (manual y automático sobre la misma RECOVERABLE vencida, un solo intento ante el proveedor).
+- **Límite del `externalId` derivado**: el contrato no declara `maxLength` para `externalId` y `ExternalId` solo exige no vacío. Se fija **255 caracteres** para el derivado; si `<externalId>-resend-<canal>` lo excede, 400 con motivo y sin crear nada. Se pide a Contrato declarar `maxLength: 255` en `externalId`.
+- **Aislamiento**: `NotificationRepository.findById` no filtra por tenant (verificado). El caso de uso usa `findById` + `filter(tenantId)` + `NotificationNotFoundException`, igual que `GetNotificationStatusService`; ajeno e inexistente dan el mismo 404. Prueba de dos tenants en unitaria y E2E.
+- **Dirección fuera de logs y errores**: los controllers de reintento y reenvío no registran el cuerpo de la solicitud; `ResendChannelInvalidException` y demás mensajes no incluyen la dirección. El listener procesa el cuerpo del mensaje con `LogContext.open(..., body)`, pero la dirección no viaja por la cola. E2E que busca la dirección completa en respuesta, errores y log.
+- **Consumidor**: hoy NO lee `x-attempt-origin` (`dispatch(id)` fija AUTOMATIC); leerlo es trabajo nuevo de esta historia, no heredado de la 018.
+- **SC-006**: solo se cumple si se retira `Notification.retryManually()`; la prueba construye un FAILED con 5 intentos recuperables y verifica que el intento manual fallido vuelve a FAILED.
+- **Contrato**: la descripción de `/notification-retries` dice "Planificada"; Contrato la cambia a `available`.
 
 ### Pendientes explícitos (Principio VII)
 
-- **PENDING con intentos y sin mensaje**: si el encolado falla tras persistir el reintento, la notificación queda sin mensaje y `recoverOrphanedPending` solo recupera las que no tienen intentos. Preexistente (afecta al reintento automático); el operador ve el 5xx pero no puede repetir porque PENDING no admite reintento. Resolver exige marca "encolada en" y conservar el origen (research.md, D1 alt. b). **Dueño**: andrualv. **Revisión**: 2026-11-15.
-- **Ciclo vestigial**: al retirar `retryManually` (D2) quedan `currentCycle` y `DeliveryAttempt.cycle` persistidos con valor siempre 1. Retirarlos es un cambio de esquema fuera de esta historia. **Dueño**: andrualv. **Revisión**: 2026-11-15.
-- **Validación de dirección por canal**: hoy `Recipient` solo exige no vacío; "dirección inválida para el canal" ([spec.md#FR-011](./spec.md)) se limita a lo que valide el envío existente. **Dueño**: andrualv. **Revisión**: 2026-11-15.
+- **PENDING con intentos y sin mensaje**: si el encolado falla tras persistir el reintento, la notificación queda sin mensaje y `recoverOrphanedPending` solo recupera las que no tienen intentos. Preexistente (afecta al reintento automático); el operador ve el 5xx pero no puede repetir porque PENDING no admite reintento. Opción sugerida: que `recoverOrphanedPending` también recupere PENDING con intentos (con marca "encolada en"; conservar MANUAL exige D1 alt. b). **Dueño**: Equipo de backend. **Revisión**: 2026-12-15.
+- **Ciclo vestigial**: al retirar `retryManually` (D2) quedan `currentCycle` y `DeliveryAttempt.cycle` persistidos con valor siempre 1. Retirarlos es un cambio de esquema fuera de esta historia. **Dueño**: Equipo de backend. **Revisión**: 2026-12-15.
+- **Validación de dirección por canal**: hoy `Recipient` solo exige no vacío; "dirección inválida para el canal" ([spec.md#FR-011](./spec.md)) se limita a lo que valide el envío existente. **Dueño**: Equipo de backend. **Revisión**: 2026-12-15.
 
 ## Contrato que consumirá la consola (repositorio aparte)
 

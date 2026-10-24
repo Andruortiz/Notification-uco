@@ -10,11 +10,11 @@ info:
     `OPERADOR` o `ADMINISTRADOR`, jerárquico). CU-03 (despachar) no
     tiene endpoint propio -- es un proceso interno disparado por el consumidor de RabbitMQ, nunca
     invocado directamente por un cliente. Autenticación (HU2-096): toda operación exige
-    `Authorization: Bearer <JWT>` -- un token interino, emitido y firmado por este mismo servicio,
-    con las claims `sub`, `tenantId` y `role` (`ADMINISTRADOR`, `OPERADOR` o `CLIENTE`, jerárquico).
-    El tenant y el rol del solicitante salen siempre del token, nunca de un encabezado. Se
-    reemplazará por la identidad resuelta contra la plataforma de Seguridad externa cuando DEP-01 se
-    cierre, sin cambiar la forma de las claims. Con el PEP activo, la credencial puede ser también la
+    `Authorization: Bearer <JWT>` -- un token firmado por la plataforma de Seguridad y validado con su
+    clave pública, con las claims `sub`, `tenantId`, `role` (`ADMINISTRADOR`, `OPERADOR` o `CLIENTE`,
+    jerárquico) y `exp`, y una claim de cliente opcional. El tenant y el rol del solicitante salen
+    siempre del token, nunca de un encabezado (`X-Tenant-Id` no se acepta). Una claim obligatoria
+    ausente responde 401 con NTF-2004; el resto de rechazos, 401 con NTF-2001. Con el PEP activo, la credencial puede ser también la
     cookie de sesión `SECURITY_BASELINE_SESSION` (HU2-101): el servicio resuelve tenant y usuario
     consultando la sesión a la plataforma de Seguridad, el rol efectivo es CLIENTE y el Bearer tiene
     precedencia sobre la cookie. El PEP puede responder 401, 403 o 503 con `PepErrorResponse` y la
@@ -44,6 +44,16 @@ info:
     (`security: []` para el PEP): `GET /openapi/api-notificaciones.yaml` y `GET /v3/api-docs` en todo
     entorno; `GET /v3/api-docs/swagger-config`, `GET /swagger-ui.html` y `GET /swagger-ui/**` solo
     fuera de producción. No son operaciones de `paths` ni recursos que haya que registrar en el PDP.
+    11. Lote del nivel 1 (adiciones compatibles, sin cambio de versión mayor; todas las operaciones
+    nuevas nacen `planned` y pasan a `available` en la historia que añade su controlador):
+    HU2-113 añade el código NTF-2004 y documenta las claims del Bearer; HU2-114 añade
+    `POST /provider-connection-tests`; HU2-115 añade `failedOver` a `DeliveryAttempt`; HU2-116 añade
+    `POST /recipients/undeliverable-lookups`, `POST /recipients/undeliverable-releases` y la ruta
+    pública `POST /providers/brevo/bounce-events` (solo en `x-public-routes`); HU2-117 añade
+    `POST /notification-resends`, aclara `POST /notification-retries` y fija `maxLength: 255` en
+    `externalId`; HU2-118 añade `GET /notifications/timeline`; HU2-119 añade las siete rutas de
+    plantillas; HU2-120 añade las cuatro de dispositivos y `INVALID_RECIPIENT` al resultado de un
+    intento; HU2-121 añade `GET /provider-health`.
 
     Tabla de migración (método y ruta v1 a método y ruta v2):
 
@@ -66,6 +76,16 @@ info:
     | POST /providers:register | POST /providers (planned) |
     | GET /recipients/{recipientId}/preferences | GET /recipients/preferences?recipientId={recipientId} (planned) |
     | POST /recipients/{recipientId}:updatePreferences | PUT /recipients/preferences?recipientId={recipientId} (planned) |
+    | (nuevo, HU2-114) | POST /provider-connection-tests (planned) |
+    | (nuevo, HU2-116) | POST /recipients/undeliverable-lookups (planned) |
+    | (nuevo, HU2-116) | POST /recipients/undeliverable-releases (planned) |
+    | (nuevo, HU2-117) | POST /notification-resends (planned) |
+    | (nuevo, HU2-118) | GET /notifications/timeline?notificationId={id} (planned) |
+    | (nuevo, HU2-119) | POST /templates, PUT /templates, GET /templates (planned) |
+    | (nuevo, HU2-119) | GET /templates/detail?templateId={id} (planned) |
+    | (nuevo, HU2-119) | POST /template-archivals, POST /template-variable-detections, POST /template-renders (planned) |
+    | (nuevo, HU2-120) | POST /devices, GET /devices, POST /device-removals, POST /device-erasures (planned) |
+    | (nuevo, HU2-121) | GET /provider-health (planned) |
   version: 2.0.0
 servers:
   - url: /
@@ -98,6 +118,16 @@ x-public-routes:
     path: /swagger-ui/**
     exposure: non-production
     security: []
+  - method: POST
+    path: /providers/brevo/bounce-events
+    exposure: always
+    security: []
+    description: >
+      HU2-116. Webhook de rebotes de Brevo. No exige credencial del PEP; se autentica con el secreto
+      compartido de la variable BREVO_WEBHOOK_SECRET enviado en una cabecera. Sin secreto configurado,
+      o con uno que no coincide, responde 401 con NTF-2005 y no procesa el evento. Solo los rebotes
+      duros (hard_bounce, invalid_email, blocked) marcan la dirección; soft_bounce y deferred se
+      descartan. Responde 2xx únicamente tras persistir y 5xx si falla.
 
 tags:
   - name: Notificaciones
@@ -116,6 +146,13 @@ tags:
     description: >
       CU-11 (lectura). GET /configuration expone los parámetros gestionables y la configuración en uso;
       exige el rol ADMINISTRADOR.
+  - name: Dispositivos
+    description: >
+      HU2-120. Registro de dispositivos push por identidad de destinatario. Los tokens se almacenan
+      cifrados y se devuelven enmascarados salvo para ADMINISTRADOR.
+  - name: Plantillas
+    description: >
+      HU2-119. Plantillas con variables {{nombre}} por canal e idioma, propias de cada tenant.
 
 paths:
   /notifications:
@@ -164,6 +201,8 @@ paths:
             tenant o sus datos no coinciden; la subida está INFECTED; el tipo real no coincide con el
             declarado; o el archivo contiene software malicioso. El mensaje identifica el adjunto por su
             posición (attachments[i]) y la regla incumplida; nunca incluye el contenido ni la dirección.
+            También INVALID_RECIPIENT (NTF-1006) cuando la dirección no tiene el formato del canal
+            (SMS en E.164, correo válido); se rechaza antes de persistir.
           content:
             application/json:
               schema:
@@ -176,7 +215,8 @@ paths:
             Un adjunto referencia una subida todavía en PENDING_SCAN. Reintentar cuando
             GET /attachment-uploads/status?uploadId=... devuelva CLEAN. Una subida en FAILED se rechaza con 400.
             También responde 409 ante una modificación concurrente, una clave externalId ya aceptada o una
-            transición de estado no permitida, con mensaje fijo.
+            transición de estado no permitida, con mensaje fijo. También RECIPIENT_UNDELIVERABLE
+            (NTF-3040) si la dirección está marcada como no entregable por un rebote duro.
           content:
             application/json:
               schema:
@@ -487,8 +527,9 @@ paths:
       description: >
         CU-06. Solo válido si el estado actual es FAILED o RECOVERABLE. Reencola la notificación y
         registra el reintento como manual (distinto del automático) para efectos de auditoría.
-        Requiere rol OPERADOR o ADMINISTRADOR. Planificada: sin controlador REST todavía (el mapeo de
-        rol queda documentado para cuando exista).
+        Requiere rol OPERADOR o ADMINISTRADOR. No reinicia el contador de intentos. HU2-117: planificada
+        hasta que exista el controlador; pasa entonces a available. 400 si el estado actual no admite
+        reintento; 409 si otro proceso (manual o automático) ganó la carrera sobre la misma notificación.
       operationId: retryNotification
       x-status: planned
       x-minimum-role: OPERADOR
@@ -1017,6 +1058,746 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /notifications/timeline:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    get:
+      tags: [Notificaciones]
+      summary: Consultar la línea de tiempo de una notificación
+      description: >
+        HU2-118. Devuelve la cabecera de la notificación y sus intentos de entrega ordenados por fecha,
+        con latencia, causa del fallo (conjunto cerrado, nunca texto del proveedor) y correlationId.
+        El destinatario sale enmascarado salvo para ADMINISTRADOR. El tenant sale de la sesión.
+        Un identificador inexistente o de otro tenant responde 404.
+      operationId: getNotificationTimeline
+      x-status: planned
+      x-minimum-role: OPERADOR
+      parameters:
+        - $ref: '#/components/parameters/NotificationId'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Línea de tiempo de la notificación.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationTimelineResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /notification-resends:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Notificaciones]
+      summary: Reenviar una notificación fallida por otro canal
+      description: >
+        HU2-117. Solo válido si la notificación original está en FAILED. Crea una notificación nueva
+        por el canal indicado, con un externalId derivado de máximo 255 caracteres, y no modifica la
+        original. La dirección recibida es dato personal: no se devuelve ni se registra. Requiere
+        rol OPERADOR o ADMINISTRADOR.
+      operationId: resendNotification
+      x-status: planned
+      x-minimum-role: OPERADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendNotificationRequest'
+      responses:
+        '202':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Reenvío aceptado; el cuerpo describe la notificación nueva en PENDING.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationStatusResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /provider-connection-tests:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Catálogo]
+      summary: Probar la conexión con un proveedor
+      description: >
+        HU2-114. Ejecuta una sonda contra el proveedor del canal indicado sin crear notificaciones.
+        Responde 200 también cuando la prueba falla (status FAILED con un errorCode cerrado); nunca
+        devuelve credenciales ni texto crudo del proveedor. Solo una prueba en vuelo por par (canal,
+        proveedor) y por réplica; la segunda recibe 429. Requiere rol ADMINISTRADOR.
+      operationId: testProviderConnection
+      x-status: planned
+      x-minimum-role: ADMINISTRADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderConnectionTestRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Resultado de la prueba (OK o FAILED).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderConnectionTestResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Ya hay una prueba en vuelo para ese par canal y proveedor en esta réplica (NTF-3060).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /provider-health:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    get:
+      tags: [Catálogo]
+      summary: Consultar la salud de los proveedores
+      description: >
+        HU2-121. Estado, tasa de éxito, latencia p95 y último error por proveedor y canal, calculados
+        sobre las métricas de despacho en una ventana configurable. La respuesta es global (no
+        depende del tenant). Límites: un proveedor desactivado con tráfico cuenta como fallido; los
+        proveedores sin tráfico en la ventana no aparecen o salen UNKNOWN. Si la fuente de métricas
+        no responde, 503 con NTF-5000; el cuerpo nunca incluye su dirección.
+      operationId: getProviderHealth
+      x-status: planned
+      x-minimum-role: OPERADOR
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Salud por proveedor y canal.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderHealthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+            X-Decision-Id:
+              $ref: '#/components/headers/DecisionId'
+          description: >
+            La fuente de métricas no está disponible (ErrorResponse, NTF-5000) o el PEP no pudo decidir
+            el acceso (PEP_UNAVAILABLE).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/PepErrorResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /recipients/undeliverable-lookups:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Preferencias]
+      summary: Consultar si una dirección está marcada como no entregable
+      description: >
+        HU2-116. Consulta sin efectos; es POST para que la dirección no viaje en la URL. La dirección
+        sale enmascarada. Requiere rol OPERADOR o ADMINISTRADOR.
+      operationId: lookupUndeliverableRecipient
+      x-status: planned
+      x-minimum-role: OPERADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UndeliverableRecipientRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Estado de la marca para la dirección (marked es false si no existe).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UndeliverableRecipientResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /recipients/undeliverable-releases:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Preferencias]
+      summary: Levantar la marca de no entregable de una dirección
+      description: >
+        HU2-116. Permite volver a enviar a la dirección. Idempotente: levantar una marca inexistente
+        responde 204. Requiere rol ADMINISTRADOR.
+      operationId: releaseUndeliverableRecipient
+      x-status: planned
+      x-minimum-role: ADMINISTRADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UndeliverableRecipientRequest'
+      responses:
+        '204':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Marca levantada.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /devices:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Dispositivos]
+      summary: Registrar un dispositivo push
+      description: >
+        HU2-120. Asocia un token de dispositivo a la identidad de la sesión. CLIENTE y OPERADOR operan
+        solo sobre su propia identidad (un subject ajeno responde 403); ADMINISTRADOR puede indicar
+        subject. Registrar un token ya existente en el tenant lo deja asociado a la sesión y la
+        respuesta no revela si era de otra identidad: 201 si se creó, 200 si ya existía para la sesión.
+        Nunca responde 409. El token se almacena cifrado.
+      operationId: registerDevice
+      x-status: planned
+      x-minimum-role: CLIENTE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterDeviceRequest'
+      responses:
+        '201':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Dispositivo registrado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceResponse'
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: El dispositivo ya estaba registrado para la sesión.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Dispositivos]
+      summary: Listar los dispositivos registrados
+      description: >
+        HU2-120. Lista los dispositivos de la identidad de la sesión con el token enmascarado
+        (**** y los últimos 4 caracteres). ADMINISTRADOR puede indicar subject y ve el token completo.
+      operationId: listDevices
+      x-status: planned
+      x-minimum-role: CLIENTE
+      parameters:
+        - name: subject
+          in: query
+          required: false
+          description: Sujeto cuyos dispositivos se listan. Solo ADMINISTRADOR; otros roles reciben 403.
+          schema:
+            type: string
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Dispositivos de la identidad (items vacío si no hay).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /device-removals:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Dispositivos]
+      summary: Dar de baja un dispositivo
+      description: >
+        HU2-120. Un dispositivo ajeno, de otro tenant o inexistente responde el mismo 404
+        (NTF-3041), sin revelar su existencia.
+      operationId: removeDevice
+      x-status: planned
+      x-minimum-role: CLIENTE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RemoveDeviceRequest'
+      responses:
+        '204':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Dispositivo dado de baja.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /device-erasures:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Dispositivos]
+      summary: Borrar los dispositivos de un titular
+      description: >
+        HU2-120. Borra la identidad del subject y todos sus dispositivos en el tenant. Responde 204
+        también si no existían. Requiere rol ADMINISTRADOR.
+      operationId: eraseRecipientDevices
+      x-status: planned
+      x-minimum-role: ADMINISTRADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EraseDevicesRequest'
+      responses:
+        '204':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Borrado realizado.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /templates:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Crear una plantilla
+      description: >
+        HU2-119. Crea una plantilla con variables {{nombre}} detectadas en asunto y cuerpo; lo no
+        declarado es obligatorio. Única por (tenant, key, channel, language). El canal debe tener ruta
+        activa para el tenant. Requiere rol OPERADOR o ADMINISTRADOR.
+      operationId: createTemplate
+      x-status: planned
+      x-minimum-role: OPERADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateRequest'
+      responses:
+        '201':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Plantilla creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Plantillas]
+      summary: Actualizar una plantilla
+      description: >
+        HU2-119. Control optimista: version debe coincidir con la vigente; si no, 409 con
+        NTF-3052. Una plantilla archivada no se actualiza (NTF-3053). Requiere rol OPERADOR o
+        ADMINISTRADOR.
+      operationId: updateTemplate
+      x-status: planned
+      x-minimum-role: OPERADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Plantilla actualizada con la versión incrementada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Plantillas]
+      summary: Listar plantillas
+      description: HU2-119. Lista las plantillas del tenant con filtros combinables y paginación.
+      operationId: listTemplates
+      x-status: planned
+      x-minimum-role: CLIENTE
+      parameters:
+        - name: category
+          in: query
+          schema:
+            $ref: '#/components/schemas/TemplateCategory'
+        - name: channel
+          in: query
+          schema:
+            type: string
+        - name: language
+          in: query
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 10
+        - name: status
+          in: query
+          schema:
+            $ref: '#/components/schemas/TemplateStatus'
+        - name: page
+          in: query
+          description: Número de página desde 0. Default 0.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          description: Tamaño de página. Default 20, máximo 100.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Página de plantillas (items vacío si no hay resultados).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /templates/detail:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    get:
+      tags: [Plantillas]
+      summary: Consultar una plantilla
+      description: HU2-119. Una plantilla ajena o inexistente responde 404.
+      operationId: getTemplate
+      x-status: planned
+      x-minimum-role: CLIENTE
+      parameters:
+        - $ref: '#/components/parameters/TemplateId'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Plantilla.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-archivals:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Archivar una plantilla
+      description: >
+        HU2-119. La plantilla sigue visible en el listado con estado ARCHIVADA y deja de poder
+        renderizarse. Requiere rol OPERADOR o ADMINISTRADOR.
+      operationId: archiveTemplate
+      x-status: planned
+      x-minimum-role: OPERADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchiveTemplateRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Plantilla archivada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-variable-detections:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Detectar las variables de un texto
+      description: >
+        HU2-119. Devuelve las variables {{nombre}} del asunto y del cuerpo, sin duplicados y en orden
+        de aparición, sin guardar nada. Requiere rol OPERADOR o ADMINISTRADOR.
+      operationId: detectTemplateVariables
+      x-status: planned
+      x-minimum-role: OPERADOR
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DetectTemplateVariablesRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Variables detectadas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DetectedTemplateVariablesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-renders:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Renderizar una plantilla
+      description: >
+        HU2-119. Sustituye las variables en una sola pasada y devuelve texto plano sin escapar; los
+        valores se tratan como texto literal y no se persisten ni se registran. Si falta alguna variable
+        obligatoria responde 422 con la lista completa en missingVariables.
+      operationId: renderTemplate
+      x-status: planned
+      x-minimum-role: CLIENTE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenderTemplateRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Texto renderizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderedTemplateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Faltan variables obligatorias (NTF-1010); missingVariables las lista todas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   headers:
     CorrelationId:
@@ -1037,10 +1818,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
       description: >
-        Token interino emitido y firmado por este mismo servicio (HS256), con las claims sub,
-        tenantId y role. Se reemplazará por la identidad resuelta contra la plataforma de Seguridad
-        externa cuando DEP-01 se cierre -- la forma de las claims es la misma que usará el adaptador
-        definitivo.
+        JWT firmado por la plataforma de Seguridad y validado con su clave pública. Claims esperadas:
+        sub (sujeto), tenantId, role (ADMINISTRADOR, OPERADOR o CLIENTE) y exp; la claim del cliente
+        de plataforma (azp por defecto) es opcional. El tenant y el rol salen siempre del token: no se
+        acepta el encabezado X-Tenant-Id ni ningún otro mecanismo de identidad. Una claim obligatoria
+        ausente responde 401 con NTF-2004; cualquier otro rechazo, 401 con NTF-2001.
     SessionCookie:
       type: apiKey
       in: cookie
@@ -1059,12 +1841,12 @@ components:
         X-Decision-Id:
           $ref: '#/components/headers/DecisionId'
       description: >
-        Sin credencial, credencial mal formada, firma inválida, expirada, o con alguna claim
-        obligatoria (sub, tenantId, role) ausente o con role fuera de ADMINISTRADOR/OPERADOR/CLIENTE.
-        También cuando la cookie de sesión es inválida, expirada o revocada. Responde ErrorResponse
-        (NTF-2001) cuando lo rechaza el servicio, con Bearer o con cookie; con el PEP activo puede
-        responder PepErrorResponse con code TOKEN_INVALID. El cuerpo nunca detalla la causa
-        criptográfica exacta del rechazo.
+        Sin credencial, credencial mal formada, firma inválida, emisor o audiencia incorrectos, o
+        expirada: ErrorResponse con NTF-2001. Con alguna claim obligatoria (sub, tenantId, role, exp)
+        ausente o con role fuera de ADMINISTRADOR/OPERADOR/CLIENTE: ErrorResponse con NTF-2004.
+        También cuando la cookie de sesión es inválida, expirada o revocada (NTF-2001). Con el PEP
+        activo puede responder PepErrorResponse con code TOKEN_INVALID. El cuerpo nunca detalla la
+        causa criptográfica exacta del rechazo ni incluye valores del token.
       content:
         application/json:
           schema:
@@ -1112,8 +1894,10 @@ components:
           $ref: '#/components/headers/CorrelationId'
       description: >
         Conflicto con el estado actual del recurso: modificación concurrente de la notificación,
-        clave externalId ya aceptada para el tenant o transición de estado no permitida. El mensaje es
-        fijo y no incluye datos de otros recursos.
+        clave externalId ya aceptada para el tenant, transición de estado no permitida, reenvío ya
+        realizado por ese canal, destinatario marcado como no entregable (NTF-3040) o, en plantillas,
+        duplicado (NTF-3051), versión desfasada (NTF-3052) o plantilla archivada (NTF-3053). El mensaje
+        es fijo y no incluye datos de otros recursos.
       content:
         application/json:
           schema:
@@ -1125,6 +1909,29 @@ components:
       description: >
         Error inesperado. El cuerpo lleva un mensaje genérico y el correlationId para localizar la causa
         en los logs; nunca el mensaje interno de la excepción.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    BadRequest:
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      description: >
+        Solicitud inválida: cuerpo o parámetros mal formados, valores fuera de rango o regla de
+        negocio incumplida. El campo code de ErrorResponse identifica la regla. El mensaje nunca
+        incluye datos personales ni secretos.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      headers:
+        X-Correlation-Id:
+          $ref: '#/components/headers/CorrelationId'
+      description: >
+        El recurso no existe para el tenant del solicitante. Un recurso de otro tenant responde igual
+        que uno inexistente.
       content:
         application/json:
           schema:
@@ -1176,6 +1983,14 @@ components:
       description: Identificador de la subida emitida por POST /attachment-uploads.
       schema:
         type: string
+    TemplateId:
+      name: templateId
+      in: query
+      required: true
+      description: Identificador de la plantilla.
+      schema:
+        type: string
+        format: uuid
 
   schemas:
     SendNotificationRequest:
@@ -1190,6 +2005,7 @@ components:
       properties:
         externalId:
           type: string
+          maxLength: 255
           description: Identificador propio del sistema cliente, usado para idempotencia.
           example: order-42
         channelType:
@@ -1524,12 +2340,18 @@ components:
           format: date-time
         result:
           type: string
-          enum: [ACCEPTED, RECOVERABLE_FAILURE, PERMANENT_FAILURE]
+          enum: [ACCEPTED, RECOVERABLE_FAILURE, PERMANENT_FAILURE, INVALID_RECIPIENT]
         origin:
           type: string
           enum: [MANUAL, AUTOMATIC]
         providerId:
           type: string
+        failedOver:
+          type: boolean
+          default: false
+          description: >
+            true si el proveedor falló y el despacho conmutó al siguiente de la ruta; el intento sigue
+            en el historial y no cuenta para el tope de reintentos.
 
     RegisterChannelRequest:
       type: object
@@ -1781,16 +2603,31 @@ components:
       properties:
         code:
           type: string
-          description: Código estable del error, con formato NTF-<número>; el prefijo del número indica la categoría (1 validación, 2 autenticación y autorización, 3 negocio, 4 proveedor, 5 infraestructura).
+          description: >
+            Código estable del error, con formato NTF-<número>; el prefijo del número indica la categoría
+            (1 validación, 2 autenticación y autorización, 3 negocio, 4 proveedor, 5 infraestructura).
+            Códigos nuevos (nombre en ErrorCode): 1006 INVALID_RECIPIENT, 1007 INVALID_TEMPLATE_SYNTAX,
+            1008 UNDECLARED_TEMPLATE_VARIABLE, 1009 TEMPLATE_LIMIT_EXCEEDED, 1010 MISSING_VARIABLES,
+            2004 AUTHENTICATION_CLAIMS_MISSING, 2005 WEBHOOK_SECRET_INVALID, 3040 RECIPIENT_UNDELIVERABLE,
+            3041 DEVICE_NOT_FOUND, 3042 DEVICE_CONFLICT, 3043 RECIPIENT_NOT_FOUND, 3050 TEMPLATE_NOT_FOUND,
+            3051 TEMPLATE_ALREADY_EXISTS, 3052 TEMPLATE_VERSION_CONFLICT, 3053 TEMPLATE_ARCHIVED,
+            3060 PROVIDER_TEST_IN_PROGRESS. CHANNEL_NOT_AVAILABLE de plantillas reutiliza NTF-1003.
           enum:
             - NTF-1001
             - NTF-1002
             - NTF-1003
             - NTF-1004
             - NTF-1005
+            - NTF-1006
+            - NTF-1007
+            - NTF-1008
+            - NTF-1009
+            - NTF-1010
             - NTF-2001
             - NTF-2002
             - NTF-2003
+            - NTF-2004
+            - NTF-2005
             - NTF-3000
             - NTF-3001
             - NTF-3002
@@ -1806,6 +2643,15 @@ components:
             - NTF-3020
             - NTF-3021
             - NTF-3030
+            - NTF-3040
+            - NTF-3041
+            - NTF-3042
+            - NTF-3043
+            - NTF-3050
+            - NTF-3051
+            - NTF-3052
+            - NTF-3053
+            - NTF-3060
             - NTF-4000
             - NTF-4002
             - NTF-4010
@@ -1835,6 +2681,11 @@ components:
           type: string
           maxLength: 64
           description: Identificador de correlación de la petición que produjo el error.
+        missingVariables:
+          type: array
+          description: Solo en NTF-1010. Todas las variables obligatorias ausentes del render.
+          items:
+            type: string
 
     PepErrorResponse:
       type: object
@@ -1882,3 +2733,478 @@ components:
       required:
         - action
         - notification
+
+    FailureCause:
+      type: string
+      enum:
+        - TRANSPORT_ERROR
+        - PROVIDER_ERROR
+        - PROVIDER_REJECTED
+        - PROVIDER_TEMPORARY
+        - ATTACHMENTS_UNSUPPORTED
+        - RETRIES_EXHAUSTED
+        - INVALID_RECIPIENT
+        - UNKNOWN
+      description: >
+        Causa del fallo de un intento, de un conjunto cerrado; nunca texto del proveedor ni mensajes
+        de excepción.
+
+    NotificationTimelineResponse:
+      type: object
+      required: [notificationId, status, channelType, recipient, correlationId, attempts]
+      properties:
+        notificationId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/NotificationStatus'
+        channelType:
+          type: string
+        recipient:
+          type: string
+          description: Destinatario enmascarado, salvo para ADMINISTRADOR.
+        correlationId:
+          type: [string, 'null']
+          maxLength: 64
+        attempts:
+          type: array
+          description: Ordenados por occurredOn ascendente.
+          items:
+            $ref: '#/components/schemas/TimelineAttempt'
+
+    TimelineAttempt:
+      type: object
+      required: [occurredOn, providerId, result, origin, cycle, latencyMillis, failureCause, correlationId]
+      properties:
+        occurredOn:
+          type: string
+          format: date-time
+        providerId:
+          type: string
+        result:
+          type: string
+          enum: [ACCEPTED, RECOVERABLE_FAILURE, PERMANENT_FAILURE, INVALID_RECIPIENT]
+        origin:
+          type: string
+          enum: [MANUAL, AUTOMATIC]
+        cycle:
+          type: integer
+          minimum: 1
+        failedOver:
+          type: boolean
+          default: false
+          description: true si el proveedor falló y el despacho conmutó al siguiente de la ruta.
+        latencyMillis:
+          type: [integer, 'null']
+          format: int64
+          description: Duración de la llamada al proveedor. Nulo en intentos anteriores a la introducción del campo.
+        failureCause:
+          oneOf:
+            - $ref: '#/components/schemas/FailureCause'
+            - type: 'null'
+          description: Nulo si el intento fue aceptado o es anterior a la introducción del campo.
+        correlationId:
+          type: [string, 'null']
+          maxLength: 64
+
+    ResendNotificationRequest:
+      type: object
+      required: [notificationId, channelType, recipient]
+      properties:
+        notificationId:
+          type: string
+          format: uuid
+          description: Notificación original, en estado FAILED.
+        channelType:
+          type: string
+          description: Canal nuevo; debe diferir del original y estar disponible en el catálogo.
+        recipient:
+          type: string
+          description: Dirección en el canal nuevo. Es dato personal y no se devuelve ni se registra.
+
+    ProviderConnectionTestRequest:
+      type: object
+      required: [channel, providerId]
+      properties:
+        channel:
+          type: string
+          example: EMAIL
+          description: Canal del catálogo (GET /channels).
+        providerId:
+          type: string
+          example: brevo
+          description: Proveedor del catálogo para ese canal (GET /providers).
+
+    ProviderConnectionTestResponse:
+      type: object
+      required: [providerId, channel, status, latencyMs, errorCode]
+      properties:
+        providerId:
+          type: string
+        channel:
+          type: string
+        status:
+          type: string
+          enum: [OK, FAILED]
+        latencyMs:
+          type: integer
+          format: int64
+        errorCode:
+          type: [string, 'null']
+          enum:
+            - CREDENTIALS_MISSING
+            - AUTH_REJECTED
+            - UNREACHABLE
+            - TIMEOUT
+            - PROVIDER_ERROR
+            - ADAPTER_MISSING
+            - SIMULATED_FAILURE
+            - null
+          description: Nulo cuando status es OK.
+
+    ProviderHealthResponse:
+      type: object
+      required: [generatedAt, windowSeconds, grafanaUrl, providers]
+      properties:
+        generatedAt:
+          type: string
+          format: date-time
+        windowSeconds:
+          type: integer
+        grafanaUrl:
+          type: [string, 'null']
+          format: uri
+          description: Dirección única del dashboard de Grafana del servicio. Nulo si no está configurada.
+        providers:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderHealth'
+
+    ProviderHealth:
+      type: object
+      required: [provider, channel, status, successRate, sampleCount, latencyP95Millis, lastError]
+      properties:
+        provider:
+          type: string
+        channel:
+          type: string
+        status:
+          type: string
+          enum: [HEALTHY, DEGRADED, DOWN, UNKNOWN, CIRCUIT_OPEN]
+          description: CIRCUIT_OPEN está reservado y no lo produce el servicio todavía.
+        successRate:
+          type: [number, 'null']
+          minimum: 0
+          maximum: 1
+          description: Nulo sin muestras suficientes.
+        sampleCount:
+          type: integer
+          minimum: 0
+        latencyP95Millis:
+          type: [integer, 'null']
+          format: int64
+          description: Calculada por proveedor y repetida en cada uno de sus canales.
+        lastError:
+          oneOf:
+            - $ref: '#/components/schemas/ProviderLastError'
+            - type: 'null'
+        failedOver:
+          type: boolean
+          description: Reservado para una extensión futura.
+
+    ProviderLastError:
+      type: object
+      required: [result, at]
+      properties:
+        result:
+          type: string
+          enum: [recoverable, failed]
+        at:
+          type: string
+          format: date-time
+          description: Resolución de 60 segundos.
+        code:
+          type: string
+          description: Reservado; hoy ausente.
+        category:
+          type: string
+          description: Reservado; hoy ausente.
+
+    UndeliverableRecipientRequest:
+      type: object
+      required: [channel, address]
+      properties:
+        channel:
+          type: string
+          example: EMAIL
+        address:
+          type: string
+          description: Dirección del canal. Dato personal; viaja en el cuerpo y nunca en la URL.
+
+    UndeliverableRecipientResponse:
+      type: object
+      required: [marked, channel, address, reason, markedAt]
+      properties:
+        marked:
+          type: boolean
+        channel:
+          type: string
+        address:
+          type: string
+          description: Dirección enmascarada.
+        reason:
+          type: [string, 'null']
+          description: Motivo del rebote duro. Nulo si no está marcada.
+        markedAt:
+          type: [string, 'null']
+          format: date-time
+
+    RegisterDeviceRequest:
+      type: object
+      required: [platform, token]
+      properties:
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+        token:
+          type: string
+          minLength: 1
+          description: Token del dispositivo emitido por el proveedor de push. Se almacena cifrado.
+        subject:
+          type: string
+          description: Solo ADMINISTRADOR. Con otros roles, un valor distinto del sujeto de la sesión responde 403.
+
+    DevicePlatform:
+      type: string
+      enum: [ANDROID, IOS, WEB]
+
+    DeviceResponse:
+      type: object
+      required: [deviceId, recipientId, platform, token, originComponent, createdAt, lastSeenAt]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+        recipientId:
+          type: string
+          description: Identificador de destinatario generado por el servicio y asociado al sujeto.
+        platform:
+          $ref: '#/components/schemas/DevicePlatform'
+        token:
+          type: string
+          description: Enmascarado (**** y los últimos 4 caracteres), salvo para ADMINISTRADOR.
+        originComponent:
+          type: string
+          description: Sujeto de la sesión que registró el dispositivo.
+        createdAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+
+    DeviceListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeviceResponse'
+
+    RemoveDeviceRequest:
+      type: object
+      required: [deviceId]
+      properties:
+        deviceId:
+          type: string
+          format: uuid
+
+    EraseDevicesRequest:
+      type: object
+      required: [subject]
+      properties:
+        subject:
+          type: string
+          minLength: 1
+
+    TemplateCategory:
+      type: string
+      enum: [ACADEMICO, ADMINISTRATIVO, MARKETING, SEGURIDAD]
+      description: SEGURIDAD se marca como crítica (critical=true en la lectura).
+
+    TemplateStatus:
+      type: string
+      enum: [ACTIVA, ARCHIVADA]
+
+    TemplateVariable:
+      type: object
+      required: [name, required]
+      properties:
+        name:
+          type: string
+          pattern: '^[A-Za-z][A-Za-z0-9_]{0,39}$'
+        required:
+          type: boolean
+          description: Lo no declarado es obligatorio.
+
+    CreateTemplateRequest:
+      type: object
+      required: [key, category, channel, language, body]
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 60
+          pattern: '^[A-Za-z0-9._-]+$'
+        category:
+          $ref: '#/components/schemas/TemplateCategory'
+        channel:
+          type: string
+        language:
+          type: string
+          minLength: 2
+          maxLength: 10
+          description: Etiqueta BCP 47 corta (es, en, es-CO).
+        subject:
+          type: [string, 'null']
+          maxLength: 200
+        body:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        variables:
+          type: array
+          maxItems: 50
+          description: Declaración de obligatoriedad. Cada nombre debe aparecer en el texto.
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+
+    UpdateTemplateRequest:
+      type: object
+      required: [templateId, version, category, body]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+          description: Versión vigente conocida por el cliente; si no coincide, 409.
+        category:
+          $ref: '#/components/schemas/TemplateCategory'
+        subject:
+          type: [string, 'null']
+          maxLength: 200
+        body:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        variables:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+
+    ArchiveTemplateRequest:
+      type: object
+      required: [templateId]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+
+    TemplateResponse:
+      type: object
+      required:
+        [templateId, key, category, critical, channel, language, subject, body, variables, status, version, createdAt, updatedAt]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        key:
+          type: string
+        category:
+          $ref: '#/components/schemas/TemplateCategory'
+        critical:
+          type: boolean
+        channel:
+          type: string
+        language:
+          type: string
+        subject:
+          type: [string, 'null']
+        body:
+          type: string
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+        status:
+          $ref: '#/components/schemas/TemplateStatus'
+        version:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TemplateListResponse:
+      type: object
+      required: [items, page, size, hasNext]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateResponse'
+        page:
+          type: integer
+        size:
+          type: integer
+        hasNext:
+          type: boolean
+
+    DetectTemplateVariablesRequest:
+      type: object
+      required: [body]
+      properties:
+        subject:
+          type: [string, 'null']
+          maxLength: 200
+        body:
+          type: string
+          maxLength: 20000
+
+    DetectedTemplateVariablesResponse:
+      type: object
+      required: [variables]
+      properties:
+        variables:
+          type: array
+          description: Sin duplicados y en orden de aparición.
+          items:
+            type: string
+
+    RenderTemplateRequest:
+      type: object
+      required: [templateId, values]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        values:
+          type: object
+          additionalProperties:
+            type: string
+          description: Valor de cada variable. Se trata como texto literal; no se persiste ni se registra.
+
+    RenderedTemplateResponse:
+      type: object
+      required: [subject, body]
+      properties:
+        subject:
+          type: [string, 'null']
+        body:
+          type: string

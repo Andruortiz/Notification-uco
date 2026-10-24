@@ -34,19 +34,32 @@ Java 25, Spring Boot 4.1, WebFlux, jjwt (ya presente). Sin dependencias nuevas. 
    único `TokenValidationPort`. Falta de clave pública = fallo de arranque (ya lo hace `parsePublicKey`; se ajusta el mensaje
    para nombrar `AUTH_PLATFORM_PUBLIC_KEY`).
 2. **Claim de cliente.** `AuthPlatformProperties.clientClaim` (default `azp`, `AUTH_PLATFORM_CLIENT_CLAIM`). El principal
-   gana `clientId` anulable con constructor de tres argumentos conservado, así no se tocan los 10 sitios que lo construyen.
-   Solo se lee si es texto; no se exige.
+   gana `clientId` anulable con constructor de tres argumentos conservado: hay 15 usos de `new AuthenticatedPrincipal(` y
+   la afirmación de no tocarlos solo vale si ese constructor se conserva. Solo se lee si es texto; no se exige.
 3. **Código de error.** Nuevo `ErrorCode.AUTHENTICATION_CLAIMS_MISSING(2004)` para `MISSING_CLAIMS`, `UNKNOWN_ROLE` y
    `MISSING_EXPIRATION`. `AuthenticationWebFilter` mapea esas razones al código nuevo (401, mensaje
    "token is missing required claims"); el resto sigue en `AUTHENTICATION_REQUIRED`.
+   - `JwtFailures` hoy mapea `InvalidClaimException` (emisor o audiencia incorrectos) a `MISSING_CLAIMS`. Se crea la razón
+     `INVALID_ISSUER_OR_AUDIENCE` en `InvalidTokenException.Reason` y se mapea a `AUTHENTICATION_REQUIRED`; prueba en
+     `PlatformJwtTokenValidationAdapterTest` (emisor y audiencia incorrectos o ausentes) y en el filtro.
+   - `AuthenticationWebFilter.logRejection` fija `AUTHENTICATION_REQUIRED`; recibe el código resuelto para que el log
+     coincida con la respuesta. Prueba que captura el log del rechazo por claims faltantes.
+   - Roles: se conservan los tres del código (ADMINISTRADOR, OPERADOR, CLIENTE) hasta B2.
 4. **Retiro del modo local.** Se borran `LocalJwtTokenIssuer`, `LocalJwtTokenValidationAdapter`, `AuthJwtProperties`,
    `AuthJwtSecretGuard`, el bean condicional de `SecurityConfig`, las claves `notification.auth.mode` y
    `notification.auth.jwt.*` de `application.yml`, el secreto de `application-local.yml`, y las variables de `.env.example` y
-   README.
+   README. También: el comentario de `.gitignore` (línea 39) sobre `AUTH_JWT_HS256_SECRET`, las menciones en `docs/` y en
+   `docs/diagramas/secuencias/F05-autenticacion-y-panel-en-vivo.drawio`, y `.github/workflows/ci-cd.yml`.
+   - **Cambio de despliegue**: `AUTH_PLATFORM_PUBLIC_KEY` pasa a ser obligatoria siempre (decisión del usuario), incluso con
+     solo cookie de sesión (spec 025). Imagen, `ci-cd.yml` (hoy no la define) y manual de despliegue deben proveerla. En CI
+     las pruebas usan el par RSA efímero; el job que arranque la imagen necesita una clave pública de prueba generada en el
+     propio job, sin versionar la privada. B1 se implementa antes que las historias que dependen de la identidad de CI.
 5. **Migración de pruebas.**
    - `TestTokens` genera un `KeyPair` RSA 2048 por JVM y firma RS256; expone `PUBLIC_KEY` en Base64.
    - Un `ApplicationContextInitializer` de prueba, registrado en `src/test/resources/META-INF/spring.factories`, inyecta
      `notification.auth.platform.public-key` y los nombres de claim en todo contexto de prueba, así las ~40 clases no cambian.
+     El inicializador NO inyecta nada cuando el contexto declara `test.auth.no-default-key=true`; `AuthModeSelectionTest`
+     (`ApplicationContextRunner`, no pasa por `spring.factories`) y la prueba de «arranque sin clave» usan esa propiedad.
    - Las 5 pruebas de controlador y 3 de filtro que importan `LocalJwtTokenValidationAdapter` pasan a importar el de
      plataforma con `AuthPlatformProperties` de prueba.
    - Se borran `AuthJwtPropertiesTest`, `NoPublishedSecretTest` y `LocalJwtTokenValidationAdapterTest`; `AuthModeSelectionTest`
@@ -55,7 +68,9 @@ Java 25, Spring Boot 4.1, WebFlux, jjwt (ya presente). Sin dependencias nuevas. 
 6. **Flujo de desarrollo.** `scripts/dev-token.ps1` (PowerShell 7, `RSA.ExportSubjectPublicKeyInfo`) crea
    `.dev-keys/` (ignorado en git), imprime el valor de `AUTH_PLATFORM_PUBLIC_KEY` y emite un RS256 con tenant, sujeto, rol y
    vigencia por parámetro. El perfil `local` no trae clave: se documenta exportarla. Alternativa documentada: sesión real del PDP.
-7. **Regresión de `X-Tenant-Id`.** E2E con dos tenants y el encabezado enviado, ampliando una E2E existente.
+7. **Regresión de `X-Tenant-Id` (FR-001).** `IdentityFromTokenE2ETest`: dos tenants y el encabezado enviado.
+8. **Sin claves privadas versionadas (FR-006).** `NoPrivateKeyInRepositoryTest` busca `BEGIN PRIVATE KEY` en fuentes, recursos
+   y scripts versionados.
 
 ## Cambios de contrato requeridos (para el agente de Contrato)
 
@@ -72,7 +87,8 @@ Java 25, Spring Boot 4.1, WebFlux, jjwt (ya presente). Sin dependencias nuevas. 
 - `infrastructure/main`: `AuthPlatformProperties`, `PlatformJwtTokenValidationAdapter`, `AuthenticationWebFilter`,
   `JwtFailures` (si mapea razones), `SecurityConfig`, `application*.yml`; borrados listados en la decisión 4.
 - `infrastructure/test`: `TestTokens`, inicializador y `spring.factories`, pruebas de la decisión 5, E2E nuevas.
-- Fuera de código: `scripts/dev-token.ps1`, `.env.example`, `README.md`, `.gitignore` (`.dev-keys/`).
+- Fuera de código: `scripts/dev-token.ps1`, `.env.example`, `README.md`, `.gitignore` (añadir `.dev-keys/`, retirar el
+  comentario obsoleto), `docs/` y el `.drawio` F05, `.github/workflows/ci-cd.yml`.
 
 ## Pruebas
 
@@ -89,4 +105,5 @@ Java 25, Spring Boot 4.1, WebFlux, jjwt (ya presente). Sin dependencias nuevas. 
   primera tarea.
 - Cambiar el código en el 401 puede romper clientes que solo conocen `AUTHENTICATION_REQUIRED`; se mitiga con el cambio de
   contrato coordinado.
-- Sin Seguridad los nombres reales de claims son supuestos (research.md, Q1).
+- Sin Seguridad los nombres reales de claims son supuestos (research.md, Q1; excepción con dueño Seguridad, fecha 2026-12-15).
+- Clave obligatoria siempre: cualquier despliegue sin ella deja de arrancar; hay que avisar a quien opera imagen y manual.

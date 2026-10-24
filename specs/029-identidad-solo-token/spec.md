@@ -40,8 +40,11 @@ Trazabilidad: HU2-096 y spec 015 (autenticación interina, quitó `X-Tenant-Id` 
 - Q: ¿Es obligatoria la claim de cliente? A: No. Es configurable y opcional; si el token la trae, queda en el principal.
   Exigirla y usarla para autorizar es de B3a.
 
-Abiertas (ver informe del plan): nombres definitivos de claims con Seguridad (DEP-01), valor por defecto de `tenantClaim`,
-código de error nuevo frente a mensaje específico.
+Decisiones del usuario (2026-10-24): la clave pública es obligatoria siempre; roles en código = 3 hasta B2; código de error
+nuevo aprobado; claim de cliente opcional con campo anulable; script en PowerShell 7. B1 se implementa primero y deja la
+identidad de CI (par RSA efímero).
+
+Excepción abierta: nombres definitivos de claims con Seguridad (DEP-01). Dueño: Seguridad. Fecha: 2026-12-15.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -113,12 +116,21 @@ tokens firmados con un par de claves RSA propio.
   `AUTHENTICATION_CLAIMS_MISSING`, cuerpo estándar con `correlationId` y sin valores del token.
 - **FR-004**: El validador de Bearer es solo el de plataforma (clave pública RSA/EC); se retiran el emisor, el validador, las
   propiedades y la guarda del secreto HS256, la propiedad `notification.auth.mode` y todas las variables `AUTH_JWT_*`.
-- **FR-005**: El arranque DEBE fallar si falta `notification.auth.platform.public-key`, nombrando la variable.
+- **FR-005**: El arranque DEBE fallar si falta `notification.auth.platform.public-key`, nombrando la variable. La clave es
+  obligatoria SIEMPRE, también en despliegues que solo usan cookie de sesión (spec 025). Decisión intencional del producto y
+  cambio de despliegue: la imagen, `.github/workflows/ci-cd.yml` y el manual de despliegue deben proveer
+  `AUTH_PLATFORM_PUBLIC_KEY`.
+- **FR-011**: Un token con emisor o audiencia incorrectos (`iss`/`aud`) NO es un caso de claims ausentes: responde
+  `401 AUTHENTICATION_REQUIRED` (razón propia `INVALID_ISSUER_OR_AUDIENCE`), no `AUTHENTICATION_CLAIMS_MISSING`.
+- **FR-012**: El log del rechazo DEBE llevar el mismo código que la respuesta (`AUTHENTICATION_CLAIMS_MISSING` o
+  `AUTHENTICATION_REQUIRED`), no uno fijo.
+- **FR-013**: Roles: el código mantiene los tres existentes (ADMINISTRADOR, OPERADOR, CLIENTE) hasta B2.
 - **FR-006**: Ningún secreto ni clave privada se versiona; las pruebas generan su par RSA en tiempo de ejecución.
 - **FR-007**: Las pruebas automáticas existentes se migran a tokens RS256 sin cambiar su intención ni su cobertura.
 - **FR-008**: El flujo de desarrollo local queda documentado y provisto de un script que genera el par de claves y un
   token con tenant, sujeto y rol elegidos.
-- **FR-009**: README, `.env.example` y `application*.yml` dejan de mencionar el modo local y sus variables.
+- **FR-009**: README, `.env.example`, `application*.yml`, `.gitignore` (comentario sobre `AUTH_JWT_HS256_SECRET`), `docs/` y
+  el diagrama `F05-autenticacion-y-panel-en-vivo.drawio` dejan de mencionar el modo local y sus variables.
 - **FR-010**: Los eventos de rechazo se registran con razón y sin el token; el nombre de la claim ausente puede registrarse.
 
 ### Key Entities
@@ -132,8 +144,14 @@ tokens firmados con un par de claves RSA propio.
 - **SC-001**: Una prueba E2E con dos tenants demuestra que `X-Tenant-Id` no altera el resultado (FR-001).
 - **SC-002**: Pruebas unitarias del validador cubren cada claim ausente y el rol desconocido con el código nuevo; una E2E
   confirma el 401 y que no hay efectos en base de datos (FR-003).
-- **SC-003**: `grep` de `hs256`, `LocalJwt`, `AuthJwt` y `AUTH_JWT` sobre fuentes, pruebas, README y `.env.example` no
-  devuelve resultados (FR-004, FR-009).
+- **SC-003**: `grep` de `hs256`, `LocalJwt`, `AuthJwt` y `AUTH_JWT` sobre fuentes, pruebas, README, `.env.example`,
+  `.gitignore`, `docs/` (incluido `docs/diagramas/secuencias/F05-autenticacion-y-panel-en-vivo.drawio`) y
+  `.github/workflows/` no devuelve resultados (FR-004, FR-009).
+- **SC-006**: Pruebas con nombre: `IdentityFromTokenE2ETest` (FR-001, dos tenants y `X-Tenant-Id` cruzado),
+  `NoPrivateKeyInRepositoryTest` (FR-006: ningún archivo versionado contiene `BEGIN PRIVATE KEY`), unitarias de
+  emisor/audiencia incorrectos que dan `AUTHENTICATION_REQUIRED` (FR-011) y del log de rechazo (FR-012).
+- **SC-007**: CI dispone de una identidad utilizable: el par RSA efímero de las pruebas, sin secretos en el workflow
+  (otras historias dependen de ello).
 - **SC-004**: `./mvnw verify` verde sin secretos compartidos; cobertura >=80 % líneas y >=70 % ramas.
 - **SC-005**: Un desarrollador llega a una llamada autenticada en menos de 5 minutos siguiendo `quickstart.md`.
 

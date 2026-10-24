@@ -39,6 +39,24 @@ Resueltas por el autor (sujetas a aprobación):
 - Q: ¿Qué abre el circuito? -> A: fallos recuperables y errores de transporte del proveedor; los
   `PERMANENT_FAILURE` no cuentan porque no indican caída del proveedor.
 
+Decisiones del usuario (sesión de revisión):
+
+- Roles vigentes: ADMINISTRADOR, OPERADOR y CLIENTE, hasta B2. Esta historia no cambia permisos.
+- Esta historia es dueña de acotar `simulated`: propiedad `notification.provider.simulated.enabled`
+  (`SIMULATED_PROVIDER_ENABLED`, falsa por defecto, verdadera en `application-local.yml` y en el perfil
+  de pruebas) y del orden por defecto del catálogo: proveedor real primero y `simulated` después.
+- Esta historia es dueña del rediseño único de los tipos compartidos del intento y del resultado de
+  despacho (ver plan); las historias posteriores solo añaden campos.
+- Error de transporte: toda excepción del envío salvo `ProviderDisabledException` y
+  `ProviderCircuitOpenException`, que son omisiones. Se trata como `RECOVERABLE_FAILURE` y deja intento.
+  Si todos los candidatos terminan en excepción de transporte, el resultado es el del último, como
+  cualquier ronda agotada (FR-009).
+- Proveedor de la ruta sin adaptador registrado: si es el único problema de la ruta aborta como en 007;
+  en una ruta parcial (hay otros invocables) se omite sin intento y se pasa al siguiente.
+- Circuitos: uno por `providerId`, globales por réplica, no por tenant.
+- Pendientes con dueño: segundo proveedor real por canal (E1/E2), dueño AP, fecha 2026-12-15; circuito
+  compartido entre réplicas, dueño Equipo de backend, fecha 2026-12-15.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Conmutar al siguiente proveedor ante fallo recuperable (Priority: P1)
@@ -162,6 +180,17 @@ despacho cuya ruta lo incluye nunca lo invoca; con `local` o pruebas, está habi
   deshabilitación MUST reflejarse en `disabledReason` y en los proveedores habilitados por canal.
 - **FR-009**: El resultado final tras agotar la ruta MUST ser el del último proveedor intentado, con
   las reglas de estado y de reintento vigentes.
+- **FR-011**: Si todos los candidatos están con circuito abierto, el despacho MUST fallar con
+  `AllProvidersCircuitOpenException`, sin registrar intentos ni métrica de fallo y sin cambiar el
+  estado; el consumidor lo trata como cualquier error de despacho (reintento y DLQ existentes).
+- **FR-012**: Toda excepción de envío distinta de las omisiones MUST tratarse como
+  `RECOVERABLE_FAILURE` (FR-001) y registrarse como intento del proveedor que la lanzó.
+- **FR-013**: Un proveedor de la ruta sin adaptador MUST omitirse sin intento si la ruta tiene otros
+  candidatos invocables; si ninguno lo es, el fallo es el de 007.
+- **FR-014**: El catálogo por defecto MUST declarar el proveedor real primero y `simulated` después.
+- **FR-015**: Los intentos conmutados MAY perderse si falla el guardado final (viven en memoria hasta
+  `persistAndPublish`); en ese caso la reentrega puede repetir el envío por el primer proveedor, riesgo
+  ya aceptado hoy con un solo proveedor.
 - **FR-010**: Ninguna garantía de aislamiento por tenant cambia: la ruta se obtiene por canal y
   tenant como hoy y el failover no cruza tenants ni canales.
 
@@ -190,5 +219,6 @@ despacho cuya ruta lo incluye nunca lo invoca; con `local` o pruebas, está habi
 - No se añade un segundo proveedor real; el segundo proveedor de la prueba E2E es `simulated`
   habilitado por perfil de pruebas con un primer proveedor de prueba que falla.
 - La conmutación es secuencial; no hay envío en paralelo a varios proveedores.
+- Los circuitos son por `providerId` y globales por réplica (no por tenant).
 - Umbral y espera del circuito son configuración por proveedor con valores por defecto razonables.
 - Los cambios de contrato (campo de conmutado en el intento) los aplica el equipo de Contrato.

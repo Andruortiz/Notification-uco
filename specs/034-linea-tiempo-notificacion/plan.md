@@ -19,26 +19,46 @@ Java 25, Spring Boot 4.1 WebFlux, Mongo reactivo. Pruebas: JUnit 5 + `StepVerifi
 ## Constitution Check
 
 - I (hexagonal): enum `FailureCause` y campos nuevos en `core/domain`; el controller solo traduce. Sin Spring en `core`.
-- II (contrato primero): el endpoint nuevo NO se agrega en este trabajo al OpenAPI por indicacion expresa; el controller
-  se implementa despues de que Contrato publique la operacion. Dependencia registrada, ver Riesgos.
-- III: cero comentarios. IV: tarea E2E explicita (abajo). V: commits de una linea. VII: sin excepciones abiertas.
+- II (contrato primero): el carril Contrato publica `GET /notifications/timeline` en `api-notificaciones.yaml` antes de
+  que se implemente el controller; este trabajo no edita ese archivo.
+- III: cero comentarios. IV: tarea E2E explicita (abajo). V: commits de una linea.
+- VII (excepcion): la dependencia de que Contrato publique la operacion y de E3/G2 se acepta de forma temporal. Dueño:
+  Equipo de backend. Fecha limite: 2026-12-15.
 - Consumidores RabbitMQ: no se agregan ni se modifican.
 
 ## Diseno
 
+### Orden de integracion
+
+E3 -> G3 -> G2 -> E10 -> E5. E3 rediseña de una vez `DeliveryAttempt`, `DeliveryAttemptDocument`,
+`NotificationDocumentMapper`, `Notification.mark*`, `AttemptResult` y `Outcome`. Todo lo siguiente es un incremento sobre
+ese rediseño (se rebasa tras E3); no se redefine `failedOver`.
+
 ### Core
 
 - `FailureCause` (enum en `core/domain/valueobject`): `PROVIDER_REJECTED` (resultado permanente del proveedor),
-  `PROVIDER_TEMPORARY` (resultado recuperable), `PROVIDER_DISABLED`, `ATTACHMENTS_UNSUPPORTED`, `RETRIES_EXHAUSTED`
-  (ultimo recuperable que agota reintentos), `UNKNOWN`.
-- `DeliveryAttempt`: nuevos componentes `Long latencyMillis`, `FailureCause failureCause`, `CorrelationId correlationId`,
-  todos opcionales; las fabricas `of(...)` actuales se conservan (nulos) para no romper llamadores ni historicos.
-- `Notification.markDelivered/markRecoverable/markRetriesExhausted/markFailed`: sobrecarga que recibe un
-  `AttemptDetail(latencyMillis, failureCause)`; el `correlationId` del intento se toma de la notificacion.
+  `PROVIDER_TEMPORARY` (resultado recuperable), `ATTACHMENTS_UNSUPPORTED`, `RETRIES_EXHAUSTED` (ultimo recuperable que
+  agota reintentos), `UNKNOWN`. No incluye `PROVIDER_DISABLED`: `ProviderDisabledException` y `ChannelNotAvailableException`
+  hoy no generan intento (solo metrica y `releaseAndPropagate`); si E3/E5 los convierten en intento, se agrega el codigo
+  entonces.
+- Tabla de causas (E5 agregara `AttemptResult.INVALID_RECIPIENT`):
+
+  | Origen | Causa |
+  |---|---|
+  | `PERMANENT_FAILURE` | `PROVIDER_REJECTED` |
+  | `RECOVERABLE_FAILURE` | `PROVIDER_TEMPORARY` |
+  | recuperable que agota reintentos | `RETRIES_EXHAUSTED` |
+  | adjuntos no soportados | `ATTACHMENTS_UNSUPPORTED` |
+  | `INVALID_RECIPIENT` (E5) | `INVALID_RECIPIENT`, que E5 agrega al enum |
+
+- `DeliveryAttempt`: incremento con `Long latencyMillis`, `FailureCause failureCause`, `CorrelationId correlationId`,
+  opcionales, sobre la forma resultante de E3; los historicos quedan en nulo.
+- `Notification.mark*`: incremento sobre las firmas de E3 (hoy 4: `markDelivered`, `markRecoverable`,
+  `markRetriesExhausted`, `markFailed`) con un `AttemptDetail(latencyMillis, failureCause)`; el `correlationId` del intento
+  es el de la notificacion.
 - `DispatchNotificationService`: mide la latencia ya calculada en `attempt(...)` (`System.nanoTime`), la propaga en
-  `Outcome` y mapea causa: `ProviderDisabledException` -> `PROVIDER_DISABLED`; adjuntos no soportados ->
-  `ATTACHMENTS_UNSUPPORTED`; `PERMANENT_FAILURE` -> `PROVIDER_REJECTED`; `RECOVERABLE_FAILURE` -> `PROVIDER_TEMPORARY`
-  o `RETRIES_EXHAUSTED` al agotar. La ruta de reintento manual aplica lo mismo.
+  `Outcome` (de E3) y mapea la causa segun la tabla. Solo despacho automatico: `applyOutcome` pasa siempre `AUTOMATIC`;
+  `retryManually()` no tiene llamadores y el registro manual queda para G2.
 - Consulta: se agrega `getTimeline(GetNotificationTimelineQuery)` a `GetNotificationStatusUseCase` y a
   `GetNotificationStatusService` (ya cableado con el repositorio; evita tocar `UseCaseConfig`). Devuelve
   `NotificationTimelineView` (cabecera + intentos ordenados por `occurredOn`). Filtra por `tenantId`; si no coincide, error
@@ -50,8 +70,11 @@ Java 25, Spring Boot 4.1 WebFlux, Mongo reactivo. Pruebas: JUnit 5 + `StepVerifi
   tolera nulos (documentos previos).
 - `NotificationTimelineResponse` + `TimelineAttemptResponse`; el enmascarado usa `LogSanitizer.maskRecipient` (`utils`) y
   se aplica en el controller segun `principal.role()`: ADMINISTRADOR completo, resto enmascarado.
-- `NotificationController`: `@GetMapping("/timeline")` con `notificationId` por query; reutiliza el patron de `/detail`.
-- `RouteAuthorizationPolicy`: `rule(GET, "/notifications/timeline", Role.OPERADOR)`.
+- `NotificationController` (`adapter/in/rest`): `@GetMapping("/timeline")` con `notificationId` por query; reutiliza el
+  patron de `/detail`.
+- `RouteAuthorizationPolicy` (`adapter/in/web`): `rule(GET, "/notifications/timeline", Role.OPERADOR)`.
+- Matriz de roles: `GET /notifications/detail` sigue en CLIENTE; `GET /notifications/timeline` es OPERADOR. La politica local
+  y la lista de recursos del PDP (script HU2-099) cambian a la vez, en el mismo cambio. Hay 3 roles en el codigo hasta B2.
 - Logs: `DISPATCH_*` nuevos o existentes incluyen `correlationId` y `failureCause` (codigo), nunca el mensaje de la excepcion
   del proveedor ni el destinatario.
 
@@ -66,18 +89,20 @@ Sin otras rutas nuevas. El esquema de `deliveryAttempts` de la busqueda NO cambi
 ## Pruebas (resumen; el desglose va en `tasks.md`)
 
 - Unitarias `core`: `DeliveryAttemptTest`, `NotificationTest` (campos nuevos), `DispatchNotificationServiceTest` (causa y
-  latencia por rama), `GetNotificationStatusServiceTest` (orden, tenant ajeno, sin intentos).
+  latencia por rama automatica), `GetNotificationStatusServiceTest` (orden, tenant ajeno, sin intentos).
 - Integracion: `NotificationMongoAdapterTest` y `NotificationDocumentMapperTest` (ida y vuelta; documento legado sin campos).
 - E2E explicito `NotificationTimelineE2ETest` (`WebTestClient` + Mongo + RabbitMQ): despacho real con proveedor simulado que
-  falla y luego acepta; verifica intentos, causa, latencia, `correlationId`; OPERADOR ve enmascarado, ADMINISTRADOR completo,
-  CLIENTE 403; dos tenants -> 404 sin datos; sembrar un mensaje crudo de proveedor y afirmar que no aparece en respuesta ni
-  en logs capturados; asercion `Duration` < 1 s para 20 intentos (SC-001).
+  falla y luego acepta (sin origen `MANUAL`, que depende de G2); verifica intentos, causa, latencia, `correlationId`;
+  OPERADOR ve enmascarado, ADMINISTRADOR completo, CLIENTE 403; dos tenants -> 404 sin datos; sembrar un mensaje crudo de
+  proveedor y afirmar que no aparece en respuesta ni en logs capturados, con control positivo de que ese log si recoge las
+  lineas `DISPATCH_*`; asercion `Duration` < 1 s para 20 intentos (SC-001).
 - `HexagonalArchitectureTest` y `ModularityTests` en verde.
 
 ## Riesgos
 
 - Contrato primero: el controller no debe fusionarse antes de la operacion en el OpenAPI; `SchemaConformanceTest` fallara si
-  se desfasan.
+  se desfasan. Publica el carril Contrato (excepcion VII, dueño Equipo de backend, 2026-12-15).
+- Se implementa tras E3; antes habria conflicto con su rediseño de `DeliveryAttempt`.
 - Con PEP activo el rol lo decide el PDP: sin aprovisionar el recurso (HU2-099) el acceso se niega o se concede mal.
 - Latencia solo mide la llamada al proveedor, no la cola.
 - Causa gruesa: no distingue timeout de caida del proveedor.

@@ -39,8 +39,9 @@ consultar la linea de tiempo y verificar los dos intentos en orden con todos sus
    intento con resultado `ACCEPTED`, proveedor, latencia en milisegundos, `correlationId` y sin causa de fallo.
 2. **Given** una notificacion con un intento fallido y uno posterior aceptado, **When** consulta, **Then** ve ambos
    ordenados por fecha ascendente y el fallido trae un codigo de causa.
-3. **Given** una notificacion con reintento manual, **When** consulta, **Then** el intento manual aparece con origen
-   `MANUAL` y su ciclo.
+3. (Depende de G2; hoy `AttemptOrigin.MANUAL` no se usa y `Notification.retryManually()` no tiene llamadores, por lo que
+   no se prueba en esta historia.) **Given** una notificacion con reintento manual, **When** consulta, **Then** el intento
+   manual aparece con origen `MANUAL` y su ciclo.
 4. **Given** una notificacion sin intentos aun, **When** consulta, **Then** recibe la cabecera con lista de intentos vacia.
 5. **Given** un id inexistente o de otro tenant, **When** consulta, **Then** recibe 404 sin revelar si existe en otro tenant.
 
@@ -68,7 +69,8 @@ visibles para quien no corresponde.
 
 - Intentos historicos persistidos antes de esta historia: latencia, causa y `correlationId` por intento llegan nulos; la
   respuesta sigue siendo valida y el intento se muestra.
-- Fallo sin latencia medible (proveedor deshabilitado, adjuntos no soportados): latencia nula.
+- Fallo sin latencia medible (adjuntos no soportados por el proveedor): latencia nula. Un proveedor deshabilitado o un
+  canal no disponible no generan intento hoy y por tanto no aparecen en la linea de tiempo.
 - Notificacion con muchos ciclos de reintento: se devuelven todos los intentos sin paginar.
 
 ## Requirements
@@ -80,7 +82,7 @@ visibles para quien no corresponde.
 - **FR-002**: Cada intento MUST incluir fecha, proveedor, resultado, origen, ciclo, latencia en milisegundos (nula si no
   aplica), codigo de causa (nulo si el resultado es `ACCEPTED`) y `correlationId`.
 - **FR-003**: El sistema MUST persistir latencia, causa y `correlationId` por intento al registrar cada intento de despacho
-  y de reintento manual; los documentos previos MUST seguir leyendose.
+  automatico; los documentos previos MUST seguir leyendose. El registro en reintento manual queda para G2.
 - **FR-004**: La causa MUST ser un codigo de un conjunto cerrado y estable; el texto crudo del proveedor y los mensajes de
   excepcion MUST NOT almacenarse, devolverse ni registrarse en logs.
 - **FR-005**: Los intentos MUST ordenarse por fecha ascendente.
@@ -102,7 +104,8 @@ visibles para quien no corresponde.
 `GET /notifications/timeline?notificationId=<id>` -> 200 con `notificationId`, `status`, `channelType`, `recipient`,
 `correlationId`, `attempts[]` (`occurredOn`, `providerId`, `result`, `origin`, `cycle`, `latencyMillis`, `failureCause`,
 `correlationId`); 400 id invalido; 401; 403 rol insuficiente; 404 no encontrada. `failureCause` y `latencyMillis` pueden
-ser `null`. Operacion nueva para el contrato; este trabajo no modifica el archivo OpenAPI.
+ser `null`. Operacion nueva: la publica el carril Contrato en `api-notificaciones.yaml` antes de implementar el controller
+(Principio II); este trabajo no modifica ese archivo.
 
 ## Success Criteria
 
@@ -110,12 +113,18 @@ ser `null`. Operacion nueva para el contrato; este trabajo no modifica el archiv
   responde en menos de 1 s en el entorno de pruebas (prueba automatizada con asercion de `Duration`).
 - **SC-002**: En 100 % de los intentos nuevos, latencia (cuando hay llamada al proveedor), causa (cuando falla) y
   `correlationId` quedan presentes.
-- **SC-003**: Ninguna respuesta ni log de las pruebas contiene el texto crudo del proveedor sembrado.
+- **SC-003**: Ninguna respuesta ni log de las pruebas contiene el texto crudo del proveedor sembrado. Control positivo: la
+  misma prueba afirma que el log capturado si contiene las lineas `DISPATCH_*` del despacho con `correlationId` y causa.
 - **SC-004**: Cero datos de otro tenant en las pruebas con dos tenants.
 
 ## Assumptions
 
-- El `correlationId` de un intento es el de la notificacion salvo que el reintento manual aporte el suyo; ver pregunta abierta.
+- El `correlationId` de un intento es el de la notificacion (hoy solo existe ese); si G2 introduce uno propio por reintento
+  manual, G2 lo define.
+- Secuencia de integracion: E3 (rediseño unico de `DeliveryAttempt`, su documento, el mapper, `Notification.mark*`,
+  `AttemptResult` y `Outcome`) -> G3 -> G2 -> E10 -> E5. Los campos de esta historia son un incremento sobre E3; no se
+  redefine `failedOver`.
+- Hay 3 roles en el codigo hasta B2.
 - La causa se deriva de la categoria del fallo conocida por el despacho, sin cambiar el contrato de los proveedores.
 - Los intentos existentes no se migran.
 - El rol minimo OPERADOR solo se hace efectivo con el PDP si el recurso se aprovisiona (HU2-099); sin PEP lo aplica la politica local.

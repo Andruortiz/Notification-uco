@@ -55,7 +55,7 @@ Un canal con `simulated` y un proveedor real habilitados puede probarse completo
 
 - `providerId` o `channel` desconocidos, o proveedor que no pertenece al canal: 400 `VALIDATION_ERROR`, sin sonda.
 - Proveedor nombrado en el catalogo sin adaptador (`MISSING_ADAPTER`): 200 `FAILED` con `ADAPTER_MISSING`.
-- Segunda prueba del mismo proveedor mientras otra sigue en vuelo en la misma replica: 429. El limite es por replica; uno
+- Segunda prueba del mismo par (canal, proveedor) mientras otra sigue en vuelo en la misma replica: 429. El limite es por replica; uno
   global queda como mejora.
 - `simulated` hoy esta por defecto en los tres canales y su adaptador no tiene perfil; restringirlo es la dependencia D-001.
 

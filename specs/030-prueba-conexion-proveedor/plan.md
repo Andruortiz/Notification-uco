@@ -27,7 +27,7 @@ mide latencia y aplica el limite de tiempo, y un endpoint `POST` de solo ADMINIS
   `CREDENTIALS_MISSING` sin llamar. Si no, `probe().timeout(limite)` con `TimeoutException` -> `TIMEOUT`; cualquier otro error
   inesperado -> `PROVIDER_ERROR`. `latencyMs` = `Clock` antes/despues. `Clock` y `Duration` limite entran por constructor;
   la `Duration` viene de `notification.provider.probe.timeout` y se pasa al construir el servicio.
-- Limite de una prueba en vuelo por proveedor: `AtomicBoolean` por `ProviderId` en el servicio; la segunda recibe un error de
+- Limite de una prueba en vuelo por par (canal, proveedor), porque `simulated` es el mismo id en los tres canales: `AtomicBoolean` por esa clave en el servicio; la segunda recibe un error de
   dominio que el controller mapea a 429. Es por replica.
 - Identidad (FR-007): el caso de uso no la recibe; el controller la toma de la sesion y escribe el log estructurado con
   `correlationId`, tenant e identidad junto al resultado.
@@ -53,7 +53,7 @@ mide latencia y aplica el limite de tiempo, y un endpoint `POST` de solo ADMINIS
 | POST | `/provider-connection-tests` | ADMINISTRADOR | `testProviderConnection` | available |
 
 Respuestas: 200 resultado (tambien cuando la prueba falla), 400 `VALIDATION_ERROR`, 401, 403, 429 (ya hay una prueba en
-vuelo para ese proveedor; el limite es por replica), 503 `PepUnavailable`. Cabecera `X-Correlation-Id` como el resto.
+vuelo para ese par canal/proveedor; el limite es por replica), 503 `PepUnavailable`. Cabecera `X-Correlation-Id` como el resto.
 Debe entrar en `protected-resources.json` y quedar vinculado a `PERFIL_ADMINISTRADOR` al re-ejecutar el script de
 aprovisionamiento del PDP (HU2-099); sin eso, con PEP activo, ADMINISTRADOR no tendria el recurso.
 
@@ -66,7 +66,7 @@ Respuesta 200:
 `{ "providerId": "brevo", "channel": "EMAIL", "status": "OK"|"FAILED", "latencyMs": 142, "errorCode": null|"AUTH_REJECTED"|... }`
 
 La UI muestra `latencyMs` siempre y traduce `errorCode` a un texto propio; no existe ningun campo con credenciales ni detalle
-crudo del proveedor. 403 -> ocultar el boton; 429 -> "prueba en curso" (el limite es por replica, asi que la UI no debe asumir exclusion global).
+crudo del proveedor. 403 -> ocultar el boton; 429 -> "prueba en curso" para ese canal y proveedor; otros canales siguen disponibles (el limite es por replica, asi que la UI no debe asumir exclusion global).
 
 ## Pruebas
 
@@ -77,14 +77,15 @@ crudo del proveedor. 403 -> ocultar el boton; 429 -> "prueba en curso" (el limit
 - Seguridad: unitaria de `RouteAuthorizationPolicy` (ADMINISTRADOR minimo) y, ademas, prueba con el modo de autorizacion
   realmente activo (PEP con doble del PDP, como en las pruebas de HU2-103): CLIENTE y OPERADOR reciben 403 y la sonda no se
   invoca; ADMINISTRADOR recibe 200 (control positivo).
-- Concurrencia: dos pruebas simultaneas del mismo proveedor -> una 200 y otra 429; tras terminar, una nueva vuelve a dar 200.
+- Concurrencia: dos pruebas simultaneas del mismo par canal/proveedor -> una 200 y otra 429; `simulated` en dos canales distintos a la vez -> ambas 200; tras terminar, una nueva vuelve a dar 200.
 - Metrica `notification.provider.probe`: prueba que se incrementa con tags `providerId` y `status` y que ninguna etiqueta
   contiene la credencial sentinela.
 - Adaptador FCM: con credencial revocada en el doble, `probe()` falla aunque haya un token cacheado vigente.
 - Tenant: dos tenants distintos prueban el mismo proveedor; el resultado es identico y el log de cada uno solo lleva su tenant.
 - **T-E2E** `ProviderConnectionTestE2ETest` (`@SpringBootTest` RANDOM_PORT + Testcontainers Mongo y RabbitMQ + `WebTestClient`,
   patron `NotificationLiveUpdatesE2ETest`): ADMINISTRADOR prueba `simulated` en los tres canales con `ACCEPTED` y con fallo,
-  asercion `Duration` < 1 s; prueba un real contra doble HTTP; CLIENTE y OPERADOR -> 403 con el modo de autorizacion activo; no se crea ninguna notificacion en Mongo; con el perfil de
+  asercion `Duration` < 1 s; sonda simulada lenta con `notification.provider.probe.timeout` reducido por propiedad (p. ej. 300 ms)
+-> `FAILED`/`TIMEOUT` con asercion `Duration` <= limite + 1 s (SC-001); prueba un real contra doble HTTP; CLIENTE y OPERADOR -> 403 con el modo de autorizacion activo; no se crea ninguna notificacion en Mongo; con el perfil de
   pruebas hay >= 2 proveedores por canal.
 - Arquitectura: `HexagonalArchitectureTest` y `ModularityTests` en verde.
 

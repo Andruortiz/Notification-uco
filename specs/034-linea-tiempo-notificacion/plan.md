@@ -30,15 +30,22 @@ Java 25, Spring Boot 4.1 WebFlux, Mongo reactivo. Pruebas: JUnit 5 + `StepVerifi
 
 ### Orden de integracion
 
-E3 -> G3 -> G2 -> E10 -> E5. E3 rediseña de una vez `DeliveryAttempt`, `DeliveryAttemptDocument`,
-`NotificationDocumentMapper`, `Notification.mark*`, `AttemptResult` y `Outcome`. Todo lo siguiente es un incremento sobre
-ese rediseño (se rebasa tras E3); no se redefine `failedOver`.
+E3 -> G3 -> G2 -> E10 -> E5. E3 rediseña de una vez los tipos compartidos (plan 031, seccion "Tipos compartidos") y esta
+historia se rebasa tras E3. Nombres finales de E3: `ProviderResult(result, providerId, latencyMillis, messageId, cause)` en
+`core.port.out` (`NotificationSenderPort.send` devuelve `Mono<ProviderResult>`), `Outcome(ProviderResult last,
+List<ProviderResult> failedOver)`, `AttemptRecord(result, origin, providerId, failedOver, latencyMillis, failureCause,
+correlationId, messageId)`; `Notification.mark*` y `recordFailedOver` reciben un `AttemptRecord`; `DeliveryAttempt`,
+`DeliveryAttemptDocument` y el mapper ya traen `failedOver`, `latencyMillis`, `failureCause`, `correlationId` y `messageId`.
 
 ### Core
 
-- `FailureCause` (enum en `core/domain/valueobject`): `PROVIDER_REJECTED` (resultado permanente del proveedor),
-  `PROVIDER_TEMPORARY` (resultado recuperable), `ATTACHMENTS_UNSUPPORTED`, `RETRIES_EXHAUSTED` (ultimo recuperable que
-  agota reintentos), `UNKNOWN`. No incluye `PROVIDER_DISABLED`: `ProviderDisabledException` y `ChannelNotAvailableException`
+- Esta historia no añade campos ni firmas: rellena `latencyMillis`, `failureCause` y `correlationId`, que E3 deja nulos, y
+  los expone en la linea de tiempo. Los intentos conmutados ya conservan latencia y causa en `Outcome.failedOver`.
+- `FailureCause` (enum de E3 en `core/domain/valueobject`, con `TRANSPORT_ERROR` y `PROVIDER_ERROR`): se reutiliza y se
+  amplia con `PROVIDER_REJECTED` (resultado permanente del proveedor), `PROVIDER_TEMPORARY` (resultado recuperable),
+  `ATTACHMENTS_UNSUPPORTED`, `RETRIES_EXHAUSTED` (ultimo recuperable que agota reintentos), `UNKNOWN`. Los valores de E3 se
+  conservan tal cual para los fallos que E3 clasifique (transporte, error del proveedor); la tabla siguiente aplica cuando
+  el proveedor solo devuelve el resultado sin causa. No incluye `PROVIDER_DISABLED`: `ProviderDisabledException` y `ChannelNotAvailableException`
   hoy no generan intento (solo metrica y `releaseAndPropagate`); si E3/E5 los convierten en intento, se agrega el codigo
   entonces.
 - Tabla de causas (E5 agregara `AttemptResult.INVALID_RECIPIENT`):
@@ -51,15 +58,10 @@ ese rediseño (se rebasa tras E3); no se redefine `failedOver`.
   | adjuntos no soportados | `ATTACHMENTS_UNSUPPORTED` |
   | `INVALID_RECIPIENT` (E5) | `INVALID_RECIPIENT`, que E5 agrega al enum |
 
-- Forma de E3 (propuesta en su plan, nombres por confirmar): `Outcome(ProviderResult last, List<FailedProvider> failedOver)`;
-  `Notification.mark*` y `recordFailedOver` reciben un unico `AttemptRecord`; `DeliveryAttempt`, `DeliveryAttemptDocument` y
-  `NotificationDocumentMapper` se construyen desde `AttemptRecord`.
-- Esta historia solo añade campos opcionales `Long latencyMillis`, `FailureCause failureCause` y `CorrelationId correlationId`
-  a `AttemptRecord`, `DeliveryAttempt`, `DeliveryAttemptDocument` y al componente de `ProviderResult` que los transporta;
-  no hay firmas nuevas de `mark*` ni `AttemptDetail`. Los historicos quedan en nulo. El `correlationId` del intento es el de
-  la notificacion.
+- Los historicos quedan en nulo. El `correlationId` del intento (`String` en `AttemptRecord`) es el de la notificacion.
 - `DispatchNotificationService`: mide la latencia ya calculada en `attempt(...)` (`System.nanoTime`), la pone en el
-  `ProviderResult` y mapea la causa segun la tabla al construir el `AttemptRecord`. Solo despacho automatico: `applyOutcome` pasa siempre `AUTOMATIC`;
+  `ProviderResult`, completa `cause` segun la tabla cuando viene nula y construye el `AttemptRecord` con `latencyMillis`,
+  `failureCause` y `correlationId`. Solo despacho automatico: `applyOutcome` pasa siempre `AUTOMATIC`;
   `retryManually()` no tiene llamadores y el registro manual queda para G2.
 - Consulta: se agrega `getTimeline(GetNotificationTimelineQuery)` a `GetNotificationStatusUseCase` y a
   `GetNotificationStatusService` (ya cableado con el repositorio; evita tocar `UseCaseConfig`). Devuelve
@@ -68,8 +70,8 @@ ese rediseño (se rebasa tras E3); no se redefine `failedOver`.
 
 ### Infrastructure
 
-- `DeliveryAttemptDocument`: campos `latencyMillis`, `failureCause` (String), `correlationId` (String); `NotificationDocumentMapper`
-  tolera nulos (documentos previos).
+- `DeliveryAttemptDocument` y `NotificationDocumentMapper` ya traen los campos desde E3 y toleran nulos (documentos previos);
+  aqui solo se prueba la ida y vuelta con valores.
 - `NotificationTimelineResponse` + `TimelineAttemptResponse`; el enmascarado usa `LogSanitizer.maskRecipient` (`utils`) y
   se aplica en el controller segun `principal.role()`: ADMINISTRADOR completo, resto enmascarado.
 - `NotificationController` (`adapter/in/rest`): `@GetMapping("/timeline")` con `notificationId` por query; reutiliza el

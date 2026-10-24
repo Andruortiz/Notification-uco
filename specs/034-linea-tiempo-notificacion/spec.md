@@ -122,8 +122,8 @@ ser `null`. Operacion nueva: la publica el carril Contrato en `api-notificacione
 - El `correlationId` de un intento es el de la notificacion (hoy solo existe ese); si G2 introduce uno propio por reintento
   manual, G2 lo define.
 - Secuencia de integracion: E3 (rediseño unico de `DeliveryAttempt`, su documento, el mapper, `Notification.mark*`,
-  `AttemptResult` y `Outcome`) -> G3 -> G2 -> E10 -> E5. Los campos de esta historia son un incremento sobre E3; no se
-  redefine `failedOver`.
+  `AttemptResult` y `Outcome`) -> G3 -> G2 -> E10 -> E5. E3 crea los campos de latencia, causa y `correlationId`
+  (nulos); esta historia los rellena y los expone, sin redefinir `failedOver`.
 - Hay 3 roles en el codigo hasta B2.
 - La causa se deriva de la categoria del fallo conocida por el despacho, sin cambiar el contrato de los proveedores.
 - Los intentos existentes no se migran.

@@ -80,7 +80,7 @@ Esta historia hace el rediseño único; G3, G2, E10 y E5 solo rellenan campos, e
   Long latencyMillis, FailureCause failureCause, String correlationId, String messageId)`. Los cuatro
   últimos opcionales: `latencyMillis`, `failureCause` y `correlationId` reservados a G3, `messageId` a
   E10; `failedOver` lo fija E3. Fábricas `AttemptRecord.of(result, origin, providerId)` (failedOver falso,
-  resto nulo) y `AttemptRecord.from(ProviderResult, origin)`.
+  resto nulo) y `AttemptRecord.from(ProviderResult, origin, providerId)`, que recibe el `providerId` como parámetro porque `ProviderResult.of(result)` lo deja nulo; `DispatchNotificationService` lo aporta desde el candidato invocado.
 
 `core.domain.valueobject`:
 
@@ -106,7 +106,7 @@ Infraestructura:
   `messageId`; `NotificationDocumentMapper` los copia en ambos sentidos. Un documento viejo sin esos
   campos se lee con `failedOver=false` y opcionales nulos.
 - `AttemptResult` sigue enum cerrado; E5 añade `INVALID_RECIPIENT`. Se deben revisar TODOS los `switch`
-  y mapeos sobre `AttemptResult`, entre ellos `MicrometerNotificationMetrics.resultLabel` (exhaustivo
+  y mapeos sobre `AttemptResult`, entre ellos `NotificationMetricsPort` (recibe `AttemptResult`) y `MicrometerNotificationMetrics.resultLabel` (exhaustivo
   sin `default`), `ProviderLogs`, `applyOutcome` (lo no reconocido se trata como fallo permanente) y
   `DeliveryAttemptDocument`.
 
@@ -180,6 +180,7 @@ Control positivo: el caso "simulated deshabilitado" se acompaña del caso habili
 - Mezclar mensajería de apertura del circuito con reintentos de la cola puede duplicar espera; la
   política cuenta solo rondas (FR-006), no es un riesgo de agotar reintentos por conmutación.
 - Circuito en memoria por instancia: cada réplica aprende por separado. Aceptado para esta historia.
+- El rediseño toca unas 28 llamadas a `DeliveryAttempt.of` en 8 archivos de prueba y unas 22 a `Notification.mark*` en 5 archivos de prueba: las fábricas `of` de 4 y 5 argumentos se conservan, los `mark*` cambian de firma a `AttemptRecord`.
 
 ## Estructura de archivos
 

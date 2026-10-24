@@ -2,78 +2,74 @@
 
 **Feature Branch**: `feature/HU2-121-panel-salud-proveedores`
 **Created**: 2026-10-24
-**Status**: Draft
-**Historia**: HU2-121 (rol OP, P1). Se alimenta de las métricas de [020](../020-observabilidad-completa/spec.md#FR-003) y del Prometheus de [021](../021-dashboard-observabilidad/spec.md#FR-006).
+**Status**: Draft (corregido tras revisión)
+**Historia**: HU2-121 (rol OP, P1). Se alimenta de las métricas de [020](../020-observabilidad-completa/spec.md#FR-003) y del Prometheus de [021](../021-dashboard-observabilidad/spec.md#FR-006). Se implementa después de E3 (circuito y failedOver).
 
 ## Clarifications
 
 - Q1: Vista propia ligera: una tabla por proveedor leída de Prometheus, con enlace a Grafana. No es un tablero nuevo ni un motor de alertas.
-- Q2: Sin métricas nuevas. Todo se deriva de `notification_dispatched_total`, `notification_provider_duration_seconds` y `notification_errors_total` (020). Si falta una señal, se documenta y no se instrumenta aquí.
-- Q3: Las métricas no llevan `tenantId` ([020 FR-008](../020-observabilidad-completa/spec.md)). La salud es global de la plataforma, no por tenant: es el estado del proveedor, no del cliente. Ver supuesto A1.
-- Q4: "Último error" es el código `NTF-n` del catálogo `ErrorCode` con su categoría y el instante aproximado; nunca texto del proveedor ni datos personales.
-- Q5: Rol mínimo `OPERADOR`. El enlace a Grafana solo se entrega a quien lo ve permitido por política (A3).
-- Q6: Fuera de alcance: página de estado pública (H6) y alertas (G9); dependen de este contrato pero no se construyen.
+- Q2: Sin métricas nuevas ni cambios a 020. Todo se deriva de `notification_dispatched_total{channel,provider,result}` y `notification_provider_duration_seconds{provider,result}`. `notification_errors_total` NO sirve para proveedores: solo registra errores de despacho sin proveedor (`provider=none`) y de reencolado.
+- Q3: Las métricas no llevan `tenantId` ([020 FR-008](../020-observabilidad-completa/spec.md)). La salud es global de plataforma (A1).
+- Q4: "Último error" se limita a lo derivable de `result` (`recoverable` o `failed`) y su instante aproximado. No hay código `NTF-n` de proveedor ni texto del proveedor. El esquema deja `code` y `category` opcionales para cuando una historia posterior instrumente errores por proveedor.
+- Q5: Rol mínimo `OPERADOR` (el código tiene 3 roles hasta que B2 cambie el modelo).
+- Q6: Fuera de alcance: página de estado (H6), alertas (G9), y el circuito abierto y `failedOver` (E3). El esquema los admite como extensión: estado `CIRCUIT_OPEN` y campo `failedOver`, sin construirlos aquí.
 
 ## User Scenarios & Testing
 
 ### User Story 1 - Ver la salud de cada proveedor (Priority: P1)
 
-Como OP quiero ver, por proveedor, su estado, tasa de éxito, latencia y último error para detectar problemas antes de que los clientes los reporten.
+Como OP quiero ver, por proveedor y canal, estado, tasa de éxito, latencia y último error para detectar problemas antes de que los clientes los reporten.
 
-**Independent Test**: Con Prometheus real y el proveedor simulado en `ACCEPTED`, luego en fallo, consultar el panel y comprobar que la tasa de éxito, la latencia y el último error reflejan lo despachado.
+**Independent Test**: Con Prometheus real y el proveedor simulado en `ACCEPTED` y luego en `PERMANENT_FAILURE`, consultar el panel y comprobar tasa, latencia y último error.
 
 **Acceptance Scenarios**:
 
-1. **Given** despachos recientes de un proveedor, **When** el OP consulta el panel, **Then** ve una fila por proveedor con canal, estado, tasa de éxito (%) y latencia p95 de la ventana.
-2. **Given** un proveedor con fallos recuperables recientes, **When** se consulta, **Then** el estado es `DEGRADED` y el último error muestra su código `NTF-n`, categoría e instante.
-3. **Given** un proveedor sin despachos en la ventana, **When** se consulta, **Then** el estado es `UNKNOWN` y no se inventa tasa ni latencia (campos nulos).
-4. **Given** el contrato de respuesta, **When** se inspecciona, **Then** ningún campo contiene texto crudo de proveedor, destinatario, `tenantId` ni credenciales.
+1. **Given** despachos recientes, **When** el OP consulta, **Then** ve una fila por proveedor/canal con estado, tasa de éxito y latencia p95.
+2. **Given** un proveedor con intentos `recoverable` o `failed` recientes, **When** se consulta, **Then** el estado es `DEGRADED` o `DOWN` y `lastError` indica `result` (`recoverable` o `failed`) y el instante.
+3. **Given** un proveedor sin volumen suficiente en la ventana, **When** se consulta, **Then** el estado es `UNKNOWN` y tasa y latencia son nulas.
+4. **Given** un proveedor desactivado por configuración o falta de credenciales, **When** se consulta, **Then** no cuenta como `DOWN` (ver FR-003).
+5. **Given** el contrato, **When** se inspecciona, **Then** ningún campo contiene texto crudo del proveedor, destinatario, `tenantId` ni credenciales.
 
 ### User Story 2 - Saltar a Grafana (Priority: P2)
 
-Como OP quiero un enlace al tablero de Grafana de 021 para profundizar en un proveedor.
-
-**Acceptance Scenarios**:
-
-1. **Given** Grafana configurado, **When** se consulta el panel, **Then** la respuesta incluye la URL del tablero con el proveedor como variable.
-2. **Given** Grafana no configurado, **When** se consulta, **Then** el campo es nulo y la tabla sigue funcionando.
+1. **Given** Grafana configurado, **When** se consulta, **Then** la respuesta incluye la URL del tablero `notification-service` (021) con el proveedor codificado en la URL.
+2. **Given** Grafana no configurado, **When** se consulta, **Then** `grafanaUrl` es nulo y la tabla funciona.
 
 ### User Story 3 - Degradación ordenada si Prometheus no responde (Priority: P2)
 
-**Acceptance Scenarios**:
-
-1. **Given** Prometheus caído o lento, **When** se consulta, **Then** la respuesta es 503 con código `NTF-` de infraestructura y `correlationId`, sin cuelgue más allá del tiempo límite.
+1. **Given** Prometheus caído o lento, **When** se consulta, **Then** responde 503 con `INFRASTRUCTURE_ERROR` (5000) y `correlationId`, dentro del tiempo límite, sin la URL de Prometheus en cuerpo ni logs de respuesta.
 
 ### Edge Cases
 
-- Proveedor que aparece en el catálogo pero nunca despachó: aparece como `UNKNOWN` (si el catálogo es consultable) o no aparece (A2).
-- Contadores reiniciados por reinicio de réplica: `increase()` los tolera; la tabla no muestra tasas negativas.
-- Varias réplicas: Prometheus agrega con `sum by (provider, channel)`.
+- Contadores reiniciados por reinicio de réplica: `increase()` los tolera.
+- Varias réplicas: agregación con `sum by`.
+- Proveedor configurado pero inactivo, o que nunca despachó: no aparece (A2). El catálogo real cambia con E3; se revisa entonces (real primero).
 
 ## Requirements
 
-- **FR-001**: El servicio MUST exponer `GET /provider-health` que devuelve una fila por proveedor/canal con `provider`, `channel`, `status` (`HEALTHY`, `DEGRADED`, `DOWN`, `UNKNOWN`), `successRate`, `latencyP95Millis`, `lastError` (`code`, `category`, `at`) y `windowSeconds`.
-- **FR-002**: Todo valor MUST calcularse con consultas a Prometheus sobre las métricas 020; no se registran métricas nuevas ni se persiste estado.
-- **FR-003**: `status` MUST derivarse de umbrales configurables sobre la tasa de éxito y el volumen mínimo de la ventana; sin volumen suficiente es `UNKNOWN`. Los valores por defecto se fijan en el plan.
-- **FR-004**: `lastError.code` MUST ser un valor del catálogo `ErrorCode` y `category` su `FailureCategory`; nunca mensaje de excepción ni cuerpo del proveedor.
-- **FR-005**: La consulta a Prometheus MUST pasar por un puerto de salida de `core`; el adaptador HTTP vive en `infrastructure`; `core` no depende de Spring.
-- **FR-006**: El endpoint MUST requerir rol `OPERADOR`; el `tenantId` y el rol salen de la sesión del PDP, nunca de parámetros de la petición.
-- **FR-007**: Los datos personales MUST aparecer enmascarados salvo para `ADMINISTRADOR`. Este panel no expone ninguno; la prueba lo afirma.
-- **FR-008**: La respuesta MUST incluir `grafanaUrl` (nulo si no está configurada) y MUST tener un tiempo límite de consulta a Prometheus configurable; al excederlo responde 503.
-- **FR-009**: Los nombres de proveedor y las etiquetas usadas en PromQL MUST ser de catálogo cerrado o validarse contra el patrón del catálogo para evitar inyección de PromQL.
-- **FR-010**: Contrato: el endpoint nuevo `GET /provider-health` lo define el equipo de Contrato en `api-notificaciones.yaml` antes del controller (Principio II). Esta historia no edita ese archivo.
+- **FR-001**: El servicio MUST exponer `GET /provider-health` con, por proveedor/canal: `provider`, `channel`, `status` (`HEALTHY`, `DEGRADED`, `DOWN`, `UNKNOWN`; `CIRCUIT_OPEN` reservado), `successRate`, `sampleCount`, `latencyP95Millis`, `lastError` (`result`, `at`; `code` y `category` opcionales reservados) y `windowSeconds`. `failedOver` reservado como extensión.
+- **FR-002**: Todo valor MUST calcularse con consultas a Prometheus sobre las métricas de Q2; no se registran métricas ni se persiste estado.
+- **FR-003**: Semántica de la tasa: `delivered / (delivered + failed)` por `provider,channel` en la ventana; los intentos `recoverable` se excluyen del denominador porque son reintentos de la misma notificación y no un veredicto del proveedor, pero cuentan como señal de degradación (si `recoverable` supera el umbral configurable de la proporción de intentos, el estado baja a `DEGRADED`). El volumen es `delivered + failed`. Los fallos por proveedor desactivado (`ProviderDisabledException`) no se distinguen en la métrica; se excluyen si el plan encuentra una señal para hacerlo; si no, queda como límite documentado y el estado `DOWN` de un proveedor desactivado se anota en el contrato (D3 del plan).
+- **FR-004**: `lastError` MUST derivarse solo de `result` y el instante; nunca mensaje de excepción ni cuerpo del proveedor.
+- **FR-005**: La consulta MUST pasar por un puerto de salida de `core`; el adaptador HTTP vive en `infrastructure`; `core` sin Spring.
+- **FR-006**: El endpoint MUST requerir rol `OPERADOR` mediante la regla de ruta del PEP/PDP (`RouteAuthorizationPolicy`); la identidad llega por la sesión del PDP y no de parámetros. El panel no usa `tenantId` porque la salud es global.
+- **FR-007**: El enmascarado de datos personales por rol queda sin objeto para este endpoint: no expone datos personales. Una prueba lo afirma; el requisito se cumple por ausencia de datos.
+- **FR-008**: La respuesta MUST incluir `grafanaUrl` (nulo si no hay) y la consulta a Prometheus MUST tener tiempo límite configurable; al excederlo, 503.
+- **FR-009**: Todo `provider` y `channel` leídos de Prometheus MUST validarse contra el patrón del catálogo (`^[a-z0-9][a-z0-9_-]{0,63}$`) antes de devolverse o de usarse en una URL; los inválidos se descartan. La URL de Prometheus solo viene de configuración, nunca de la petición, y nunca aparece en el 503 ni en logs de respuesta.
+- **FR-010**: El endpoint nuevo `GET /provider-health` lo define Contrato en `api-notificaciones.yaml` antes del controller (Principio II). Esta historia no edita ese archivo. La latencia p95 solo existe por proveedor (la métrica no tiene `channel`): se repite en cada canal del mismo proveedor y el contrato lo documenta.
 
 ## Success Criteria
 
-- **SC-001**: Con Prometheus alcanzable, la respuesta llega en ≤2 s (aserción explícita de `Duration` en la prueba E2E).
-- **SC-002**: En la prueba E2E con proveedor simulado, la tasa de éxito calculada coincide con lo despachado (±0), y un fallo inducido pasa el estado a `DEGRADED` o `DOWN` en la siguiente consulta tras un scrape.
-- **SC-003**: Ninguna respuesta contiene texto fuera del catálogo en `lastError`; verificado con un error cuyo mensaje incluye un correo y un token.
-- **SC-004**: Un usuario con rol `CLIENTE` recibe 403; con `OPERADOR`, 200.
+- **SC-001**: Con Prometheus alcanzable, la respuesta llega en ≤2 s (aserción de `Duration` en la E2E).
+- **SC-002**: En la E2E con proveedor simulado, la tasa coincide con lo despachado y un lote en `PERMANENT_FAILURE` baja el estado a `DOWN` en la consulta siguiente a un scrape, con `lastError.result = failed`.
+- **SC-003**: Ninguna respuesta contiene texto fuera de los campos definidos; verificado con un fallo cuyo mensaje incluye un correo y un token, y con una etiqueta `provider` inválida inyectada que se descarta.
+- **SC-004**: `CLIENTE` recibe 403; `OPERADOR`, 200.
 
 ## Assumptions
 
-- **A1**: La salud es de plataforma (sin tenant), porque las métricas no llevan `tenantId`. Un tenant no ve a otros: el panel no contiene datos de tenant. Si se quisiera salud por tenant, haría falta una métrica nueva (fuera de alcance).
-- **A2**: La lista de proveedores sale de las etiquetas presentes en Prometheus, no del catálogo Mongo, para no duplicar fuentes.
-- **A3**: La UI vive en `Front-Notification-mfe` (repo aparte); aquí solo se define el contrato que consumirá.
-- **A4**: El instante de `lastError.at` es aproximado a la resolución del paso de `query_range` (60 s) porque los contadores no guardan marca de tiempo.
-- **A5**: Prometheus es alcanzable desde el servicio por URL configurable (`PROMETHEUS_URL`), sin credenciales en repositorio.
+- **A1**: Salud global de plataforma; por tenant requeriría una métrica nueva (fuera de alcance).
+- **A2**: Los proveedores salen de las etiquetas de Prometheus: los configurados pero inactivos o sin tráfico no aparecen (en vez de `UNKNOWN`). Límite aceptado; el catálogo de `application.yml` cambia con E3 y se reevalúa entonces.
+- **A3**: La UI vive en `Front-Notification-mfe` (repo aparte); aquí solo el contrato.
+- **A4**: `lastError.at` tiene resolución de 60 s porque los contadores no guardan marca de tiempo.
+- **A5**: `PROMETHEUS_URL` y `GRAFANA_URL` por variables de entorno.
+- **A6**: Excepción (Principio VII): el código de error por proveedor y la exclusión de proveedores desactivados dependen de instrumentación futura. Dueño: Equipo de backend; fecha: 2026-12-15.

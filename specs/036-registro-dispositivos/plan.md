@@ -142,3 +142,10 @@ Java 25, Spring Boot 4, WebFlux, Mongo reactivo. `javax.crypto` del JDK (AES-256
 - Decision 4: no hay `TokenProtectionPort`; `AesGcmTokenProtection` vive en `infrastructure` y la mascara es `TokenMask` en `core`. Sin claves, `local` y `test` usan claves efimeras (no sirven para datos persistentes) y los demas perfiles no arrancan.
 - Decision 5: el AAD de los campos de la notificacion es `tenantId|notificationId|campo`; `GET /notifications/stream` tambien devuelve `recipientId` y lo enmascara igual.
 - Decision 10: solo contadores `devices.removed{reason}`; el gauge `devices.active` queda pendiente (dueno Equipo de backend, 2026-12-15).
+
+## Decisiones conocidas y deuda
+
+- Versiones de clave: la spec no las exige como requisito; solo se cifra con la version actual y un documento con otra version o clave se lee como `[unreadable]` (aviso con tenantId, notificationId y keyVersion, metrica `encryption.unreadable` sin etiquetas). El descifrado con claves anteriores y la rotacion de la clave de huella (que exige reindexar `tokenFingerprint` y `recipientIdFingerprint`) quedan pendientes: dueno Seguridad, fecha 2026-12-15.
+- Reasignacion de token: la spec (Q3, FR-013) la define: registrar un token ya existente en el tenant lo deja asociado a la sesion que lo registra, con 200 y sin 409. Cubierta por `DeviceRegistryE2ETest` y `DeviceMongoAdapterTest`. La base legal de este comportamiento la confirma el responsable de datos.
+- Claves efimeras: solo si todos los perfiles activos son `local` o `test`; con cualquier otro perfil, o ninguno, el arranque falla.
+- Deuda: dos beans `DispatchNotificationUseCase` (el de `UseCaseConfig` queda sin uso hasta el cableado); el indice `(tenantId, recipientIdFingerprint)` es disperso y propio de PUSH, sin huella para `recipientAddress`.

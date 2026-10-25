@@ -7,6 +7,7 @@ import co.edu.uco.notification.core.domain.template.TemplateVariable;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.MissingTemplateVariablesException;
 import co.edu.uco.notification.core.exception.TemplateArchivedException;
+import co.edu.uco.notification.core.exception.TemplateLimitExceededException;
 import co.edu.uco.notification.core.exception.TemplateNotFoundException;
 import co.edu.uco.notification.core.port.in.RenderTemplateUseCase;
 import co.edu.uco.notification.core.port.in.RenderedTemplate;
@@ -17,6 +18,9 @@ import java.util.Map;
 import reactor.core.publisher.Mono;
 
 public final class RenderTemplateService implements RenderTemplateUseCase {
+
+  public static final int MAX_VALUES = 50;
+  public static final int MAX_VALUE_LENGTH = 2000;
 
   private final TemplateRepository templateRepository;
 
@@ -29,6 +33,10 @@ public final class RenderTemplateService implements RenderTemplateUseCase {
   public Mono<RenderedTemplate> render(
       final TenantId tenantId, final TemplateId templateId, final Map<String, String> values) {
     final Map<String, String> safeValues = values == null ? Map.of() : values;
+    if (safeValues.size() > MAX_VALUES
+        || safeValues.values().stream().anyMatch(v -> v != null && v.length() > MAX_VALUE_LENGTH)) {
+      return Mono.error(new TemplateLimitExceededException("values exceed the allowed limits"));
+    }
     return templateRepository
         .findById(tenantId, templateId)
         .switchIfEmpty(Mono.error(TemplateNotFoundException::new))

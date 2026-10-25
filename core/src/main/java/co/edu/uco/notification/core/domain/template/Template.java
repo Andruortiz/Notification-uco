@@ -8,6 +8,7 @@ import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -50,6 +51,7 @@ public record Template(
       final Instant now) {
     Preconditions.requireNonBlank(key, "key must not be blank");
     Preconditions.requireNonBlank(language, "language must not be blank");
+    final String normalizedLanguage = language.toLowerCase(Locale.ROOT);
     requireLimit(key.length() <= MAX_KEY, "key exceeds " + MAX_KEY + " characters");
     requireLimit(
         language.length() >= 2 && language.length() <= 10, "language must have 2 to 10 characters");
@@ -62,7 +64,7 @@ public record Template(
         key,
         category,
         channel,
-        language,
+        normalizedLanguage,
         subject,
         body,
         variables,

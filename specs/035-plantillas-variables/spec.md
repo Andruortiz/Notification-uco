@@ -106,7 +106,7 @@ Un tenant no ve, edita ni renderiza plantillas de otro. El tenant sale de la ses
   sintaxis invalida (`INVALID_TEMPLATE_SYNTAX`).
 - **FR-005**: El sistema MUST validar que el canal tenga ruta activa para el tenant y que la categoria sea una de las cuatro.
 - **FR-006**: El sistema MUST garantizar unicidad por `(tenant, clave, canal, idioma)` y responder 409 al duplicar.
-- **FR-007**: El render MUST responder 422 con `missingVariables` (todas las faltantes) si falta una obligatoria; opcionales vacias.
+- **FR-007**: El render MUST responder 422 con `missingVariables` (todas las faltantes) si falta una obligatoria; opcionales vacias. Una variable cuenta como entregada con cualquier valor no nulo, incluida la cadena vacia; solo ausente o `null` es faltante. El mapa `values` admite hasta 50 entradas y 2000 caracteres por valor; si se excede, 400 `TEMPLATE_LIMIT_EXCEEDED`. El idioma se normaliza a minusculas (`es` y `ES` son la misma plantilla).
 - **FR-008**: El render MUST sustituir en una sola pasada y tratar los valores como texto literal.
 - **FR-009**: El sistema MUST permitir listar (filtros categoria, canal, idioma, estado), consultar detalle, actualizar y archivar.
 - **FR-010**: El tenant MUST salir de la sesion; toda consulta y escritura MUST filtrar por el.

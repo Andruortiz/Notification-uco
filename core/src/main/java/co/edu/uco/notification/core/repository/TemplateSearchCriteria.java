@@ -21,6 +21,7 @@ public record TemplateSearchCriteria(
 
   public TemplateSearchCriteria {
     Preconditions.requireNonNull(tenantId, "tenantId must not be null");
+    language = language == null ? null : language.toLowerCase(java.util.Locale.ROOT);
     Preconditions.requireTrue(page >= 0, "page must not be negative");
     if (size < 1 || size > MAX_SIZE) {
       throw new TemplateLimitExceededException("size must be between 1 and " + MAX_SIZE);

@@ -74,6 +74,10 @@ Testcontainers (Mongo), `WebTestClient` | **Alcance**: backend; la UI (repo apar
 | Seguridad de ruta | una prueba por ruta de `RouteAuthorizationPolicy` (OPERADOR para escritura, CLIENTE para lectura y render) |
 | Arquitectura | `HexagonalArchitectureTest` y `ModularityTests` en verde |
 
+## Cambios de contrato requeridos
+
+- Contrato debe anadir `maxProperties: 50` a `RenderTemplateRequest.values` y `maxLength: 2000` a sus valores, y documentar la normalizacion del idioma a minusculas.
+
 ## Riesgos y dependencias
 
 - Bloqueo por el YAML de Contrato (Principio II) y por el wiring externo (Equipo de backend, 2026-12-15).

@@ -426,6 +426,64 @@ class TemplateE2ETest {
     assertFalse(documents.contains(SENTINEL));
   }
 
+  @Test
+  void invalidListingFiltersAnswerWithTheValidationCode() {
+    final Reply category =
+        call(HttpMethod.GET, "/templates?category=NOPE", tenantA, Role.CLIENTE, null);
+    final Reply status =
+        call(HttpMethod.GET, "/templates?status=NOPE", tenantA, Role.CLIENTE, null);
+
+    assertEquals(400, category.status());
+    assertEquals("NTF-1004", category.body().get("code").asString());
+    assertEquals(400, status.status());
+    assertEquals("NTF-1004", status.body().get("code").asString());
+    assertEquals(
+        200,
+        call(HttpMethod.GET, "/templates?category=ACADEMICO", tenantA, Role.CLIENTE, null)
+            .status());
+  }
+
+  @Test
+  void languageCaseVariantsAreTheSameTemplateAndTheFilterIgnoresCase() {
+    assertEquals(
+        201,
+        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("lang", "ES"))
+            .status());
+    final Reply duplicate =
+        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("lang", "es"));
+
+    assertEquals(409, duplicate.status());
+    assertEquals("NTF-3051", duplicate.body().get("code").asString());
+    final Reply listed =
+        call(HttpMethod.GET, "/templates?language=Es", tenantA, Role.CLIENTE, null);
+    assertEquals(1, listed.body().get("items").size());
+    assertEquals("es", listed.body().get("items").get(0).get("language").asString());
+  }
+
+  @Test
+  void renderWithTooManyValuesIsRejectedWithTheLimitCode() {
+    final String id =
+        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("limits", "es"))
+            .body()
+            .get("templateId")
+            .asString();
+    final java.util.Map<String, String> values = new java.util.HashMap<>();
+    for (int i = 0; i < 51; i++) {
+      values.put("v" + i, "x");
+    }
+
+    final Reply reply =
+        call(
+            HttpMethod.POST,
+            "/template-renders",
+            tenantA,
+            Role.CLIENTE,
+            Map.of("templateId", id, "values", values));
+
+    assertEquals(400, reply.status());
+    assertEquals("NTF-1009", reply.body().get("code").asString());
+  }
+
   private static Map<String, Object> newTemplate(final String key, final String language) {
     return Map.of(
         "key", key,

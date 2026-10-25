@@ -133,10 +133,10 @@ public class TemplateController {
                 queryUseCase.list(
                     new TemplateSearchCriteria(
                         principal.tenantId(),
-                        category == null ? null : TemplateCategory.valueOf(category),
+                        category == null ? null : parse(TemplateCategory.class, category),
                         channel == null ? null : ChannelType.of(channel),
                         language,
-                        status == null ? null : TemplateStatus.valueOf(status),
+                        status == null ? null : parse(TemplateStatus.class, status),
                         page,
                         size)))
         .map(TemplateListResponse::from);
@@ -174,6 +174,14 @@ public class TemplateController {
                 renderUseCase.render(
                     principal.tenantId(), TemplateId.of(request.templateId()), request.values()))
         .map(RenderedTemplateResponse::from);
+  }
+
+  private static <E extends Enum<E>> E parse(final Class<E> type, final String value) {
+    try {
+      return Enum.valueOf(type, value);
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("invalid " + type.getSimpleName() + " filter", e);
+    }
   }
 
   private static List<TemplateVariable> variablesOf(final List<VariableDto> variables) {

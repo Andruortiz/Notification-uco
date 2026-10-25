@@ -282,6 +282,69 @@ class TemplateServicesTest {
   }
 
   @Test
+  void anEmptyStringCountsAsDeliveredForARequiredVariable() {
+    final Template created = create.create(command("k", "[{{nombre}}]", null, List.of())).block();
+
+    assertEquals("[]", render.render(TENANT, created.id(), Map.of("nombre", "")).block().body());
+    final Map<String, String> withNull = new java.util.HashMap<>();
+    withNull.put("nombre", null);
+    assertThrows(
+        MissingTemplateVariablesException.class,
+        () -> render.render(TENANT, created.id(), withNull).block());
+  }
+
+  @Test
+  void renderRejectsTooManyValuesOrTooLongValues() {
+    final Template created = create.create(command("k", "Hola", null, List.of())).block();
+    final Map<String, String> many = new java.util.HashMap<>();
+    for (int i = 0; i <= RenderTemplateService.MAX_VALUES; i++) {
+      many.put("v" + i, "x");
+    }
+
+    assertThrows(
+        TemplateLimitExceededException.class,
+        () -> render.render(TENANT, created.id(), many).block());
+    assertThrows(
+        TemplateLimitExceededException.class,
+        () ->
+            render
+                .render(
+                    TENANT,
+                    created.id(),
+                    Map.of("a", "x".repeat(RenderTemplateService.MAX_VALUE_LENGTH + 1)))
+                .block());
+    assertEquals(
+        "Hola",
+        render
+            .render(
+                TENANT,
+                created.id(),
+                Map.of("a", "x".repeat(RenderTemplateService.MAX_VALUE_LENGTH)))
+            .block()
+            .body());
+  }
+
+  @Test
+  void languageIsNormalizedToLowercaseSoCaseVariantsAreTheSameTemplate() {
+    final Template created =
+        create
+            .create(
+                new CreateTemplateCommand(
+                    TENANT, "k", TemplateCategory.ACADEMICO, EMAIL, "ES-co", null, "b", List.of()))
+            .block();
+
+    assertEquals("es-co", created.language());
+    StepVerifier.create(
+            create.create(
+                new CreateTemplateCommand(
+                    TENANT, "k", TemplateCategory.ACADEMICO, EMAIL, "es-CO", null, "b", List.of())))
+        .expectError(TemplateAlreadyExistsException.class)
+        .verify();
+    assertEquals("es-co", update.update(updateOf(created, 0L, "c", List.of())).block().language());
+    assertEquals(1, query.list(criteria(TENANT, null, "ES-CO", 0, 20)).block().items().size());
+  }
+
+  @Test
   void securityCategoryIsCritical() {
     final Template created =
         create

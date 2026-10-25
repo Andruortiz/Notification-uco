@@ -18,9 +18,11 @@ proceso existía desde el inicio.
 
 El canal EMAIL entrega adjuntos por Brevo. Los envia como Base64 dentro de la solicitud al proveedor.
 
-- **Activacion:** el proveedor por defecto del canal es el simulado, que no envia nada. Para entregar de
-  verdad, definir `NOTIFICATION_EMAIL_PROVIDERS=brevo` y las variables `BREVO_API_KEY`,
-  `BREVO_SENDER_EMAIL` y `BREVO_SENDER_NAME`.
+- **Activacion:** el orden por defecto del canal es `brevo,simulated`. Definir las variables `BREVO_API_KEY`,
+  `BREVO_SENDER_EMAIL` y `BREVO_SENDER_NAME` para entregar de verdad. `simulated` no envia nada y solo esta
+  habilitado con `SIMULATED_PROVIDER_ENABLED=true` (falso por defecto; verdadero en el perfil `local` y en
+  pruebas). En un despliegue sin credenciales reales y con `simulated` deshabilitado, el despacho falla con
+  `ProviderDisabledException` y el mensaje sigue el camino de reintento y DLQ.
 - **Limite:** Brevo admite menos de 4 MB de adjuntos por correo transaccional. Se aplica ese limite como
   **suma de todos los adjuntos** (4 000 000 bytes), en dos puntos: al aceptar la notificacion, con el
   esquema del canal (`attachmentsTotalBytes` y `sizeBytes`, 400 con el motivo), y al despachar, donde un

@@ -80,7 +80,7 @@ Esta historia hace el rediseño único; G3, G2, E10 y E5 solo rellenan campos, e
   Long latencyMillis, FailureCause failureCause, String correlationId, String messageId)`. Los cuatro
   últimos opcionales: `latencyMillis`, `failureCause` y `correlationId` reservados a G3, `messageId` a
   E10; `failedOver` lo fija E3. Fábricas `AttemptRecord.of(result, origin, providerId)` (failedOver falso,
-  resto nulo) y `AttemptRecord.from(ProviderResult, origin, providerId)`, que recibe el `providerId` como parámetro porque `ProviderResult.of(result)` lo deja nulo; `DispatchNotificationService` lo aporta desde el candidato invocado.
+  resto nulo). El paso de `ProviderResult` a `AttemptRecord` no vive en `AttemptRecord` (para no importar puertos desde `core.domain`): lo hace `DispatchNotificationService.recordOf(ProviderResult)` (paquete-privado, origen `AUTOMATIC`, `providerId` tomado del resultado ya completado con el candidato invocado), usado en `applyOutcome` para los conmutados y el resultado final.
 
 `core.domain.valueobject`:
 
@@ -144,7 +144,7 @@ Infraestructura:
 
 | Nivel | Qué |
 |---|---|
-| Unitaria `core` (`DispatchNotificationServiceTest`) | A recuperable y B acepta; A y B recuperables; A permanente sin conmutar; A acepta y B sin invocar; deshabilitado y circuito abierto omitidos sin intento; todos omitidos y error; orden del historial; el presupuesto de reintentos no cuenta `failedOver` (FR-006). `StepVerifier`. |
+| Unitaria `core` (`DispatchFailoverTest`) | A recuperable y B acepta; A y B recuperables; A permanente sin conmutar; A acepta y B sin invocar; deshabilitado y circuito abierto omitidos sin intento; todos omitidos y error; orden del historial; el presupuesto de reintentos no cuenta `failedOver` (FR-006). `StepVerifier`. |
 | Unitaria `core` (`NotificationTest`) | `recordFailedOver` y `recoverableAttemptsInCurrentCycle`. |
 | Unitaria infra | `CircuitBreakerNotificationSenderTest`: abre al umbral, no invoca abierto, semiabierto cierra con éxito, permanentes no abren, circuitos independientes. Tiempo de omisión con aserción de `Duration` (SC-002). |
 | Integración | Mapeo Mongo de `failedOver` con Testcontainers, incluyendo documento viejo sin el campo. |

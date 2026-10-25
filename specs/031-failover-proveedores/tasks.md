@@ -34,7 +34,7 @@
 
 ## Fase 5: Pruebas nuevas
 
-- [x] T019 [P] `DispatchNotificationServiceTest`: A recuperable y B acepta; A y B recuperables; A permanente sin conmutar; A acepta y B sin invocar; deshabilitado y circuito abierto omitidos sin intento; todos abiertos lanza `AllProvidersCircuitOpenException` sin métrica ni cambio de estado; orden del historial; excepción de transporte; ruta parcial con proveedor sin adaptador; ruta sin invocables (FR-001 a FR-004, FR-009 a FR-013).
+- [x] T019 [P] `DispatchFailoverTest`: A recuperable y B acepta; A y B recuperables; A permanente sin conmutar; A acepta y B sin invocar; deshabilitado y circuito abierto omitidos sin intento; todos abiertos lanza `AllProvidersCircuitOpenException` sin métrica ni cambio de estado; orden del historial; excepción de transporte; ruta parcial con proveedor sin adaptador; ruta sin invocables (FR-001 a FR-004, FR-009 a FR-013).
 - [x] T020 [P] `NotificationTest`: `recordFailedOver` y `recoverableAttemptsInCurrentCycle` (FR-006).
 - [x] T021 [P] `RequeuePendingNotificationsServiceTest`: intentos `failedOver` no cuentan para el agotamiento.
 - [x] T022 [P] `CircuitBreakerNotificationSenderTest`: abre al umbral, no invoca abierto, semiabierto cierra con éxito, permanentes no abren, circuitos independientes, aserción de `Duration` de la omisión (SC-002).

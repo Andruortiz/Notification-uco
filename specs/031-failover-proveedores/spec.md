@@ -155,7 +155,8 @@ despacho cuya ruta lo incluye nunca lo invoca; con `local` o pruebas, está habi
 - Dos hilos despachan la misma notificación: `reserveForDispatch` ya lo impide; la conmutación ocurre
   dentro de una única reserva.
 - El proveedor siguiente no soporta adjuntos y la notificación los lleva: se trata como hoy (rechazo
-  permanente de ese proveedor, sin conmutar más).
+  permanente de ese proveedor, sin conmutar más). Decisión aceptada: un proveedor sin soporte de adjuntos
+  devuelve `PERMANENT_FAILURE` sin conmutar al siguiente.
 - El proveedor lanza un error de transporte (excepción): se trata como fallo recuperable para la
   conmutación y el circuito.
 - La notificación falla en el guardado tras conmutar: aplican las garantías de persistencia de hoy; no

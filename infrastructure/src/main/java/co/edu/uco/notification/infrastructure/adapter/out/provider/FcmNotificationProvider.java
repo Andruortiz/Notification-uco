@@ -89,11 +89,7 @@ public class FcmNotificationProvider implements NotificationSenderPort, Provider
 
   private static Mono<ProbeOutcome> probeFailure(final Throwable error) {
     if (error instanceof FcmAccessTokenProvider.AuthorizationRejectedException rejected) {
-      final int status = rejected.status();
-      return Mono.just(
-          status == 400 || status == 401 || status == 403
-              ? ProbeOutcome.failed(ProbeErrorCode.AUTH_REJECTED)
-              : ProbeOutcome.failed(ProbeErrorCode.PROVIDER_ERROR));
+      return Mono.just(ProviderProbes.ofTokenStatus(rejected.status()));
     }
     return Mono.just(ProviderProbes.ofError(error));
   }

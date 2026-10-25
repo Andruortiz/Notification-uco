@@ -43,6 +43,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import reactor.core.publisher.Mono;
 
@@ -70,7 +71,7 @@ class ProviderConnectionTestControllerTest {
   }
 
   @Autowired private WebTestClient webTestClient;
-  @Autowired private MeterRegistry meterRegistry;
+  @MockitoSpyBean private MeterRegistry meterRegistry;
 
   @MockitoBean private TestProviderConnectionUseCase testProviderConnectionUseCase;
 
@@ -191,6 +192,66 @@ class ProviderConnectionTestControllerTest {
         .expectBody()
         .jsonPath("$.code")
         .isEqualTo("NTF-3060");
+  }
+
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(
+      strings = {
+        "{}",
+        "{\"channel\":null,\"providerId\":\"brevo\"}",
+        "{\"channel\":\"\",\"providerId\":\"brevo\"}",
+        "{\"channel\":\"  \",\"providerId\":\"brevo\"}",
+        "{\"channel\":\"EMAIL\"}",
+        "{\"channel\":\"EMAIL\",\"providerId\":null}",
+        "{\"channel\":\"EMAIL\",\"providerId\":\"\"}",
+        "{\"channel\":\"EMAIL\",\"providerId\":\"   \"}"
+      })
+  void missingNullEmptyOrBlankFieldsAreBadRequestsNeverServerErrors(final String json) {
+    webTestClient
+        .post()
+        .uri("/provider-connection-tests")
+        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(json)
+        .exchange()
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.code")
+        .isEqualTo("NTF-1004");
+    verifyNoInteractions(testProviderConnectionUseCase);
+  }
+
+  @Test
+  void anUnknownChannelIsABadRequestWithItsOwnCode() {
+    when(testProviderConnectionUseCase.test(any(), any()))
+        .thenReturn(
+            Mono.error(
+                new co.edu.uco.notification.core.exception.ChannelNotAvailableException(
+                    ChannelType.of("FAX"))));
+
+    post(TestTokens.bearer("tenant-1"), Map.of("channel", "FAX", "providerId", "brevo"))
+        .expectStatus()
+        .isBadRequest()
+        .expectBody()
+        .jsonPath("$.code")
+        .isEqualTo("NTF-1003");
+  }
+
+  @Test
+  void aFailingMeterRegistryOrLoggerDoesNotTurnAFinishedTestIntoAServerError() {
+    when(testProviderConnectionUseCase.test(any(), any())).thenReturn(Mono.just(result(null)));
+    org.mockito.Mockito.doThrow(new IllegalStateException("registry down"))
+        .when(meterRegistry)
+        .counter(
+            org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.<String>any());
+
+    post(TestTokens.bearer("tenant-1"), Map.of("channel", "EMAIL", "providerId", "brevo"))
+        .expectStatus()
+        .isOk()
+        .expectBody()
+        .jsonPath("$.status")
+        .isEqualTo("OK");
   }
 
   @Test

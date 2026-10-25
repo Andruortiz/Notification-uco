@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.client.reactive.ReactorClientHttpConnector;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 import reactor.netty.http.client.HttpClient;
 import reactor.test.StepVerifier;
 
@@ -292,6 +293,13 @@ class ProviderProbeAdaptersTest {
         .verify();
     assertEquals("cached", tokens.accessToken().block());
     assertEquals(2, authServer.requests().size());
+  }
+
+  @Test
+  void anEmptyStatusIsReportedAsProviderError() {
+    StepVerifier.create(ProviderProbes.classify(Mono.empty()))
+        .assertNext(outcome -> assertFailed(outcome, ProbeErrorCode.PROVIDER_ERROR))
+        .verifyComplete();
   }
 
   @Test

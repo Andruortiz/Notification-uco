@@ -61,9 +61,28 @@ public class ProviderConnectionTestController {
       final CorrelationId correlationId,
       final ProviderProbeResult result) {
     final String status = result.isOk() ? "OK" : "FAILED";
-    meterRegistry
-        .counter(METRIC_NAME, "providerId", result.providerId().value(), "status", status)
-        .increment();
+    isolated(
+        () ->
+            meterRegistry
+                .counter(METRIC_NAME, "providerId", result.providerId().value(), "status", status)
+                .increment());
+    isolated(() -> log(principal, correlationId, result, status));
+  }
+
+  private static boolean isolated(final Runnable telemetry) {
+    try {
+      telemetry.run();
+      return true;
+    } catch (final RuntimeException telemetryFailure) {
+      return false;
+    }
+  }
+
+  private static void log(
+      final AuthenticatedPrincipal principal,
+      final CorrelationId correlationId,
+      final ProviderProbeResult result,
+      final String status) {
     try (LogContext ignored =
         LogContext.open(correlationId, LogSanitizer.safe(principal.tenantId().value()), null)) {
       LOGGER.info(

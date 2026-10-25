@@ -27,6 +27,12 @@ final class ProviderProbes {
     return ProbeOutcome.failed(ProbeErrorCode.PROVIDER_ERROR);
   }
 
+  static ProbeOutcome ofTokenStatus(final int status) {
+    return status == 400 || status == 401 || status == 403
+        ? ProbeOutcome.failed(ProbeErrorCode.AUTH_REJECTED)
+        : ProbeOutcome.failed(ProbeErrorCode.PROVIDER_ERROR);
+  }
+
   static ProbeOutcome ofError(final Throwable error) {
     return error instanceof WebClientRequestException || error instanceof IOException
         ? ProbeOutcome.failed(ProbeErrorCode.UNREACHABLE)

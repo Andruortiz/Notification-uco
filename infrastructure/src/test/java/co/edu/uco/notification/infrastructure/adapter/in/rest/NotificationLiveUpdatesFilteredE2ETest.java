@@ -2,10 +2,12 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import co.edu.uco.notification.core.domain.AttemptRecord;
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationDocument;
@@ -128,7 +130,13 @@ class NotificationLiveUpdatesFilteredE2ETest {
               final Notification reloaded =
                   notificationRepository.findById(outsideFilter.notificationId()).block();
               publishTransition(
-                  reloaded, n -> n.markFailed(AttemptOrigin.AUTOMATIC, ProviderId.of("simulated")));
+                  reloaded,
+                  n ->
+                      n.markFailed(
+                          AttemptRecord.of(
+                              AttemptResult.PERMANENT_FAILURE,
+                              AttemptOrigin.AUTOMATIC,
+                              ProviderId.of("simulated"))));
             })
         .assertNext(
             event -> {

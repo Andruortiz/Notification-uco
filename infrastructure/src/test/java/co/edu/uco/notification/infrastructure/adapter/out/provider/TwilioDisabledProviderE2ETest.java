@@ -100,13 +100,15 @@ class TwilioDisabledProviderE2ETest {
     fakeTwilio.reset();
   }
 
-  private ChannelRoute awaitSmsRoute(final String preferredProvider) {
+  private ChannelRoute awaitSmsRoute(final String preferredProvider, final int size) {
     final ProviderId expected = ProviderId.of(preferredProvider);
     final Instant deadline = Instant.now().plus(Duration.ofSeconds(40));
     while (Instant.now().isBefore(deadline)) {
       final ChannelRoute route =
           channelCatalogPort.findActiveRoute(ChannelType.of("SMS"), TenantId.of(TENANT)).block();
-      if (route != null && route.preferredProvider().equals(expected)) {
+      if (route != null
+          && route.preferredProvider().equals(expected)
+          && route.providers().size() == size) {
         return route;
       }
     }
@@ -175,9 +177,9 @@ class TwilioDisabledProviderE2ETest {
 
   @Test
   void theDefaultConfigurationSeedsTheSmsChannelAndDeliversThroughTheSimulatedProvider() {
-    final ChannelRoute route = awaitSmsRoute("simulated");
+    final ChannelRoute route = awaitSmsRoute("twilio", 2);
 
-    assertEquals(List.of(ProviderId.of("simulated"), ProviderId.of("twilio")), route.providers());
+    assertEquals(List.of(ProviderId.of("twilio"), ProviderId.of("simulated")), route.providers());
     assertTrue(route.contentSchema().contains("\"maxLength\":160"));
 
     final String notificationId = acceptSms("sms-default-1");
@@ -194,11 +196,9 @@ class TwilioDisabledProviderE2ETest {
         mongoTemplate.findById("SMS", ChannelCatalogDocument.class).block();
     assertNotNull(seeded);
     mongoTemplate
-        .save(
-            new ChannelCatalogDocument(
-                "SMS", List.of("twilio", "simulated"), seeded.contentSchema()))
+        .save(new ChannelCatalogDocument("SMS", List.of("twilio"), seeded.contentSchema()))
         .block();
-    awaitSmsRoute("twilio");
+    awaitSmsRoute("twilio", 1);
 
     final String notificationId = acceptSms("sms-disabled-1");
     final Message deadLettered = awaitDeadLetteredMessage(notificationId);

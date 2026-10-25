@@ -24,6 +24,7 @@ import co.edu.uco.notification.core.port.in.RequeuePendingNotificationsUseCase;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationMongoAdapter;
@@ -84,11 +85,11 @@ class DispatchIdempotencyE2ETest {
     private final Map<String, AtomicInteger> sends = new ConcurrentHashMap<>();
 
     @Override
-    public Mono<AttemptResult> send(final Notification notification) {
+    public Mono<ProviderResult> send(final Notification notification) {
       sends
           .computeIfAbsent(notification.notificationId().value(), key -> new AtomicInteger())
           .incrementAndGet();
-      return Mono.just(AttemptResult.ACCEPTED);
+      return Mono.just(ProviderResult.of(AttemptResult.ACCEPTED));
     }
 
     int sendsOf(final NotificationId id) {

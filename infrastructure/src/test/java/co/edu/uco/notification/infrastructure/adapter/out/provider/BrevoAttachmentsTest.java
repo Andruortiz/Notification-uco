@@ -130,7 +130,7 @@ class BrevoAttachmentsTest {
 
     StepVerifier.create(
             provider.send(notificationWith(List.of(embedded("nota.txt", content, content.length)))))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final JsonNode attachment = sentBody().get("attachment");
@@ -148,7 +148,7 @@ class BrevoAttachmentsTest {
 
     StepVerifier.create(
             provider.send(notificationWith(List.of(stored(content, Sha256Digest.of(content))))))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final JsonNode attachment = sentBody().get("attachment");
@@ -168,7 +168,7 @@ class BrevoAttachmentsTest {
                     List.of(
                         embedded("a.txt", first, first.length),
                         embedded("b.txt", second, second.length)))))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final JsonNode attachment = sentBody().get("attachment");
@@ -179,7 +179,7 @@ class BrevoAttachmentsTest {
   @Test
   void aNotificationWithoutAttachmentsDoesNotSendTheField() throws Exception {
     StepVerifier.create(provider.send(notificationWith(List.of())))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertFalse(sentBody().has("attachment"));
@@ -198,7 +198,9 @@ class BrevoAttachmentsTest {
                             "grande.txt",
                             content,
                             BrevoNotificationProvider.MAX_ATTACHMENTS_BYTES + 1)))))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -213,7 +215,9 @@ class BrevoAttachmentsTest {
             provider.send(
                 notificationWith(
                     List.of(embedded("a.txt", content, half), embedded("b.txt", content, half)))))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -231,7 +235,7 @@ class BrevoAttachmentsTest {
                             "limite.txt",
                             content,
                             BrevoNotificationProvider.MAX_ATTACHMENTS_BYTES)))))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());
@@ -244,7 +248,9 @@ class BrevoAttachmentsTest {
 
     StepVerifier.create(
             provider.send(notificationWith(List.of(stored(content, Sha256Digest.of(content))))))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -259,7 +265,9 @@ class BrevoAttachmentsTest {
 
     StepVerifier.create(
             provider.send(notificationWith(List.of(stored(content, Sha256Digest.of(content))))))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -273,7 +281,9 @@ class BrevoAttachmentsTest {
     when(storage.read(KEY, "etag-1")).thenReturn(Mono.just(content));
 
     StepVerifier.create(provider.send(notificationWith(List.of(stored(content, other)))))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -290,7 +300,9 @@ class BrevoAttachmentsTest {
 
     StepVerifier.create(
             provider.send(notificationWith(List.of(stored(content, Sha256Digest.of(content))))))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.RECOVERABLE_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());

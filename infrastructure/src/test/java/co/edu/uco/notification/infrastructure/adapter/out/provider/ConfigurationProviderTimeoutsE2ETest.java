@@ -112,7 +112,8 @@ class ConfigurationProviderTimeoutsE2ETest {
   void beforeAnyChangeASlowCallIsWithinTheStartupTimeout() {
     FAKE_BREVO.nextDelay(SLOW_RESPONSE_MS);
 
-    final AttemptResult result = brevoProvider.send(notification()).block(Duration.ofSeconds(15));
+    final AttemptResult result =
+        brevoProvider.send(notification()).block(Duration.ofSeconds(15)).result();
 
     assertEquals(AttemptResult.ACCEPTED, result);
   }
@@ -134,13 +135,14 @@ class ConfigurationProviderTimeoutsE2ETest {
     assertTrue(
         adoption.compareTo(POLL_INTERVAL.plus(ADOPTION_MARGIN)) < 0, "adoption took " + adoption);
 
-    assertEquals(AttemptResult.ACCEPTED, inFlight.get());
+    assertEquals(AttemptResult.ACCEPTED, inFlight.get().result());
     assertTrue(
         Duration.between(start, Instant.now()).compareTo(Duration.ofMillis(SLOW_RESPONSE_MS - 200))
             >= 0);
 
     final Instant nextStart = Instant.now();
-    final AttemptResult next = brevoProvider.send(notification()).block(Duration.ofSeconds(15));
+    final AttemptResult next =
+        brevoProvider.send(notification()).block(Duration.ofSeconds(15)).result();
     final Duration elapsed = Duration.between(nextStart, Instant.now());
 
     assertEquals(AttemptResult.RECOVERABLE_FAILURE, next);

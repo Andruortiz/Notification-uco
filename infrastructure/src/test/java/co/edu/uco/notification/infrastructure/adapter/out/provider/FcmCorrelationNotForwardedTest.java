@@ -87,7 +87,7 @@ class FcmCorrelationNotForwardedTest {
     assertNotNull(notification.correlationId());
 
     StepVerifier.create(provider().send(notification))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, fcmServer.requests().size());
@@ -106,7 +106,7 @@ class FcmCorrelationNotForwardedTest {
   @Test
   void theMessageHasNeitherDataNorAnalyticsLabelFields() {
     StepVerifier.create(provider().send(pushWith(CorrelationId.of(CORRELATION_ID))))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final String body = fcmServer.requests().get(0).body();

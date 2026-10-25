@@ -180,7 +180,9 @@ class FcmPushDeliveryE2ETest {
     while (Instant.now().isBefore(deadline)) {
       final ChannelRoute route =
           channelCatalogPort.findActiveRoute(ChannelType.of("PUSH"), TenantId.of(TENANT)).block();
-      if (route != null && route.preferredProvider().equals(expected)) {
+      if (route != null
+          && route.preferredProvider().equals(expected)
+          && route.providers().size() == providers.length) {
         return;
       }
     }
@@ -307,7 +309,7 @@ class FcmPushDeliveryE2ETest {
 
   @Test
   void deliversThroughFcmAndRecordsItsProviderId() {
-    preferProviders("fcm", "simulated");
+    preferProviders("fcm");
 
     final String notificationId =
         accept(pushRequest("push-ok-1", RECIPIENT, "Pedido enviado", "Tu pedido salio hoy"));
@@ -339,7 +341,7 @@ class FcmPushDeliveryE2ETest {
   @Test
   void anUnregisteredDeviceEndsInFailedAfterASingleCallWithoutRetries()
       throws InterruptedException {
-    preferProviders("fcm", "simulated");
+    preferProviders("fcm");
     fakeFcm.nextResponse(404, fcmError(404, "NOT_FOUND", "UNREGISTERED"));
 
     final String notificationId = accept(pushRequest("push-404-1", RECIPIENT, null, "Hola"));
@@ -352,7 +354,7 @@ class FcmPushDeliveryE2ETest {
 
   @Test
   void anInvalidArgumentEndsInFailedStatus() {
-    preferProviders("fcm", "simulated");
+    preferProviders("fcm");
     fakeFcm.nextResponse(400, fcmError(400, "INVALID_ARGUMENT", "INVALID_ARGUMENT"));
 
     final String notificationId = accept(pushRequest("push-400-1", RECIPIENT, null, "Hola"));
@@ -362,7 +364,7 @@ class FcmPushDeliveryE2ETest {
 
   @Test
   void anUnavailableProviderEndsInRecoverableStatus() {
-    preferProviders("fcm", "simulated");
+    preferProviders("fcm");
     fakeFcm.nextResponse(503, fcmError(503, "UNAVAILABLE", "UNAVAILABLE"));
 
     final String notificationId = accept(pushRequest("push-503-1", RECIPIENT, null, "Hola"));
@@ -372,7 +374,7 @@ class FcmPushDeliveryE2ETest {
 
   @Test
   void aTitleOf100AndABodyOf900CharactersAreAcceptedAndDelivered() {
-    preferProviders("fcm", "simulated");
+    preferProviders("fcm");
 
     final String notificationId =
         accept(pushRequest("push-limit-1", RECIPIENT, "t".repeat(100), "b".repeat(900)));
@@ -383,7 +385,7 @@ class FcmPushDeliveryE2ETest {
 
   @Test
   void aTitleOrBodyOverTheChannelLimitIsRejectedAtAcceptanceWithoutCallingFcm() {
-    preferProviders("fcm", "simulated");
+    preferProviders("fcm");
 
     assertRejectedAtAcceptance(
         pushRequest("push-title-101", RECIPIENT, "t".repeat(101), "Hola"), "100");
@@ -395,7 +397,7 @@ class FcmPushDeliveryE2ETest {
 
   @Test
   void aNotificationWithoutSubjectIsSentWithoutTitle() {
-    preferProviders("fcm", "simulated");
+    preferProviders("fcm");
 
     final String notificationId = accept(pushRequest("push-notitle-1", RECIPIENT, null, "Hola"));
 
@@ -405,7 +407,7 @@ class FcmPushDeliveryE2ETest {
 
   @Test
   void aRecipientThatIsNotADeviceTokenIsSentAsIsAndEndsInFailed() {
-    preferProviders("fcm", "simulated");
+    preferProviders("fcm");
     fakeFcm.nextResponse(400, fcmError(400, "INVALID_ARGUMENT", "INVALID_ARGUMENT"));
 
     final String notificationId =
@@ -418,7 +420,7 @@ class FcmPushDeliveryE2ETest {
 
   @Test
   void noCredentialTokenContentOrFullDeviceTokenLeaksIntoLogsOrPublishedEvents() {
-    preferProviders("fcm", "simulated");
+    preferProviders("fcm");
     final String secretTitle = "TituloSecretoE2E";
     final String secretBody = "CuerpoSecretoE2E";
 

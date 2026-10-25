@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.exception.ProviderDisabledException;
+import co.edu.uco.notification.infrastructure.config.SimulatedProviderProperties;
 import org.junit.jupiter.api.Test;
 import reactor.test.StepVerifier;
 
@@ -26,27 +28,29 @@ class SimulatedNotificationProviderTest {
   void sendReturnsTheConfiguredResult() {
     final SimulatedNotificationProvider provider =
         new SimulatedNotificationProvider(
-            new SimulatedProviderProperties(AttemptResult.RECOVERABLE_FAILURE));
+            new SimulatedProviderProperties(AttemptResult.RECOVERABLE_FAILURE, true));
 
     StepVerifier.create(provider.send(aNotification()))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.RECOVERABLE_FAILURE, providerResult.result()))
         .verifyComplete();
   }
 
   @Test
   void resultDefaultsToAcceptedWhenNotConfigured() {
     final SimulatedNotificationProvider provider =
-        new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null, true));
 
     StepVerifier.create(provider.send(aNotification()))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
   }
 
   @Test
   void sendRejectsNullNotification() {
     final SimulatedNotificationProvider provider =
-        new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null, true));
 
     assertThrows(NullPointerException.class, () -> provider.send(null));
   }
@@ -54,15 +58,26 @@ class SimulatedNotificationProviderTest {
   @Test
   void declaresTheSimulatedProviderId() {
     final SimulatedNotificationProvider provider =
-        new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null, true));
 
     assertEquals(ProviderId.of("simulated"), provider.providerId());
   }
 
   @Test
-  void isNeverDisabled() {
+  void isDisabledWhenNotEnabledAndRefusesToSend() {
     final SimulatedNotificationProvider provider =
-        new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null, false));
+
+    assertTrue(provider.disabledReason().isPresent());
+    StepVerifier.create(provider.send(aNotification()))
+        .expectError(ProviderDisabledException.class)
+        .verify();
+  }
+
+  @Test
+  void isEnabledWhenConfiguredEnabled() {
+    final SimulatedNotificationProvider provider =
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null, true));
 
     assertTrue(provider.disabledReason().isEmpty());
   }
@@ -70,7 +85,7 @@ class SimulatedNotificationProviderTest {
   @Test
   void supportsAttachments() {
     final SimulatedNotificationProvider provider =
-        new SimulatedNotificationProvider(new SimulatedProviderProperties(null));
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null, true));
 
     assertTrue(provider.supportsAttachments());
   }

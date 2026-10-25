@@ -214,7 +214,7 @@ class FcmNotificationProviderTest {
   @Test
   void happyPathSendsTheNotificationWithBearerAuthorizationAndReturnsAccepted() {
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, authServer.requests().size());
@@ -241,10 +241,10 @@ class FcmNotificationProviderTest {
     final FcmNotificationProvider provider = enabledProvider();
 
     StepVerifier.create(provider.send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
     StepVerifier.create(provider.send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, authServer.requests().size());
@@ -335,7 +335,7 @@ class FcmNotificationProviderTest {
     fcmServer.nextResponse(status, body);
 
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(expected)
+        .assertNext(providerResult -> assertEquals(expected, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, fcmServer.requests().size());
@@ -347,12 +347,14 @@ class FcmNotificationProviderTest {
     fcmServer.nextResponse(401, fcmError(401, "UNAUTHENTICATED", "UNSPECIFIED_ERROR"));
 
     StepVerifier.create(provider.send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     fcmServer.nextResponse(200, "{\"name\":\"projects/demo-project/messages/0:msg-0002\"}");
     StepVerifier.create(provider.send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(2, authServer.requests().size());
@@ -377,7 +379,7 @@ class FcmNotificationProviderTest {
             + "\"}");
 
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(expected)
+        .assertNext(providerResult -> assertEquals(expected, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fcmServer.requests().isEmpty());
@@ -398,7 +400,9 @@ class FcmNotificationProviderTest {
             CREDENTIALS.json(), null, fcmServer.baseUrl(), closedUrl + "/token", 10_000L, 5_000L);
 
     StepVerifier.create(provider(webClient, properties).send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.RECOVERABLE_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fcmServer.requests().isEmpty());
@@ -413,7 +417,7 @@ class FcmNotificationProviderTest {
     fcmServer.nextResponse(200, body);
 
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
   }
 
@@ -423,7 +427,9 @@ class FcmNotificationProviderTest {
     fcmServer.nextResponse(404, body);
 
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
   }
 
@@ -439,7 +445,9 @@ class FcmNotificationProviderTest {
     StepVerifier.create(
             provider(WebClient.builder().baseUrl(closedUrl).build(), properties)
                 .send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.RECOVERABLE_FAILURE, providerResult.result()))
         .verifyComplete();
 
     final String logs = logs();
@@ -462,13 +470,15 @@ class FcmNotificationProviderTest {
     final FcmNotificationProvider provider =
         provider(shortTimeoutClient, properties(CREDENTIALS.json(), null));
     StepVerifier.create(provider.send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
     fcmServer.nextDelay(3_000);
 
     final Instant start = Instant.now();
     StepVerifier.create(provider.send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.RECOVERABLE_FAILURE, providerResult.result()))
         .verifyComplete();
     final Duration elapsed = Duration.between(start, Instant.now());
 
@@ -479,7 +489,7 @@ class FcmNotificationProviderTest {
   @Test
   void aNotificationWithoutSubjectIsSentWithoutTitle() {
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final JsonNode notification =
@@ -500,7 +510,7 @@ class FcmNotificationProviderTest {
   @MethodSource("opaqueRecipients")
   void theRecipientIsSentUnchangedAndUnvalidated(final String recipient) {
     StepVerifier.create(enabledProvider().send(pushTo(recipient, TITLE)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, fcmServer.requests().size());
@@ -511,7 +521,7 @@ class FcmNotificationProviderTest {
   @Test
   void acceptedDispatchLogsTheMessageIdAndTheMaskedRecipientOnly() {
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final String logs = logs();
@@ -526,7 +536,9 @@ class FcmNotificationProviderTest {
     fcmServer.nextResponse(404, fcmError(404, "NOT_FOUND", "UNREGISTERED"));
 
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, TITLE)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     final String logs = logs();
@@ -541,7 +553,7 @@ class FcmNotificationProviderTest {
   @ValueSource(strings = {"abcd", "a"})
   void aShortRecipientIsFullyMasked(final String recipient) {
     StepVerifier.create(enabledProvider().send(pushTo(recipient, TITLE)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertTrue(logs().lines().anyMatch(line -> line.contains("recipient=***}")), logs());

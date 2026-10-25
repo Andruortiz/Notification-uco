@@ -106,13 +106,15 @@ class FcmDisabledProviderE2ETest {
     fakeFcm.reset();
   }
 
-  private ChannelRoute awaitPushRoute(final String preferredProvider) {
+  private ChannelRoute awaitPushRoute(final String preferredProvider, final int size) {
     final ProviderId expected = ProviderId.of(preferredProvider);
     final Instant deadline = Instant.now().plus(Duration.ofSeconds(40));
     while (Instant.now().isBefore(deadline)) {
       final ChannelRoute route =
           channelCatalogPort.findActiveRoute(ChannelType.of("PUSH"), TenantId.of(TENANT)).block();
-      if (route != null && route.preferredProvider().equals(expected)) {
+      if (route != null
+          && route.preferredProvider().equals(expected)
+          && route.providers().size() == size) {
         return route;
       }
     }
@@ -182,9 +184,9 @@ class FcmDisabledProviderE2ETest {
 
   @Test
   void theDefaultConfigurationSeedsThePushChannelAndDeliversThroughTheSimulatedProvider() {
-    final ChannelRoute route = awaitPushRoute("simulated");
+    final ChannelRoute route = awaitPushRoute("fcm", 2);
 
-    assertEquals(List.of(ProviderId.of("simulated"), ProviderId.of("fcm")), route.providers());
+    assertEquals(List.of(ProviderId.of("fcm"), ProviderId.of("simulated")), route.providers());
     assertTrue(route.contentSchema().contains("\"maxLength\":900"));
     assertTrue(route.contentSchema().contains("\"maxLength\":100"));
 
@@ -203,10 +205,9 @@ class FcmDisabledProviderE2ETest {
         mongoTemplate.findById("PUSH", ChannelCatalogDocument.class).block();
     assertNotNull(seeded);
     mongoTemplate
-        .save(
-            new ChannelCatalogDocument("PUSH", List.of("fcm", "simulated"), seeded.contentSchema()))
+        .save(new ChannelCatalogDocument("PUSH", List.of("fcm"), seeded.contentSchema()))
         .block();
-    awaitPushRoute("fcm");
+    awaitPushRoute("fcm", 1);
 
     final String notificationId = acceptPush("push-disabled-1");
     final Message deadLettered = awaitDeadLetteredMessage(notificationId);

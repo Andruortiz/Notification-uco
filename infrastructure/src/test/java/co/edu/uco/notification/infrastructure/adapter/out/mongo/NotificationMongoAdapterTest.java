@@ -13,10 +13,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import co.edu.uco.notification.core.domain.AttemptRecord;
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
@@ -265,7 +267,8 @@ class NotificationMongoAdapterTest {
     final Notification pending = adapter.save(aNotification("order-reserve-control")).block();
     final Notification delivered = adapter.save(aNotification("order-reserve-delivered")).block();
     delivered.markQueued();
-    delivered.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    delivered.markDelivered(
+        AttemptRecord.of(AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
     final Notification persistedDelivered = adapter.save(delivered).block();
 
     StepVerifier.create(adapter.reserveForDispatch(pending.notificationId()))
@@ -282,7 +285,8 @@ class NotificationMongoAdapterTest {
     final Notification saved = adapter.save(aNotification("order-reserve-save")).block();
     final Notification reserved = adapter.reserveForDispatch(saved.notificationId()).block();
 
-    reserved.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    reserved.markDelivered(
+        AttemptRecord.of(AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
     final Notification persisted = adapter.save(reserved).block();
 
     assertEquals(NotificationStatus.DELIVERED, persisted.status());

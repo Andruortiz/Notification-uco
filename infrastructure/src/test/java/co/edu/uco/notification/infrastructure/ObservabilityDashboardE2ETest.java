@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.support.DashboardQueries;
 import co.edu.uco.notification.infrastructure.support.DashboardQueries.Query;
 import co.edu.uco.notification.infrastructure.support.PrometheusText;
@@ -105,8 +106,8 @@ class ObservabilityDashboardE2ETest {
       RESULTS.put(id, new AtomicReference<>(AttemptResult.ACCEPTED));
       return new NotificationSenderPort() {
         @Override
-        public Mono<AttemptResult> send(final Notification notification) {
-          return Mono.just(RESULTS.get(id).get());
+        public Mono<ProviderResult> send(final Notification notification) {
+          return Mono.just(ProviderResult.of(RESULTS.get(id).get()));
         }
 
         @Override

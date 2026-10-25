@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
@@ -74,9 +75,9 @@ class ProviderRoutingE2ETest {
     }
 
     @Override
-    public Mono<AttemptResult> send(final Notification notification) {
+    public Mono<ProviderResult> send(final Notification notification) {
       received.add(notification.notificationId());
-      return Mono.just(AttemptResult.ACCEPTED);
+      return Mono.just(ProviderResult.of(AttemptResult.ACCEPTED));
     }
 
     @Override

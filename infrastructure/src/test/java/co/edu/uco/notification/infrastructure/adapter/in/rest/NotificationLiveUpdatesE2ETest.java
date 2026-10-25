@@ -2,9 +2,11 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import co.edu.uco.notification.core.domain.AttemptRecord;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationDocument;
@@ -112,7 +114,9 @@ class NotificationLiveUpdatesE2ETest {
               final Notification reloaded =
                   notificationRepository.findById(notification.notificationId()).block();
               reloaded.markQueued();
-              reloaded.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("simulated"));
+              reloaded.markDelivered(
+                  AttemptRecord.of(
+                      AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("simulated")));
               final List<DomainEvent> events = reloaded.pullEvents();
               notificationRepository.save(reloaded).block();
               eventPublisherPort.publish(events).block();
@@ -138,7 +142,9 @@ class NotificationLiveUpdatesE2ETest {
               final Notification reloaded =
                   notificationRepository.findById(otherTenantNotification.notificationId()).block();
               reloaded.markQueued();
-              reloaded.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("simulated"));
+              reloaded.markDelivered(
+                  AttemptRecord.of(
+                      AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("simulated")));
               final List<DomainEvent> events = reloaded.pullEvents();
               notificationRepository.save(reloaded).block();
               eventPublisherPort.publish(events).block();

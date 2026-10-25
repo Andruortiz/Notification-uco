@@ -2,8 +2,10 @@ package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import co.edu.uco.notification.core.domain.AttemptRecord;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationDocument;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
@@ -104,7 +106,9 @@ class NotificationLiveUpdatesReconnectE2ETest {
     final Notification reloaded =
         notificationRepository.findById(notification.notificationId()).block();
     reloaded.markQueued();
-    reloaded.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("simulated"));
+    reloaded.markDelivered(
+        AttemptRecord.of(
+            AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("simulated")));
     reloaded.pullEvents();
     notificationRepository.save(reloaded).block();
 

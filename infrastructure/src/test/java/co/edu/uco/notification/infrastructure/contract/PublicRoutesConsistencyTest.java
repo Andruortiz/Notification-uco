@@ -109,15 +109,25 @@ class PublicRoutesConsistencyTest {
       assertFalse(operationPaths.contains(path), path);
       assertFalse(ApiContract.paths().containsKey(path), path);
     }
-    assertEquals(16, ApiContract.operations().size());
+    assertEquals(33, ApiContract.operations().size());
   }
 
   @Test
-  void everyPublicRouteIsAReadOnlyGetWithoutSecurityRequirements() {
+  void everyPublicRouteIsAGetOrASecretProtectedPostWithoutSecurityRequirements() {
+    int posts = 0;
     for (final Object entry : ApiContract.list(ApiContract.document().get("x-public-routes"))) {
       final Map<String, Object> route = ApiContract.map(entry);
-      assertEquals("GET", route.get("method"), String.valueOf(route));
       assertEquals(List.of(), route.get("security"), String.valueOf(route));
+      if ("POST".equals(route.get("method"))) {
+        posts++;
+        assertEquals("/providers/brevo/bounce-events", route.get("path"), String.valueOf(route));
+        final List<Object> headers = ApiContract.list(route.get("headers"));
+        assertEquals(1, headers.size(), String.valueOf(route));
+        assertEquals("X-Brevo-Webhook-Secret", ApiContract.map(headers.get(0)).get("name"));
+      } else {
+        assertEquals("GET", route.get("method"), String.valueOf(route));
+      }
     }
+    assertEquals(1, posts);
   }
 }

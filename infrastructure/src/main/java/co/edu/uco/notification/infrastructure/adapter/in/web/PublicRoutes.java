@@ -15,6 +15,7 @@ public final class PublicRoutes {
       List.of(
           "/openapi/api-notificaciones.yaml",
           "/v3/api-docs",
+          "/providers/brevo/bounce-events",
           "/v3/api-docs/swagger-config",
           "/swagger-ui.html",
           "/swagger-ui/**");

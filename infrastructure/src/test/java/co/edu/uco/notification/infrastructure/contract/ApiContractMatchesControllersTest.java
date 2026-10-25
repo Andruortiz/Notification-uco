@@ -53,8 +53,19 @@ class ApiContractMatchesControllersTest {
             .map(ApiContract.Operation::key)
             .collect(Collectors.toCollection(TreeSet::new));
 
-    assertEquals(11, available.size());
-    assertEquals(available, served());
+    assertEquals(29, available.size());
+    final Set<String> served = served();
+    assertTrue(served.containsAll(publicRoutes()));
+    served.removeAll(publicRoutes());
+    assertEquals(available, served);
+  }
+
+  private static Set<String> publicRoutes() {
+    return ApiContract.list(ApiContract.document().get("x-public-routes")).stream()
+        .map(ApiContract::map)
+        .filter(route -> "POST".equals(route.get("method")))
+        .map(route -> route.get("method") + " " + route.get("path"))
+        .collect(Collectors.toCollection(TreeSet::new));
   }
 
   @Test
@@ -66,7 +77,7 @@ class ApiContractMatchesControllersTest {
             .map(ApiContract.Operation::key)
             .collect(Collectors.toCollection(TreeSet::new));
 
-    assertEquals(5, planned.size());
+    assertEquals(4, planned.size());
     planned.forEach(key -> assertFalse(served.contains(key), key));
   }
 

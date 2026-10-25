@@ -45,7 +45,7 @@ info:
     entorno; `GET /v3/api-docs/swagger-config`, `GET /swagger-ui.html` y `GET /swagger-ui/**` solo
     fuera de producción. No son operaciones de `paths` ni recursos que haya que registrar en el PDP.
     11. Lote del nivel 1 (adiciones compatibles, sin cambio de versión mayor; todas las operaciones
-    nuevas nacen `planned` y pasan a `available` en la historia que añade su controlador):
+    nuevas nacieron `planned`; el 2.1.0 las pasa a `available`):
     HU2-113 añade el código NTF-2004 y documenta las claims del Bearer; HU2-114 añade
     `POST /provider-connection-tests`; HU2-115 añade `failedOver` a `DeliveryAttempt`; HU2-116 añade
     `POST /recipients/undeliverable-lookups`, `POST /recipients/undeliverable-releases` y la ruta
@@ -55,6 +55,19 @@ info:
     plantillas; HU2-120 añade las cuatro de dispositivos y `INVALID_RECIPIENT` al resultado de un
     intento; HU2-121 añade `GET /provider-health`.
 
+    Registro de cambios 2.1.0 (integración del nivel 1, adiciones compatibles sobre 2.0.0):
+
+    1. Las 17 operaciones nuevas del nivel 1 y `POST /notification-retries` pasan a `available`.
+    2. Nuevos códigos de error: NTF-3022 NOTIFICATION_STATE_NOT_ALLOWED (reintento o reenvío sobre un
+    estado que no lo admite) y NTF-3070 RESEND_CHANNEL_INVALID (reenvío por el mismo canal, con
+    adjuntos o con externalId derivado demasiado largo); `POST /notification-retries` y
+    `POST /notification-resends` los usan en lugar de NTF-3008 y NTF-1003 para esos casos.
+    3. El webhook `POST /providers/brevo/bounce-events` se autentica con la cabecera
+    `X-Brevo-Webhook-Secret`, declarada en `x-public-routes`.
+    4. `POST /template-renders` limita `values` a 50 variables de hasta 2000 caracteres.
+    5. Límites conocidos documentados: un reenvío con adjuntos responde 400; `GET /provider-health`
+    puede mostrar UNKNOWN o no listar un proveedor cuyo breaker de conmutación está abierto.
+
     Tabla de migración (método y ruta v1 a método y ruta v2):
 
     | v1 | v2 |
@@ -63,7 +76,7 @@ info:
     | GET /notifications | GET /notifications |
     | POST /notifications:sendBatch | POST /notifications/batches |
     | GET /notifications/{id} | GET /notifications/detail?notificationId={id} |
-    | POST /notifications/{id}:retry | POST /notification-retries (cuerpo notificationId; planned) |
+    | POST /notifications/{id}:retry | POST /notification-retries (cuerpo notificationId; available) |
     | GET /notifications:subscribe | GET /notifications/stream |
     | POST /notifications:subscribeTicket | retirado sin reemplazo (HU2-111); el stream usa Bearer o cookie |
     | POST /attachment-uploads | POST /attachment-uploads |
@@ -76,17 +89,17 @@ info:
     | POST /providers:register | POST /providers (planned) |
     | GET /recipients/{recipientId}/preferences | GET /recipients/preferences?recipientId={recipientId} (planned) |
     | POST /recipients/{recipientId}:updatePreferences | PUT /recipients/preferences?recipientId={recipientId} (planned) |
-    | (nuevo, HU2-114) | POST /provider-connection-tests (planned) |
-    | (nuevo, HU2-116) | POST /recipients/undeliverable-lookups (planned) |
-    | (nuevo, HU2-116) | POST /recipients/undeliverable-releases (planned) |
-    | (nuevo, HU2-117) | POST /notification-resends (planned) |
-    | (nuevo, HU2-118) | GET /notifications/timeline?notificationId={id} (planned) |
-    | (nuevo, HU2-119) | POST /templates, PUT /templates, GET /templates (planned) |
-    | (nuevo, HU2-119) | GET /templates/detail?templateId={id} (planned) |
-    | (nuevo, HU2-119) | POST /template-archivals, POST /template-variable-detections, POST /template-renders (planned) |
-    | (nuevo, HU2-120) | POST /devices, GET /devices, POST /device-removals, POST /device-erasures (planned) |
-    | (nuevo, HU2-121) | GET /provider-health (planned) |
-  version: 2.0.0
+    | (nuevo, HU2-114) | POST /provider-connection-tests (available) |
+    | (nuevo, HU2-116) | POST /recipients/undeliverable-lookups (available) |
+    | (nuevo, HU2-116) | POST /recipients/undeliverable-releases (available) |
+    | (nuevo, HU2-117) | POST /notification-resends (available) |
+    | (nuevo, HU2-118) | GET /notifications/timeline?notificationId={id} (available) |
+    | (nuevo, HU2-119) | POST /templates, PUT /templates, GET /templates (available) |
+    | (nuevo, HU2-119) | GET /templates/detail?templateId={id} (available) |
+    | (nuevo, HU2-119) | POST /template-archivals, POST /template-variable-detections, POST /template-renders (available) |
+    | (nuevo, HU2-120) | POST /devices, GET /devices, POST /device-removals, POST /device-erasures (available) |
+    | (nuevo, HU2-121) | GET /provider-health (available) |
+  version: 2.1.0
 servers:
   - url: /
     description: >
@@ -122,9 +135,13 @@ x-public-routes:
     path: /providers/brevo/bounce-events
     exposure: always
     security: []
+    headers:
+      - name: X-Brevo-Webhook-Secret
+        required: true
+        description: Secreto compartido; debe coincidir con la variable BREVO_WEBHOOK_SECRET.
     description: >
       HU2-116. Webhook de rebotes de Brevo. No exige credencial del PEP; se autentica con el secreto
-      compartido de la variable BREVO_WEBHOOK_SECRET enviado en una cabecera. Sin secreto configurado,
+      compartido de la variable BREVO_WEBHOOK_SECRET enviado en la cabecera X-Brevo-Webhook-Secret. Sin secreto configurado,
       o con uno que no coincide, responde 401 con NTF-2005 y no procesa el evento. Solo los rebotes
       duros (hard_bounce, invalid_email, blocked) marcan la dirección; soft_bounce y deferred se
       descartan. Responde 2xx únicamente tras persistir y 5xx si falla.
@@ -527,11 +544,10 @@ paths:
       description: >
         CU-06. Solo válido si el estado actual es FAILED o RECOVERABLE. Reencola la notificación y
         registra el reintento como manual (distinto del automático) para efectos de auditoría.
-        Requiere rol OPERADOR o ADMINISTRADOR. No reinicia el contador de intentos. HU2-117: planificada
-        hasta que exista el controlador; pasa entonces a available. 400 si el estado actual no admite
+        Requiere rol OPERADOR o ADMINISTRADOR. No reinicia el contador de intentos. 400 con NTF-3022 si el estado actual no admite
         reintento; 409 si otro proceso (manual o automático) ganó la carrera sobre la misma notificación.
       operationId: retryNotification
-      x-status: planned
+      x-status: available
       x-minimum-role: OPERADOR
       requestBody:
         required: true
@@ -1071,7 +1087,7 @@ paths:
         El destinatario sale enmascarado salvo para ADMINISTRADOR. El tenant sale de la sesión.
         Un identificador inexistente o de otro tenant responde 404.
       operationId: getNotificationTimeline
-      x-status: planned
+      x-status: available
       x-minimum-role: OPERADOR
       parameters:
         - $ref: '#/components/parameters/NotificationId'
@@ -1109,9 +1125,13 @@ paths:
         HU2-117. Solo válido si la notificación original está en FAILED. Crea una notificación nueva
         por el canal indicado, con un externalId derivado de máximo 255 caracteres, y no modifica la
         original. La dirección recibida es dato personal: no se devuelve ni se registra. Requiere
-        rol OPERADOR o ADMINISTRADOR.
+        rol OPERADOR o ADMINISTRADOR. Límite conocido: una notificación original con adjuntos no se
+        reenvía y responde 400 con NTF-3070 (RESEND_CHANNEL_INVALID); lo mismo ocurre si el canal nuevo
+        es el original o el externalId derivado supera el máximo. Un canal no disponible responde
+        400 con NTF-1003 y una dirección con formato inválido para el canal, 400 con NTF-1006. Si
+        el estado original no es FAILED, 400 con NTF-3022 (NOTIFICATION_STATE_NOT_ALLOWED).
       operationId: resendNotification
-      x-status: planned
+      x-status: available
       x-minimum-role: OPERADOR
       requestBody:
         required: true
@@ -1157,7 +1177,7 @@ paths:
         devuelve credenciales ni texto crudo del proveedor. Solo una prueba en vuelo por par (canal,
         proveedor) y por réplica; la segunda recibe 429. Requiere rol ADMINISTRADOR.
       operationId: testProviderConnection
-      x-status: planned
+      x-status: available
       x-minimum-role: ADMINISTRADOR
       requestBody:
         required: true
@@ -1205,11 +1225,12 @@ paths:
       description: >
         HU2-121. Estado, tasa de éxito, latencia p95 y último error por proveedor y canal, calculados
         sobre las métricas de despacho en una ventana configurable. La respuesta es global (no
-        depende del tenant). Límites: un proveedor desactivado con tráfico cuenta como fallido; los
-        proveedores sin tráfico en la ventana no aparecen o salen UNKNOWN. Si la fuente de métricas
+        depende del tenant). Límites: un proveedor desactivado con tráfico sale DOWN; los proveedores
+        sin tráfico en la ventana no aparecen o salen UNKNOWN; con el breaker de HU2-115 abierto el
+        proveedor no recibe intentos y por eso puede salir UNKNOWN o ausente aunque esté caído. Si la fuente de métricas
         no responde, 503 con NTF-5000; el cuerpo nunca incluye su dirección.
       operationId: getProviderHealth
-      x-status: planned
+      x-status: available
       x-minimum-role: OPERADOR
       responses:
         '200':
@@ -1255,7 +1276,7 @@ paths:
         HU2-116. Consulta sin efectos; es POST para que la dirección no viaje en la URL. La dirección
         sale enmascarada. Requiere rol OPERADOR o ADMINISTRADOR.
       operationId: lookupUndeliverableRecipient
-      x-status: planned
+      x-status: available
       x-minimum-role: OPERADOR
       requestBody:
         required: true
@@ -1295,7 +1316,7 @@ paths:
         HU2-116. Permite volver a enviar a la dirección. Idempotente: levantar una marca inexistente
         responde 204. Requiere rol ADMINISTRADOR.
       operationId: releaseUndeliverableRecipient
-      x-status: planned
+      x-status: available
       x-minimum-role: ADMINISTRADOR
       requestBody:
         required: true
@@ -1334,7 +1355,7 @@ paths:
         respuesta no revela si era de otra identidad: 201 si se creó, 200 si ya existía para la sesión.
         Nunca responde 409. El token se almacena cifrado.
       operationId: registerDevice
-      x-status: planned
+      x-status: available
       x-minimum-role: CLIENTE
       requestBody:
         required: true
@@ -1378,7 +1399,7 @@ paths:
         HU2-120. Lista los dispositivos de la identidad de la sesión con el token enmascarado
         (**** y los últimos 4 caracteres). ADMINISTRADOR puede indicar subject y ve el token completo.
       operationId: listDevices
-      x-status: planned
+      x-status: available
       x-minimum-role: CLIENTE
       parameters:
         - name: subject
@@ -1419,7 +1440,7 @@ paths:
         HU2-120. Un dispositivo ajeno, de otro tenant o inexistente responde el mismo 404
         (NTF-3041), sin revelar su existencia.
       operationId: removeDevice
-      x-status: planned
+      x-status: available
       x-minimum-role: CLIENTE
       requestBody:
         required: true
@@ -1457,7 +1478,7 @@ paths:
         HU2-120. Borra la identidad del subject y todos sus dispositivos en el tenant. Responde 204
         también si no existían. Requiere rol ADMINISTRADOR.
       operationId: eraseRecipientDevices
-      x-status: planned
+      x-status: available
       x-minimum-role: ADMINISTRADOR
       requestBody:
         required: true
@@ -1494,7 +1515,7 @@ paths:
         declarado es obligatorio. Única por (tenant, key, channel, language). El canal debe tener ruta
         activa para el tenant. Requiere rol OPERADOR o ADMINISTRADOR.
       operationId: createTemplate
-      x-status: planned
+      x-status: available
       x-minimum-role: OPERADOR
       requestBody:
         required: true
@@ -1532,7 +1553,7 @@ paths:
         NTF-3052. Una plantilla archivada no se actualiza (NTF-3053). Requiere rol OPERADOR o
         ADMINISTRADOR.
       operationId: updateTemplate
-      x-status: planned
+      x-status: available
       x-minimum-role: OPERADOR
       requestBody:
         required: true
@@ -1569,7 +1590,7 @@ paths:
       summary: Listar plantillas
       description: HU2-119. Lista las plantillas del tenant con filtros combinables y paginación.
       operationId: listTemplates
-      x-status: planned
+      x-status: available
       x-minimum-role: CLIENTE
       parameters:
         - name: category
@@ -1635,7 +1656,7 @@ paths:
       summary: Consultar una plantilla
       description: HU2-119. Una plantilla ajena o inexistente responde 404.
       operationId: getTemplate
-      x-status: planned
+      x-status: available
       x-minimum-role: CLIENTE
       parameters:
         - $ref: '#/components/parameters/TemplateId'
@@ -1673,7 +1694,7 @@ paths:
         HU2-119. La plantilla sigue visible en el listado con estado ARCHIVADA y deja de poder
         renderizarse. Requiere rol OPERADOR o ADMINISTRADOR.
       operationId: archiveTemplate
-      x-status: planned
+      x-status: available
       x-minimum-role: OPERADOR
       requestBody:
         required: true
@@ -1715,7 +1736,7 @@ paths:
         HU2-119. Devuelve las variables {{nombre}} del asunto y del cuerpo, sin duplicados y en orden
         de aparición, sin guardar nada. Requiere rol OPERADOR o ADMINISTRADOR.
       operationId: detectTemplateVariables
-      x-status: planned
+      x-status: available
       x-minimum-role: OPERADOR
       requestBody:
         required: true
@@ -1756,7 +1777,7 @@ paths:
         valores se tratan como texto literal y no se persisten ni se registran. Si falta alguna variable
         obligatoria responde 422 con la lista completa en missingVariables.
       operationId: renderTemplate
-      x-status: planned
+      x-status: available
       x-minimum-role: CLIENTE
       requestBody:
         required: true
@@ -2611,7 +2632,10 @@ components:
             2004 AUTHENTICATION_CLAIMS_MISSING, 2005 WEBHOOK_SECRET_INVALID, 3040 RECIPIENT_UNDELIVERABLE,
             3041 DEVICE_NOT_FOUND, 3050 TEMPLATE_NOT_FOUND,
             3051 TEMPLATE_ALREADY_EXISTS, 3052 TEMPLATE_VERSION_CONFLICT, 3053 TEMPLATE_ARCHIVED,
-            3060 PROVIDER_TEST_IN_PROGRESS. CHANNEL_NOT_AVAILABLE de plantillas reutiliza NTF-1003.
+            3060 PROVIDER_TEST_IN_PROGRESS, 3022 NOTIFICATION_STATE_NOT_ALLOWED (estado que no admite
+            reintento ni reenvío) y 3070 RESEND_CHANNEL_INVALID (reenvío por el mismo canal, con
+            adjuntos o con externalId derivado demasiado largo).
+            CHANNEL_NOT_AVAILABLE de plantillas reutiliza NTF-1003.
           enum:
             - NTF-1001
             - NTF-1002
@@ -2642,6 +2666,7 @@ components:
             - NTF-3012
             - NTF-3020
             - NTF-3021
+            - NTF-3022
             - NTF-3030
             - NTF-3040
             - NTF-3041
@@ -2650,6 +2675,7 @@ components:
             - NTF-3052
             - NTF-3053
             - NTF-3060
+            - NTF-3070
             - NTF-4000
             - NTF-4002
             - NTF-4010
@@ -3194,9 +3220,13 @@ components:
           format: uuid
         values:
           type: object
+          maxProperties: 50
           additionalProperties:
             type: string
-          description: Valor de cada variable. Se trata como texto literal; no se persiste ni se registra.
+            maxLength: 2000
+          description: >
+            Valor de cada variable, hasta 50 variables de hasta 2000 caracteres. Se trata como texto
+            literal; no se persiste ni se registra.
 
     RenderedTemplateResponse:
       type: object

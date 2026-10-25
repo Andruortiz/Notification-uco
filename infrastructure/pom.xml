@@ -24,6 +24,10 @@
 
     <dependencies>
         <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-circuitbreaker</artifactId>
+        </dependency>
+        <dependency>
             <groupId>co.edu.uco.notification</groupId>
             <artifactId>core</artifactId>
         </dependency>

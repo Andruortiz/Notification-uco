@@ -58,6 +58,14 @@ test('la guarda exige confirmacion, host local y credencial', () => {
   assert.deepEqual(validarEntorno({ ...ok, LOADTEST_BASE_URL: 'http://localhost:9000/x' }), []);
 });
 
+test('la guarda valida el hostname real y no el texto antes de @', () => {
+  const ok = { LOADTEST_CONFIRM_SIMULATED: 'true', LOADTEST_BEARER: 'x' };
+  const engano = validarEntorno({ ...ok, LOADTEST_BASE_URL: 'http://localhost@prod.example.com' });
+  assert.match(engano[0], /prod.example.com/);
+  assert.deepEqual(validarEntorno({ ...ok, LOADTEST_BASE_URL: 'http://user@localhost:8060' }), []);
+  assert.equal(validarEntorno({ ...ok, LOADTEST_BASE_URL: 'no es una url' }).length, 1);
+});
+
 test('SC-004: el resultado no contiene secretos aunque los reciba', () => {
   const jwt = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJ4In0.firma_secreta';
   const texto = construirResultado({

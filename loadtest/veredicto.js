@@ -36,7 +36,12 @@ export function despachoPorMinuto(incremento, minutos) {
 export function validarEntorno(env) {
   const errores = [];
   const base = env.LOADTEST_BASE_URL || 'http://localhost:8060';
-  const host = base.replace(/^[a-z]+:\/\//i, '').split(/[:/]/)[0];
+  let host;
+  try {
+    host = new URL(base).hostname;
+  } catch {
+    return ['LOADTEST_BASE_URL invalida'];
+  }
   if (env.LOADTEST_CONFIRM_SIMULATED !== 'true') {
     errores.push('LOADTEST_CONFIRM_SIMULATED=true es obligatorio');
   }

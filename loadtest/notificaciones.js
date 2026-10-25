@@ -45,6 +45,7 @@ export const options = {
       maxVUs: 200,
     },
   },
+  teardownTimeout: `${DRENAJE_SEGUNDOS + 120}s`,
   summaryTrendStats: ['avg', 'p(95)', 'max'],
   thresholds: {
     [METRICAS.aceptacion]: [`p(95)<=${UMBRALES.p95Seconds}`],

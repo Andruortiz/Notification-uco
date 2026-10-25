@@ -18,7 +18,7 @@ Dependencias: B1 (spec 029, identidad RS256 en CI) y E3 (`simulated` acotado) se
 - VII Sin atajos: excepción abajo.
 - VIII/IX: el despacho medido demuestra que nada se acumula bajo carga; ningún secreto en logs ni artefactos.
 
-Excepción (Principio VII): hasta que B1 se fusione, la prueba en CI usa el modo `local` (JWT HS256 con secreto efímero y PEP desactivado). Dueño: Equipo de backend. Fecha: 2026-12-15 o la fusión de B1, lo que ocurra primero; después se pasa a RS256 con par RSA efímero.
+Excepcion (Principio VII): el workflow nocturno usa `PACKAGES_USER` y `PACKAGES_TOKEN` solo en el paso de Maven (resolver el starter del PEP desde GitHub Packages); el arranque y la carga no reciben secretos del repositorio. Dueno: Equipo de backend. Fecha: 2026-12-15, o cuando el starter se publique sin autenticacion. B1 ya esta fusionada en la rama: no hay modo `local` con HS256; el Bearer es un JWT RS256 firmado con un par RSA efimero (`loadtest/token.js`), la app recibe `AUTH_PLATFORM_PUBLIC_KEY` y el workflow fija `SECURITY_PEP_ENFORCEMENT_ENABLED=false`.
 
 Alcance una réplica / proveedor simulado ([FR-010](spec.md#functional-requirements)): dueño AP, revisar al cerrar el nivel que introduzca autoescalado.
 
@@ -64,8 +64,9 @@ Dos paneles en la fila de RNF-02 y RNF-03: "Última prueba de carga: p95 (s)" co
 Workflow aparte `carga-nocturna.yml`, de quien administra CI. `ci-cd.yml` solo corre en `pull_request` y tags, y `codeql.yml` los domingos 01:30, así que 06:00 UTC no choca con ninguno.
 
 - `on: schedule` (cron 06:00 UTC) y `workflow_dispatch`.
-- Pasos: checkout; JDK 25; `./mvnw -B -ntp -DskipTests package`; `docker compose up -d mongodb rabbitmq` y Prometheus con `-f docker-compose.observability.yml`; arrancar el jar en el host con `SIMULATED_PROVIDER_RESULT=ACCEPTED` y el perfil que dejen B1 y E3 (hasta B1: `local`, PEP desactivado, secreto HS256 efímero); firmar el Bearer; k6 por `grafana/setup-k6-action` fijado por SHA; `loadtest/run.sh`; `actions/upload-artifact` de `resultado.json`, `retention-days: 90`.
-- `timeout-minutes: 20`, `permissions: contents: read`, sin secretos del repositorio.
+- Pasos: checkout; JDK 25 y Node 20; `./mvnw -B -ntp -DskipTests package`; `docker compose up -d mongodb rabbitmq` y Prometheus con `-f docker-compose.observability.yml`; arrancar el jar en el host con perfil `local`, `SIMULATED_PROVIDER_RESULT=ACCEPTED`, `AUTH_PLATFORM_PUBLIC_KEY` del par efimero y `SECURITY_PEP_ENFORCEMENT_ENABLED=false`; k6 por `grafana/setup-k6-action` fijado por SHA; `loadtest/run.sh`; `actions/upload-artifact` de `resultado.json`, `retention-days: 90`.
+- `timeout-minutes: 30` (no 20: la repeticion ante rojo ejecuta dos pasadas de unos 8 minutos mas arranque), `permissions: contents: read`.
+- `teardownTimeout` de k6 = drenaje + 120 s: el valor por defecto (30 s) abortaria el `teardown()` que espera el drenaje y consulta Prometheus.
 - Ante rojo, se repite una vez (`workflow_dispatch`) antes de declarar regresión; se exigen dos ejecuciones concordantes.
 
 ## Preguntas abiertas
@@ -82,3 +83,4 @@ Workflow aparte `carga-nocturna.yml`, de quien administra CI. `ci-cd.yml` solo c
 - Medición de despacho depende del scrape de 15 s: margen de 2 scrapes y ventana de 5 min.
 - Nombres `k6_*` acoplados al tablero: los protege la prueba de coherencia.
 - Credenciales enmascaradas en CI y nunca impresas.
+- Sin verificar por falta de k6 en el equipo de desarrollo, a confirmar en la primera ejecucion real: que las metricas emitidas en `teardown()` cuenten para los umbrales (H4) y que Trend con `K6_PROMETHEUS_RW_TREND_STATS=p(95)` publique `k6_notificaciones_aceptacion_seconds_p95`. Si difieren, se ajusta el nombre en `veredicto.js` y el tablero, sin cambiar el diseno.

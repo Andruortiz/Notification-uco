@@ -343,13 +343,23 @@ class TwilioSmsDeliveryE2ETest {
   }
 
   @Test
-  void aRecipientWithoutInternationalFormatEndsInFailedWithoutCallingTwilio() {
+  void aRecipientWithoutInternationalFormatIsRejectedBeforePersistingAndWithoutCallingTwilio() {
     preferProviders("twilio");
 
-    final String notificationId =
-        accept(smsRequest("sms-bad-recipient-1", "alice@example.com", null, "Hola"));
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("Authorization", TestTokens.bearer(TENANT))
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(smsRequest("sms-bad-recipient-1", "alice@example.com", null, "Hola"))
+        .exchange()
+        .expectStatus()
+        .isBadRequest();
 
-    assertEquals("FAILED", awaitStatus(notificationId, "FAILED").get("status"));
+    assertNull(
+        notificationRepository
+            .findByTenantAndExternalId(TenantId.of(TENANT), ExternalId.of("sms-bad-recipient-1"))
+            .block());
     assertTrue(fakeTwilio.requests().isEmpty());
   }
 

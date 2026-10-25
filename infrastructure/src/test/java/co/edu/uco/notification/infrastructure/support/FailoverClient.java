@@ -38,13 +38,20 @@ public final class FailoverClient {
               .contentType(MediaType.APPLICATION_JSON)
               .bodyValue(
                   Map.of(
-                      "externalId", externalId,
-                      "channelType", channelType,
-                      "recipientId", recipientId,
-                      "recipientAddress", "alice@example.com",
-                      "subject", "Subject",
-                      "body", "Body",
-                      "priority", "NORMAL"))
+                      "externalId",
+                      externalId,
+                      "channelType",
+                      channelType,
+                      "recipientId",
+                      recipientId,
+                      "recipientAddress",
+                      "SMS".equals(channelType) ? "+573001234567" : "alice@example.com",
+                      "subject",
+                      "Subject",
+                      "body",
+                      "Body",
+                      "priority",
+                      "NORMAL"))
               .exchange()
               .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
               .returnResult();

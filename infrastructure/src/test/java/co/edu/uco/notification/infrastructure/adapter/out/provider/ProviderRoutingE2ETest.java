@@ -157,13 +157,20 @@ class ProviderRoutingE2ETest {
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(
                 Map.of(
-                    "externalId", externalId,
-                    "channelType", channelType,
-                    "recipientId", "recipient-1",
-                    "recipientAddress", "alice@example.com",
-                    "subject", "Subject",
-                    "body", "Body",
-                    "priority", "NORMAL"))
+                    "externalId",
+                    externalId,
+                    "channelType",
+                    channelType,
+                    "recipientId",
+                    "recipient-1",
+                    "recipientAddress",
+                    "SMS".equals(channelType) ? "+573001234567" : "alice@example.com",
+                    "subject",
+                    "Subject",
+                    "body",
+                    "Body",
+                    "priority",
+                    "NORMAL"))
             .exchange()
             .expectStatus()
             .isAccepted()

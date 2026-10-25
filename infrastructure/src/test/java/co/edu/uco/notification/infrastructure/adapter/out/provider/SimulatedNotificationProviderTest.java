@@ -56,6 +56,28 @@ class SimulatedNotificationProviderTest {
   }
 
   @Test
+  void anAcceptedResultCarriesAMessageIdDerivedFromTheNotificationAndOthersCarryNone() {
+    final Notification notification = aNotification();
+    final SimulatedNotificationProvider accepting =
+        new SimulatedNotificationProvider(new SimulatedProviderProperties(null, true));
+    final SimulatedNotificationProvider failing =
+        new SimulatedNotificationProvider(
+            new SimulatedProviderProperties(AttemptResult.PERMANENT_FAILURE, true));
+
+    StepVerifier.create(accepting.send(notification))
+        .assertNext(
+            result ->
+                assertEquals(
+                    SimulatedNotificationProvider.MESSAGE_ID_PREFIX
+                        + notification.notificationId().value(),
+                    result.messageId()))
+        .verifyComplete();
+    StepVerifier.create(failing.send(notification))
+        .assertNext(result -> assertEquals(null, result.messageId()))
+        .verifyComplete();
+  }
+
+  @Test
   void declaresTheSimulatedProviderId() {
     final SimulatedNotificationProvider provider =
         new SimulatedNotificationProvider(new SimulatedProviderProperties(null, true));

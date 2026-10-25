@@ -61,14 +61,14 @@ public class NotificationExceptionHandler {
   public ResponseEntity<ErrorResponse> handleStateNotAllowed(
       final NotificationStateNotAllowedException e, final ServerWebExchange exchange) {
     return respond(
-        HttpStatus.BAD_REQUEST, ErrorCode.INVALID_STATUS_TRANSITION, e.getMessage(), exchange);
+        HttpStatus.BAD_REQUEST, ErrorCode.NOTIFICATION_STATE_NOT_ALLOWED, e.getMessage(), exchange);
   }
 
   @ExceptionHandler(ResendChannelInvalidException.class)
   public ResponseEntity<ErrorResponse> handleResendChannelInvalid(
       final ResendChannelInvalidException e, final ServerWebExchange exchange) {
     return respond(
-        HttpStatus.BAD_REQUEST, ErrorCode.CHANNEL_NOT_AVAILABLE, e.getMessage(), exchange);
+        HttpStatus.BAD_REQUEST, ErrorCode.RESEND_CHANNEL_INVALID, e.getMessage(), exchange);
   }
 
   @ExceptionHandler(InvalidContentException.class)

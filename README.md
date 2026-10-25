@@ -175,6 +175,14 @@ Que demuestra cada panel de RNF y que no:
 - RNF-10: las filas de negocio y tecnicas leen las series del endpoint de metricas; una prueba automatizada (`ObservabilityDashboardE2ETest`) verifica que cada metrica y etiqueta del tablero y de las reglas existe y que cada consulta es valida en un Prometheus real.
 - Alertas: `observability/alerts.yml` define `NotificationDispatchFailedHigh` (mas de 5 % de despachos fallidos en 5 minutos) y `NotificationServiceDown`. Se evaluan en Prometheus sin Alertmanager; el destino externo esta pendiente (dueno: equipo de desarrollo del componente, fecha 2026-11-12).
 
+## Panel de salud de proveedores
+
+`GET /provider-health` (rol `OPERADOR`) devuelve, por proveedor y canal, estado, tasa de exito, latencia p95 y ultimo error, calculados con consultas a Prometheus sobre `notification_dispatched_total` y `notification_provider_duration_seconds`. Si Prometheus no responde dentro del tiempo limite, responde 503 con `NTF-5000` sin incluir su direccion. La respuesta incluye `grafanaUrl` (tablero `notification-service`) o nulo si `GRAFANA_URL` esta vacia.
+
+- `PROMETHEUS_URL` (por defecto `http://localhost:9090`) y `GRAFANA_URL` (vacia por defecto).
+- Ajustes opcionales: `PROVIDER_HEALTH_WINDOW` (5m), `PROVIDER_HEALTH_LOOKBACK` (15m), `PROVIDER_HEALTH_TIMEOUT` (2s), `PROVIDER_HEALTH_MIN_SAMPLES` (5), `PROVIDER_HEALTH_HEALTHY_THRESHOLD` (0,95), `PROVIDER_HEALTH_DOWN_THRESHOLD` (0,5) y `PROVIDER_HEALTH_RECOVERABLE_THRESHOLD` (0,5).
+- Limites: un proveedor desactivado con trafico sale `DOWN` porque la metrica no distingue `ProviderDisabledException` de un fallo (dueno: equipo de backend, fecha 2026-12-15); los proveedores sin trafico en la ventana no aparecen; el instante del ultimo error tiene resolucion de 60 segundos.
+
 ## Azure Key Vault
 
 Las variables de entorno del servicio (`MONGO_PASSWORD`, `BREVO_API_KEY`, `AUTH_JWT_HS256_SECRET`, etc.)

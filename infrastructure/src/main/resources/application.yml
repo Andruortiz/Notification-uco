@@ -193,3 +193,14 @@ notification:
       host: ${CLAMAV_HOST:localhost}
       port: ${CLAMAV_PORT:3310}
       max-concurrent-scans: ${CLAMAV_MAX_CONCURRENT_SCANS:4}
+
+provider-health:
+  prometheus-url: ${PROMETHEUS_URL:http://localhost:9090}
+  grafana-url: ${GRAFANA_URL:}
+  window: ${PROVIDER_HEALTH_WINDOW:5m}
+  lookback: ${PROVIDER_HEALTH_LOOKBACK:15m}
+  timeout: ${PROVIDER_HEALTH_TIMEOUT:2s}
+  min-samples: ${PROVIDER_HEALTH_MIN_SAMPLES:5}
+  healthy-threshold: ${PROVIDER_HEALTH_HEALTHY_THRESHOLD:0.95}
+  down-threshold: ${PROVIDER_HEALTH_DOWN_THRESHOLD:0.5}
+  recoverable-threshold: ${PROVIDER_HEALTH_RECOVERABLE_THRESHOLD:0.5}

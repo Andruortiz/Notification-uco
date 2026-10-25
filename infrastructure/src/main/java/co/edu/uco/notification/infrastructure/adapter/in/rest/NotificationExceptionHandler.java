@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
 import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.exception.ProviderMetricsUnavailableException;
 import co.edu.uco.notification.infrastructure.adapter.in.web.CorrelationIdWebFilter;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
@@ -85,6 +86,16 @@ public class NotificationExceptionHandler {
         HttpStatus.SERVICE_UNAVAILABLE,
         ErrorCode.ATTACHMENT_INSPECTION_UNAVAILABLE,
         e.getMessage(),
+        exchange);
+  }
+
+  @ExceptionHandler(ProviderMetricsUnavailableException.class)
+  public ResponseEntity<ErrorResponse> handleMetricsUnavailable(
+      final ProviderMetricsUnavailableException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        ErrorCode.INFRASTRUCTURE_ERROR,
+        "the provider metrics source is unavailable",
         exchange);
   }
 

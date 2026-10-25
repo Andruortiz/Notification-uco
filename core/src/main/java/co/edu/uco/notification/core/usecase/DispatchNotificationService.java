@@ -155,15 +155,23 @@ public final class DispatchNotificationService implements DispatchNotificationUs
               return Mono.just(Optional.empty());
             })
         .onErrorResume(
-            error ->
-                Mono.just(
-                    Optional.of(
-                        new ProviderResult(
-                            AttemptResult.RECOVERABLE_FAILURE,
-                            providerId,
-                            null,
-                            null,
-                            FailureCause.TRANSPORT_ERROR))))
+            DispatchNotificationService::isTransportError,
+            error -> {
+              LOGGER.log(
+                  System.Logger.Level.WARNING,
+                  "PROVIDER_TRANSPORT_ERROR providerId="
+                      + providerId.value()
+                      + " errorType="
+                      + error.getClass().getSimpleName());
+              return Mono.just(
+                  Optional.of(
+                      new ProviderResult(
+                          AttemptResult.RECOVERABLE_FAILURE,
+                          providerId,
+                          null,
+                          null,
+                          FailureCause.TRANSPORT_ERROR)));
+            })
         .flatMap(
             maybe ->
                 maybe.isEmpty()
@@ -298,15 +306,34 @@ public final class DispatchNotificationService implements DispatchNotificationUs
             });
   }
 
+  static AttemptRecord recordOf(final ProviderResult result) {
+    return new AttemptRecord(
+        result.result(),
+        AttemptOrigin.AUTOMATIC,
+        result.providerId(),
+        false,
+        result.latencyMillis(),
+        result.cause(),
+        null,
+        result.messageId());
+  }
+
+  private static boolean isTransportError(final Throwable error) {
+    return !(error instanceof NullPointerException
+        || error instanceof IllegalArgumentException
+        || error instanceof ClassCastException
+        || error instanceof IndexOutOfBoundsException
+        || error instanceof ArithmeticException
+        || error instanceof Error);
+  }
+
   private static void applyOutcome(
       final Notification notification, final Outcome outcome, final RetryPolicy retryPolicy) {
     for (final ProviderResult failedOver : outcome.failedOver()) {
-      notification.recordFailedOver(
-          AttemptRecord.from(failedOver, AttemptOrigin.AUTOMATIC, failedOver.providerId()));
+      notification.recordFailedOver(recordOf(failedOver));
     }
     final ProviderResult last = outcome.last();
-    final AttemptRecord record =
-        AttemptRecord.from(last, AttemptOrigin.AUTOMATIC, last.providerId());
+    final AttemptRecord record = recordOf(last);
     if (last.result() == AttemptResult.ACCEPTED) {
       notification.markDelivered(record);
     } else if (last.result() == AttemptResult.RECOVERABLE_FAILURE) {

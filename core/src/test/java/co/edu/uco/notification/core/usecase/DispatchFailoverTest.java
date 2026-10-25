@@ -299,4 +299,18 @@ class DispatchFailoverTest {
 
     assertTrue(notification.deliveryAttempts().isEmpty());
   }
+
+  @Test
+  void programmingErrorsAreNotTreatedAsTransportFailures() {
+    final Notification notification = stub(A, B);
+    when(senderA.send(notification)).thenReturn(Mono.error(new NullPointerException("bug")));
+
+    StepVerifier.create(service.dispatch(notification.notificationId()))
+        .expectError(NullPointerException.class)
+        .verify();
+
+    verify(senderB, never()).send(any());
+    verify(repository).releaseReservation(notification.notificationId());
+    assertTrue(notification.deliveryAttempts().isEmpty());
+  }
 }

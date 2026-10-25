@@ -62,6 +62,10 @@ public final class FcmAccessTokenProvider {
     return cachedToken.map(AccessToken::value);
   }
 
+  public Mono<Void> probe() {
+    return Mono.defer(this::exchange).then();
+  }
+
   public void invalidate(final String token) {
     revokedToken.set(token);
   }

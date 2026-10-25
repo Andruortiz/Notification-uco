@@ -29,6 +29,7 @@ public class RouteAuthorizationPolicy {
           rule(HttpMethod.GET, "/configuration", Role.ADMINISTRADOR),
           rule(HttpMethod.POST, "/channels", Role.ADMINISTRADOR),
           rule(HttpMethod.POST, "/providers", Role.ADMINISTRADOR),
+          rule(HttpMethod.POST, "/provider-connection-tests", Role.ADMINISTRADOR),
           rule(HttpMethod.GET, "/recipients/preferences", Role.CLIENTE),
           rule(HttpMethod.PUT, "/recipients/preferences", Role.CLIENTE));
 

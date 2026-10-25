@@ -2,10 +2,13 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ProbeErrorCode;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProbeOutcome;
+import co.edu.uco.notification.core.port.out.ProviderProbePort;
 import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.config.FcmCredentials;
 import co.edu.uco.notification.infrastructure.config.FcmProviderProperties;
@@ -23,7 +26,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 @Component
-public class FcmNotificationProvider implements NotificationSenderPort {
+public class FcmNotificationProvider implements NotificationSenderPort, ProviderProbePort {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(FcmNotificationProvider.class);
   private static final ProviderId PROVIDER_ID = ProviderId.of("fcm");
@@ -71,6 +74,28 @@ public class FcmNotificationProvider implements NotificationSenderPort {
                 account -> new FcmAccessTokenProvider(clientSource, account, properties.tokenUrl()))
             .orElse(null);
     disabledReason.ifPresent(reason -> ProviderLogs.disabled(LOGGER, PROVIDER_ID, reason));
+  }
+
+  @Override
+  public Mono<ProbeOutcome> probe() {
+    if (disabledReason.isPresent()) {
+      return Mono.just(ProbeOutcome.failed(ProbeErrorCode.CREDENTIALS_MISSING));
+    }
+    return tokenProvider
+        .probe()
+        .thenReturn(ProbeOutcome.ok())
+        .onErrorResume(FcmNotificationProvider::probeFailure);
+  }
+
+  private static Mono<ProbeOutcome> probeFailure(final Throwable error) {
+    if (error instanceof FcmAccessTokenProvider.AuthorizationRejectedException rejected) {
+      final int status = rejected.status();
+      return Mono.just(
+          status == 400 || status == 401 || status == 403
+              ? ProbeOutcome.failed(ProbeErrorCode.AUTH_REJECTED)
+              : ProbeOutcome.failed(ProbeErrorCode.PROVIDER_ERROR));
+    }
+    return Mono.just(ProviderProbes.ofError(error));
   }
 
   @Override

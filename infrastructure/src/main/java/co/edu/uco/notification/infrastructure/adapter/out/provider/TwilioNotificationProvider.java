@@ -2,10 +2,13 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ProbeErrorCode;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProbeOutcome;
+import co.edu.uco.notification.core.port.out.ProviderProbePort;
 import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.config.TwilioProviderProperties;
 import co.edu.uco.notification.utils.PhoneNumbers;
@@ -25,11 +28,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 @Component
-public class TwilioNotificationProvider implements NotificationSenderPort {
+public class TwilioNotificationProvider implements NotificationSenderPort, ProviderProbePort {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(TwilioNotificationProvider.class);
   private static final ProviderId PROVIDER_ID = ProviderId.of("twilio");
   private static final String SEND_PATH = "/2010-04-01/Accounts/{accountSid}/Messages.json";
+  private static final String ACCOUNT_PATH = "/2010-04-01/Accounts/{accountSid}.json";
 
   private final Supplier<WebClient> clientSource;
   private final TwilioProviderProperties properties;
@@ -57,6 +61,26 @@ public class TwilioNotificationProvider implements NotificationSenderPort {
     this.properties = Preconditions.requireNonNull(properties, "properties must not be null");
     this.disabledReason = properties.disabledReason();
     disabledReason.ifPresent(reason -> ProviderLogs.disabled(LOGGER, PROVIDER_ID, reason));
+  }
+
+  @Override
+  public Mono<ProbeOutcome> probe() {
+    if (disabledReason.isPresent()) {
+      return Mono.just(ProbeOutcome.failed(ProbeErrorCode.CREDENTIALS_MISSING));
+    }
+    return ProviderProbes.classify(
+        Mono.defer(
+            () ->
+                clientSource
+                    .get()
+                    .get()
+                    .uri(ACCOUNT_PATH, properties.accountSid())
+                    .headers(
+                        headers ->
+                            headers.setBasicAuth(properties.accountSid(), properties.authToken()))
+                    .exchangeToMono(
+                        response ->
+                            response.releaseBody().thenReturn(response.statusCode().value()))));
   }
 
   @Override

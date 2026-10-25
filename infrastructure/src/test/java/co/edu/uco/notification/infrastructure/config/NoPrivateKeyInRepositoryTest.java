@@ -9,11 +9,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 class NoPrivateKeyInRepositoryTest {
 
-  private static final String MARKER = "BEGIN " + "PRIVATE KEY";
+  private static final Pattern MARKER = Pattern.compile("BEGIN (RSA |EC )?" + "PRIVATE KEY");
   private static final List<String> SCOPES =
       List.of("core/src", "utils/src", "infrastructure/src", "scripts", ".github", ".env.example");
 
@@ -26,7 +27,9 @@ class NoPrivateKeyInRepositoryTest {
     for (final String file : files) {
       final Path path = root.resolve(file);
       if (Files.isRegularFile(path)
-          && new String(Files.readAllBytes(path), StandardCharsets.ISO_8859_1).contains(MARKER)) {
+          && MARKER
+              .matcher(new String(Files.readAllBytes(path), StandardCharsets.ISO_8859_1))
+              .find()) {
         offenders.add(file);
       }
     }

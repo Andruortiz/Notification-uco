@@ -5,11 +5,6 @@ import org.springframework.context.ApplicationContextInitializer;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.env.MapPropertySource;
 
-/**
- * Registers the ephemeral test public key as notification.auth.platform.public-key in every test
- * context. A context that declares test.auth.no-default-key=true receives nothing, so it can
- * exercise startup without a key.
- */
 public final class TestAuthKeyInitializer
     implements ApplicationContextInitializer<ConfigurableApplicationContext> {
 

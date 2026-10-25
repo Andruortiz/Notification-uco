@@ -48,7 +48,7 @@ class RabbitRetryConfigCustomAttemptsTest {
   @Test
   void aSingleFailureAlreadyMovesTheMessageToTheDeadLetterQueueWhenMaxAttemptsIsOne() {
     final NotificationId poisonId = NotificationId.newId();
-    when(dispatchNotificationUseCase.dispatch(any()))
+    when(dispatchNotificationUseCase.dispatch(any(), any()))
         .thenReturn(Mono.error(new NotificationNotFoundException(poisonId)));
 
     rabbitTemplate.convertAndSend(
@@ -66,7 +66,7 @@ class RabbitRetryConfigCustomAttemptsTest {
         deadLettered,
         "con max-attempts=1, un único fallo ya debe mover el mensaje a la cola de mensajes muertos");
     assertNull(deadLettered.getMessageProperties().getHeaders().get("x-dispatch-attempt"));
-    verify(dispatchNotificationUseCase, times(1)).dispatch(any());
+    verify(dispatchNotificationUseCase, times(1)).dispatch(any(), any());
   }
 
   @Test

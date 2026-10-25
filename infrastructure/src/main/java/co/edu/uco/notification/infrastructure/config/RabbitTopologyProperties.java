@@ -5,6 +5,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "notification.rabbit")
 public record RabbitTopologyProperties(Dispatch dispatch, Dlq dlq, String eventsExchange) {
 
+  public static final String ATTEMPT_ORIGIN_HEADER = "x-attempt-origin";
+
   public record Dispatch(String exchange, String routingKey, String queue) {}
 
   public record Dlq(String exchange, String routingKey, String queue) {}

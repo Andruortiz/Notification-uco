@@ -18,6 +18,7 @@ import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
@@ -190,7 +191,7 @@ class NotificationMongoAdapterTest {
     final NotificationEventPublisherPort eventPublisherPort =
         Mockito.mock(NotificationEventPublisherPort.class);
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(), any())).thenReturn(Mono.empty());
     final RequeuePendingNotificationsService service =
         new RequeuePendingNotificationsService(
             adapter,
@@ -221,7 +222,7 @@ class NotificationMongoAdapterTest {
     final NotificationEventPublisherPort eventPublisherPort =
         Mockito.mock(NotificationEventPublisherPort.class);
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(any())).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(), any())).thenReturn(Mono.empty());
     final RequeuePendingNotificationsService service =
         new RequeuePendingNotificationsService(
             adapter,
@@ -234,8 +235,9 @@ class NotificationMongoAdapterTest {
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
-    verify(eventPublisherPort).enqueueForDispatch(orphaned);
-    verify(eventPublisherPort, never()).enqueueForDispatch(recentlyAccepted);
+    verify(eventPublisherPort).enqueueForDispatch(orphaned, AttemptOrigin.AUTOMATIC);
+    verify(eventPublisherPort, never())
+        .enqueueForDispatch(recentlyAccepted, AttemptOrigin.AUTOMATIC);
   }
 
   @Test

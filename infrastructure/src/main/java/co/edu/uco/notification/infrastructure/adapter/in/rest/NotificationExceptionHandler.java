@@ -11,7 +11,9 @@ import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
 import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
+import co.edu.uco.notification.core.exception.NotificationStateNotAllowedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.exception.ResendChannelInvalidException;
 import co.edu.uco.notification.infrastructure.adapter.in.web.CorrelationIdWebFilter;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
@@ -45,6 +47,20 @@ public class NotificationExceptionHandler {
   @ExceptionHandler(ChannelNotAvailableException.class)
   public ResponseEntity<ErrorResponse> handleChannelNotAvailable(
       final ChannelNotAvailableException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.BAD_REQUEST, ErrorCode.CHANNEL_NOT_AVAILABLE, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(NotificationStateNotAllowedException.class)
+  public ResponseEntity<ErrorResponse> handleStateNotAllowed(
+      final NotificationStateNotAllowedException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.BAD_REQUEST, ErrorCode.INVALID_STATUS_TRANSITION, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(ResendChannelInvalidException.class)
+  public ResponseEntity<ErrorResponse> handleResendChannelInvalid(
+      final ResendChannelInvalidException e, final ServerWebExchange exchange) {
     return respond(
         HttpStatus.BAD_REQUEST, ErrorCode.CHANNEL_NOT_AVAILABLE, e.getMessage(), exchange);
   }

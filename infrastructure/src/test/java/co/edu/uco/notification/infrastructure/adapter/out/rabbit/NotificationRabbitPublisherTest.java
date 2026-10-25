@@ -18,6 +18,7 @@ import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.event.NotificationAccepted;
 import co.edu.uco.notification.core.domain.event.NotificationQueued;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
 import co.edu.uco.notification.utils.CorrelationId;
 import io.micrometer.observation.Observation;
@@ -78,7 +79,8 @@ class NotificationRabbitPublisherTest {
         new NotificationRabbitPublisher(rabbitTemplate, objectMapper(), PROPERTIES);
     final Notification notification = aNotification();
 
-    StepVerifier.create(publisher.enqueueForDispatch(notification)).verifyComplete();
+    StepVerifier.create(publisher.enqueueForDispatch(notification, AttemptOrigin.AUTOMATIC))
+        .verifyComplete();
 
     final ArgumentCaptor<MessagePostProcessor> postProcessor =
         ArgumentCaptor.forClass(MessagePostProcessor.class);
@@ -96,13 +98,38 @@ class NotificationRabbitPublisherTest {
   }
 
   @Test
+  void enqueueForDispatchWritesTheAttemptOriginHeader() {
+    final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
+    final NotificationRabbitPublisher publisher =
+        new NotificationRabbitPublisher(rabbitTemplate, objectMapper(), PROPERTIES);
+
+    StepVerifier.create(publisher.enqueueForDispatch(aNotification(), AttemptOrigin.MANUAL))
+        .verifyComplete();
+
+    final ArgumentCaptor<MessagePostProcessor> postProcessor =
+        ArgumentCaptor.forClass(MessagePostProcessor.class);
+    verify(rabbitTemplate)
+        .convertAndSend(
+            any(String.class), any(String.class), any(Object.class), postProcessor.capture());
+    final Message message = new Message(new byte[0], new MessageProperties());
+    postProcessor.getValue().postProcessMessage(message);
+    assertEquals(
+        "MANUAL",
+        message
+            .getMessageProperties()
+            .getHeaders()
+            .get(RabbitTopologyProperties.ATTEMPT_ORIGIN_HEADER));
+  }
+
+  @Test
   void enqueueForDispatchStampsThePersistedCorrelationIdAsAHeader() {
     final RabbitTemplate rabbitTemplate = mock(RabbitTemplate.class);
     final NotificationRabbitPublisher publisher =
         new NotificationRabbitPublisher(rabbitTemplate, objectMapper(), PROPERTIES);
     final Notification notification = aNotification(CorrelationId.of("corr-1"));
 
-    StepVerifier.create(publisher.enqueueForDispatch(notification)).verifyComplete();
+    StepVerifier.create(publisher.enqueueForDispatch(notification, AttemptOrigin.AUTOMATIC))
+        .verifyComplete();
 
     final ArgumentCaptor<MessagePostProcessor> postProcessor =
         ArgumentCaptor.forClass(MessagePostProcessor.class);
@@ -123,7 +150,7 @@ class NotificationRabbitPublisherTest {
 
     StepVerifier.create(
             publisher
-                .enqueueForDispatch(aNotification())
+                .enqueueForDispatch(aNotification(), AttemptOrigin.AUTOMATIC)
                 .contextWrite(Context.of(CorrelationId.CONTEXT_KEY, "ctx-9")))
         .verifyComplete();
 
@@ -224,7 +251,9 @@ class NotificationRabbitPublisherTest {
     final NotificationRabbitPublisher publisher =
         new NotificationRabbitPublisher(mock(RabbitTemplate.class), objectMapper(), PROPERTIES);
 
-    assertThrows(NullPointerException.class, () -> publisher.enqueueForDispatch(null));
+    assertThrows(
+        NullPointerException.class,
+        () -> publisher.enqueueForDispatch(null, AttemptOrigin.AUTOMATIC));
   }
 
   @Test
@@ -274,7 +303,8 @@ class NotificationRabbitPublisherTest {
 
     StepVerifier.create(
             publisher
-                .enqueueForDispatch(aNotification(CorrelationId.of("corr-1")))
+                .enqueueForDispatch(
+                    aNotification(CorrelationId.of("corr-1")), AttemptOrigin.AUTOMATIC)
                 .contextWrite(
                     context ->
                         context

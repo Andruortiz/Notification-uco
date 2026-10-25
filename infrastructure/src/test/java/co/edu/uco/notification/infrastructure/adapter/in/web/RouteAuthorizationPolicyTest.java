@@ -52,6 +52,12 @@ class RouteAuthorizationPolicyTest {
   }
 
   @Test
+  void retryAndResendRequireOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/notification-retries"));
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/notification-resends"));
+  }
+
+  @Test
   void timelineRequiresOperador() {
     assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.GET, "/notifications/timeline"));
   }

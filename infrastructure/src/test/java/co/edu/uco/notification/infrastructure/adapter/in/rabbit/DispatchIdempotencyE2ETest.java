@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
@@ -191,10 +192,11 @@ class DispatchIdempotencyE2ETest {
     }
 
     @Override
-    public Mono<Void> enqueueForDispatch(final Notification notification) {
+    public Mono<Void> enqueueForDispatch(
+        final Notification notification, final AttemptOrigin origin) {
       return failureSwitch.enqueueFailuresFor.remove(notification.notificationId().value())
           ? Mono.error(new IllegalStateException("broker down"))
-          : delegate.enqueueForDispatch(notification);
+          : delegate.enqueueForDispatch(notification, origin);
     }
 
     @Override

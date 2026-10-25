@@ -105,6 +105,42 @@ class RouteAuthorizationPolicyTest {
   }
 
   @Test
+  void createTemplateRequiresOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/templates"));
+  }
+
+  @Test
+  void updateTemplateRequiresOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.PUT, "/templates"));
+  }
+
+  @Test
+  void listTemplatesRequiresOnlyCliente() {
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/templates"));
+  }
+
+  @Test
+  void templateDetailRequiresOnlyCliente() {
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/templates/detail"));
+  }
+
+  @Test
+  void archiveTemplateRequiresOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/template-archivals"));
+  }
+
+  @Test
+  void detectTemplateVariablesRequiresOperador() {
+    assertEquals(
+        Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/template-variable-detections"));
+  }
+
+  @Test
+  void renderTemplateRequiresOnlyCliente() {
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/template-renders"));
+  }
+
+  @Test
   void configurationReadRequiresAdministrador() {
     assertEquals(Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.GET, "/configuration"));
   }

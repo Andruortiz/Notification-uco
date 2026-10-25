@@ -39,7 +39,14 @@ public class RouteAuthorizationPolicy {
           rule(HttpMethod.POST, "/devices", Role.CLIENTE),
           rule(HttpMethod.GET, "/devices", Role.CLIENTE),
           rule(HttpMethod.POST, "/device-removals", Role.CLIENTE),
-          rule(HttpMethod.POST, "/device-erasures", Role.ADMINISTRADOR));
+          rule(HttpMethod.POST, "/device-erasures", Role.ADMINISTRADOR),
+          rule(HttpMethod.POST, "/templates", Role.OPERADOR),
+          rule(HttpMethod.PUT, "/templates", Role.OPERADOR),
+          rule(HttpMethod.GET, "/templates", Role.CLIENTE),
+          rule(HttpMethod.GET, "/templates/detail", Role.CLIENTE),
+          rule(HttpMethod.POST, "/template-archivals", Role.OPERADOR),
+          rule(HttpMethod.POST, "/template-variable-detections", Role.OPERADOR),
+          rule(HttpMethod.POST, "/template-renders", Role.CLIENTE));
 
   private static Map.Entry<Route, Role> rule(
       final HttpMethod method, final String path, final Role minimumRole) {

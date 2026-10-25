@@ -8,11 +8,13 @@ import co.edu.uco.notification.core.exception.AttachmentUploadNotFoundException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
+import co.edu.uco.notification.core.exception.InvalidRecipientException;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
 import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.exception.NotificationStateNotAllowedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.exception.RecipientUndeliverableException;
 import co.edu.uco.notification.core.exception.ResendChannelInvalidException;
 import co.edu.uco.notification.infrastructure.adapter.in.web.CorrelationIdWebFilter;
 import co.edu.uco.notification.infrastructure.config.LogContext;
@@ -69,6 +71,26 @@ public class NotificationExceptionHandler {
   public ResponseEntity<ErrorResponse> handleInvalidContent(
       final InvalidContentException e, final ServerWebExchange exchange) {
     return respond(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_CONTENT, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(InvalidRecipientException.class)
+  public ResponseEntity<ErrorResponse> handleInvalidRecipient(
+      final InvalidRecipientException e, final ServerWebExchange exchange) {
+    return respond(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_RECIPIENT, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(RecipientUndeliverableException.class)
+  public ResponseEntity<ErrorResponse> handleRecipientUndeliverable(
+      final RecipientUndeliverableException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.CONFLICT, ErrorCode.RECIPIENT_UNDELIVERABLE, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(WebhookSecretInvalidException.class)
+  public ResponseEntity<ErrorResponse> handleWebhookSecretInvalid(
+      final WebhookSecretInvalidException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.UNAUTHORIZED, ErrorCode.WEBHOOK_SECRET_INVALID, e.getMessage(), exchange);
   }
 
   @ExceptionHandler(InvalidAttachmentException.class)

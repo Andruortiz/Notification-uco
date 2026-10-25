@@ -16,6 +16,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
     unique = true)
 @CompoundIndex(name = "tenant_acceptedAt", def = "{'tenantId': 1, 'acceptedAt': -1}")
 @CompoundIndex(name = "status_pendingSince", def = "{'status': 1, 'pendingSince': 1}")
+@CompoundIndex(name = "attempt_messageId", def = "{'deliveryAttempts.messageId': 1}", sparse = true)
 public record NotificationDocument(
     @Id String id,
     String tenantId,

@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
@@ -17,6 +18,7 @@ import reactor.core.publisher.Mono;
 public class SimulatedNotificationProvider implements NotificationSenderPort {
 
   private static final ProviderId PROVIDER_ID = ProviderId.of("simulated");
+  public static final String MESSAGE_ID_PREFIX = "simulated-";
   private static final String DISABLED_REASON = "notification.provider.simulated.enabled=false";
 
   private final SimulatedProviderProperties properties;
@@ -31,7 +33,12 @@ public class SimulatedNotificationProvider implements NotificationSenderPort {
     if (!properties.enabled()) {
       return Mono.error(new ProviderDisabledException(PROVIDER_ID, DISABLED_REASON));
     }
-    return Mono.just(ProviderResult.of(properties.result()));
+    final AttemptResult result = properties.result();
+    final String messageId =
+        result == AttemptResult.ACCEPTED
+            ? MESSAGE_ID_PREFIX + notification.notificationId().value()
+            : null;
+    return Mono.just(new ProviderResult(result, null, null, messageId, null));
   }
 
   @Override

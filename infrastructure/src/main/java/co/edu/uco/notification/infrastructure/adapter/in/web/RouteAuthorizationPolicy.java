@@ -32,7 +32,9 @@ public class RouteAuthorizationPolicy {
           rule(HttpMethod.POST, "/channels", Role.ADMINISTRADOR),
           rule(HttpMethod.POST, "/providers", Role.ADMINISTRADOR),
           rule(HttpMethod.GET, "/recipients/preferences", Role.CLIENTE),
-          rule(HttpMethod.PUT, "/recipients/preferences", Role.CLIENTE));
+          rule(HttpMethod.PUT, "/recipients/preferences", Role.CLIENTE),
+          rule(HttpMethod.POST, "/recipients/undeliverable-lookups", Role.OPERADOR),
+          rule(HttpMethod.POST, "/recipients/undeliverable-releases", Role.ADMINISTRADOR));
 
   private static Map.Entry<Route, Role> rule(
       final HttpMethod method, final String path, final Role minimumRole) {

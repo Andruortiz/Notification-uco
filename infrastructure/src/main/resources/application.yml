@@ -74,7 +74,7 @@ security:
       environment: ${SECURITY_ENVIRONMENT:local}
       application-credential: ${PEP_REGISTRATION_TOKEN:}
       allow-insecure-http: ${SECURITY_PEP_ALLOW_INSECURE_HTTP:false}
-      public-paths: ${SECURITY_PEP_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,/openapi/api-notificaciones.yaml,/v3/api-docs}
+      public-paths: ${SECURITY_PEP_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,/openapi/api-notificaciones.yaml,/v3/api-docs,/providers/brevo/bounce-events}
 
 notification:
   auth:
@@ -126,6 +126,8 @@ notification:
       PUSH:
         providers: ${NOTIFICATION_PUSH_PROVIDERS:fcm,simulated}
         content-schema: '{"type":"object","required":["body"],"properties":{"subject":{"maxLength":100},"body":{"type":"string","maxLength":900}}}'
+  brevo:
+    webhook-secret: ${BREVO_WEBHOOK_SECRET:}
   provider:
     simulated:
       result: ${SIMULATED_PROVIDER_RESULT:ACCEPTED}

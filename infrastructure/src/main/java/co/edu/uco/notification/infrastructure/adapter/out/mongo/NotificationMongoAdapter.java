@@ -1,12 +1,15 @@
 package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
 import co.edu.uco.notification.core.domain.Notification;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.port.out.MessageRecipientRef;
+import co.edu.uco.notification.core.port.out.ProviderMessageLookupPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
 import co.edu.uco.notification.utils.Preconditions;
@@ -27,7 +30,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 @Component
-public class NotificationMongoAdapter implements NotificationRepository {
+public class NotificationMongoAdapter implements NotificationRepository, ProviderMessageLookupPort {
 
   private final ReactiveMongoTemplate mongoTemplate;
 
@@ -200,6 +203,22 @@ public class NotificationMongoAdapter implements NotificationRepository {
           return findAndModify(query, update);
         },
         limit);
+  }
+
+  @Override
+  public Mono<MessageRecipientRef> findByProviderMessageId(final String messageId) {
+    Preconditions.requireNonBlank(messageId, "messageId must not be blank");
+    return mongoTemplate
+        .findOne(
+            Query.query(Criteria.where("deliveryAttempts.messageId").is(messageId)),
+            NotificationDocument.class)
+        .map(
+            document ->
+                new MessageRecipientRef(
+                    TenantId.of(document.tenantId()),
+                    ChannelType.of(document.channelType()),
+                    document.recipientAddress(),
+                    NotificationId.of(document.id())));
   }
 
   private Mono<Notification> findAndModify(final Query query, final Update update) {

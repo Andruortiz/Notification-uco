@@ -28,6 +28,7 @@ public class RouteAuthorizationPolicy {
           rule(HttpMethod.GET, "/attachment-uploads/status", Role.CLIENTE),
           rule(HttpMethod.GET, "/channels", Role.CLIENTE),
           rule(HttpMethod.GET, "/providers", Role.CLIENTE),
+          rule(HttpMethod.GET, "/provider-health", Role.OPERADOR),
           rule(HttpMethod.GET, "/configuration", Role.ADMINISTRADOR),
           rule(HttpMethod.POST, "/channels", Role.ADMINISTRADOR),
           rule(HttpMethod.POST, "/providers", Role.ADMINISTRADOR),

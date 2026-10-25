@@ -33,7 +33,6 @@ import org.testcontainers.rabbitmq.RabbitMQContainer;
       "spring.profiles.active=publico",
       "MONGO_USERNAME=test",
       "MONGO_PASSWORD=test",
-      "notification.auth.jwt.hs256-secret=public-routes-e2e-secret-0123456789abcdef-0123",
       "security.enabled=true",
       "security.pep.enforcement.enabled=true",
       "security.pep.enforcement.allow-insecure-http=true",

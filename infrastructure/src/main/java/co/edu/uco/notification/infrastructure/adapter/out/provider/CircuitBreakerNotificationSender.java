@@ -10,8 +10,13 @@ import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.utils.Preconditions;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.function.LongSupplier;
 import reactor.core.publisher.Mono;
 
 public class CircuitBreakerNotificationSender implements NotificationSenderPort {
@@ -30,6 +35,13 @@ public class CircuitBreakerNotificationSender implements NotificationSenderPort 
 
   public CircuitBreakerNotificationSender(
       final NotificationSenderPort delegate, final ProviderCircuitProperties properties) {
+    this(delegate, properties, System::currentTimeMillis);
+  }
+
+  public CircuitBreakerNotificationSender(
+      final NotificationSenderPort delegate,
+      final ProviderCircuitProperties properties,
+      final LongSupplier millis) {
     this.delegate = Preconditions.requireNonNull(delegate, "delegate must not be null");
     Preconditions.requireNonNull(properties, "properties must not be null");
     this.circuitBreaker =
@@ -42,6 +54,7 @@ public class CircuitBreakerNotificationSender implements NotificationSenderPort 
                 .waitDurationInOpenState(properties.openWait())
                 .permittedNumberOfCallsInHalfOpenState(properties.halfOpenCalls())
                 .ignoreExceptions(ProviderDisabledException.class)
+                .clock(new MillisClock(millis))
                 .build());
   }
 
@@ -62,6 +75,30 @@ public class CircuitBreakerNotificationSender implements NotificationSenderPort 
                           System.nanoTime() - startedAt, TimeUnit.NANOSECONDS, error))
               .doOnCancel(circuitBreaker::releasePermission);
         });
+  }
+
+  private static final class MillisClock extends Clock {
+
+    private final LongSupplier millis;
+
+    private MillisClock(final LongSupplier millis) {
+      this.millis = millis;
+    }
+
+    @Override
+    public ZoneId getZone() {
+      return ZoneOffset.UTC;
+    }
+
+    @Override
+    public Clock withZone(final ZoneId zone) {
+      return this;
+    }
+
+    @Override
+    public Instant instant() {
+      return Instant.ofEpochMilli(millis.getAsLong());
+    }
   }
 
   private void record(final ProviderResult result, final long elapsedNanos) {

@@ -323,4 +323,20 @@ class DeviceMongoAdapterTest {
             .device();
     assertEquals("identity-future", device.recipientIdentityId());
   }
+
+  @Test
+  void aTokenEncryptedWithAnotherKeyDoesNotBreakTheListing() {
+    final DeviceMongoAdapter foreign =
+        new DeviceMongoAdapter(
+            mongoTemplate, new AesGcmTokenProtection(key(9), 1, key(2), 1), meters);
+    final RecipientIdentity identity = identity(TENANT, "app-1");
+    foreign.save(TENANT, identity, DevicePlatform.WEB, "foreign-token-1", "app-1").block();
+    adapter.save(TENANT, identity, DevicePlatform.WEB, TOKEN, "app-1").block();
+
+    final List<Device> devices = adapter.findBySubject(TENANT, "app-1").collectList().block();
+
+    assertEquals(2, devices.size());
+    assertTrue(devices.stream().anyMatch(d -> AesGcmTokenProtection.UNREADABLE.equals(d.token())));
+    assertTrue(devices.stream().anyMatch(d -> TOKEN.equals(d.token())));
+  }
 }

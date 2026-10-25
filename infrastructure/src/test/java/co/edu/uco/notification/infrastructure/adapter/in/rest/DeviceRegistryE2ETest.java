@@ -58,17 +58,10 @@ import org.testcontainers.rabbitmq.RabbitMQContainer;
       "MONGO_USERNAME=test",
       "MONGO_PASSWORD=test",
       "notification.catalog.refresh-interval-ms=500",
-      "notification.scheduler.requeue-interval-ms=600000",
-      DeviceRegistryE2ETest.TOKEN_KEY_PROPERTY,
-      DeviceRegistryE2ETest.FINGERPRINT_KEY_PROPERTY
+      "notification.scheduler.requeue-interval-ms=600000"
     })
 @Testcontainers
 class DeviceRegistryE2ETest {
-
-  static final String TOKEN_KEY_PROPERTY =
-      "DEVICE_TOKEN_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=";
-  static final String FINGERPRINT_KEY_PROPERTY =
-      "DEVICE_FINGERPRINT_KEY=ZmluZ2VycHJpbnQta2V5LWZvci10ZXN0cy0wMDAwMDAwMDA=";
 
   private static final String ACCESS_TOKEN = "device-e2e-access-" + "token";
   private static final AtomicInteger SEQUENCE = new AtomicInteger();

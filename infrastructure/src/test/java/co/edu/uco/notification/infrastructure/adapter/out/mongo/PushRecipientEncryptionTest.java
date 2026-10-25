@@ -168,4 +168,68 @@ class PushRecipientEncryptionTest {
     }
     assertEquals(TOKEN, raw(sms).recipientAddress());
   }
+
+  @Test
+  void documentsEncryptedWithAnotherKeyDoNotBreakReadsAndShowAMarker() {
+    final AesGcmTokenProtection foreign = new AesGcmTokenProtection(key(9), 1, key(2), 1);
+    final Notification foreignSaved =
+        new NotificationMongoAdapter(mongoTemplate, foreign)
+            .save(notification(TENANT, "PUSH", "push-foreign"))
+            .block();
+    protectedAdapter.save(notification(TENANT, "PUSH", "push-own")).block();
+
+    final java.util.List<Notification> listed =
+        protectedAdapter
+            .search(new NotificationSearchCriteria(TENANT, null, null, null, null, null, 50, 0))
+            .collectList()
+            .block();
+
+    assertEquals(2, listed.size());
+    assertEquals(
+        AesGcmTokenProtection.UNREADABLE,
+        protectedAdapter.findById(foreignSaved.notificationId()).block().recipient().address());
+    assertTrue(listed.stream().anyMatch(n -> TOKEN.equals(n.recipient().address())));
+  }
+
+  @Test
+  void theSweepSkipsPushDocumentsWithoutAddressAndStillFinishes() {
+    legacyAdapter.save(notification(TENANT, "PUSH", "legacy-ok")).block();
+    mongoTemplate
+        .getCollection("notifications")
+        .flatMap(
+            collection ->
+                reactor.core.publisher.Mono.from(
+                    collection.insertOne(
+                        new org.bson.Document("_id", "no-address")
+                            .append("tenantId", TENANT.value())
+                            .append("channelType", "PUSH")
+                            .append("recipientId", RECIPIENT)
+                            .append("recipientAddress", null))))
+        .block();
+    final PushRecipientEncryptionSweep sweep =
+        new PushRecipientEncryptionSweep(mongoTemplate, protection);
+
+    assertEquals(1L, sweep.run(5).block());
+    assertEquals(0L, sweep.run(5).block());
+  }
+
+  @Test
+  void theSweepKeepsGoingWhenAnotherReplicaAlreadyEncryptedPartOfTheBatch() {
+    for (int i = 0; i < 4; i++) {
+      legacyAdapter.save(notification(TENANT, "PUSH", "legacy-race-" + i)).block();
+    }
+    final PushRecipientEncryptionSweep sweep =
+        new PushRecipientEncryptionSweep(mongoTemplate, protection);
+
+    assertEquals(4L, sweep.run(1).block());
+    assertEquals(
+        0,
+        mongoTemplate
+            .count(
+                org.springframework.data.mongodb.core.query.Query.query(
+                    org.springframework.data.mongodb.core.query.Criteria.where("recipientAddress")
+                        .regex("^(?!enc:v).+")),
+                NotificationDocument.class)
+            .block());
+  }
 }

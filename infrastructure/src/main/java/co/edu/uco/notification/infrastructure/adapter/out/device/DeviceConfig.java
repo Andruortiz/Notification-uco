@@ -14,16 +14,18 @@ import co.edu.uco.notification.core.usecase.DispatchNotificationService;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.DeviceMongoAdapter;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.PushRecipientEncryptionSweep;
 import co.edu.uco.notification.infrastructure.adapter.out.security.AesGcmTokenProtection;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
+import java.util.Arrays;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
-import org.springframework.core.env.Profiles;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import reactor.core.scheduler.Schedulers;
 
@@ -35,15 +37,37 @@ class DeviceConfig {
   @Bean
   AesGcmTokenProtection tokenProtection(
       final Environment environment,
+      final ObjectProvider<MeterRegistry> meterRegistry,
       @Value("${DEVICE_TOKEN_KEY:}") final String tokenKey,
       @Value("${DEVICE_TOKEN_KEY_VERSION:1}") final int tokenKeyVersion,
       @Value("${DEVICE_FINGERPRINT_KEY:}") final String fingerprintKey,
       @Value("${DEVICE_FINGERPRINT_KEY_VERSION:1}") final int fingerprintKeyVersion) {
+    return protection(
+            environment.getActiveProfiles(),
+            tokenKey,
+            tokenKeyVersion,
+            fingerprintKey,
+            fingerprintKeyVersion)
+        .withMeters(meterRegistry.getIfAvailable());
+  }
+
+  static boolean ephemeralKeysAllowed(final String[] activeProfiles) {
+    return activeProfiles.length > 0
+        && Arrays.stream(activeProfiles)
+            .allMatch(profile -> "local".equals(profile) || "test".equals(profile));
+  }
+
+  static AesGcmTokenProtection protection(
+      final String[] activeProfiles,
+      final String tokenKey,
+      final int tokenKeyVersion,
+      final String fingerprintKey,
+      final int fingerprintKeyVersion) {
     if (tokenKey.isBlank() || fingerprintKey.isBlank()) {
-      if (!environment.acceptsProfiles(Profiles.of("local", "test"))) {
+      if (!ephemeralKeysAllowed(activeProfiles)) {
         throw new IllegalStateException(
-            "DEVICE_TOKEN_KEY and DEVICE_FINGERPRINT_KEY are required outside the local and test"
-                + " profiles");
+            "DEVICE_TOKEN_KEY and DEVICE_FINGERPRINT_KEY are required unless every active profile is"
+                + " local or test");
       }
       LOGGER.warn("Device encryption keys not configured; using ephemeral keys for this process");
       return AesGcmTokenProtection.ephemeral();

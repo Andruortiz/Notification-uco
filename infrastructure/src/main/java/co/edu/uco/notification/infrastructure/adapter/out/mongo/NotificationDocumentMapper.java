@@ -18,14 +18,18 @@ import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
 import co.edu.uco.notification.infrastructure.adapter.out.security.AesGcmTokenProtection;
+import co.edu.uco.notification.infrastructure.config.LogFields;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.util.List;
 import java.util.Objects;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 final class NotificationDocumentMapper {
 
   private NotificationDocumentMapper() {}
 
+  private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDocumentMapper.class);
   private static final String PUSH = "PUSH";
   private static final String RECIPIENT_ID_FIELD = "recipientId";
   private static final String RECIPIENT_ADDRESS_FIELD = "recipientAddress";
@@ -81,9 +85,24 @@ final class NotificationDocumentMapper {
       final String value,
       final String field,
       final AesGcmTokenProtection protection) {
-    return protection == null
-        ? value
-        : protection.reveal(value, aad(document.tenantId(), document.id(), field));
+    if (protection == null) {
+      return value;
+    }
+    return protection
+        .tryReveal(value, aad(document.tenantId(), document.id(), field))
+        .orElseGet(
+            () -> {
+              LOGGER.warn(
+                  LogFields.fields(
+                      "tenantId",
+                      document.tenantId(),
+                      "notificationId",
+                      document.id(),
+                      "keyVersion",
+                      AesGcmTokenProtection.versionOf(value)),
+                  "Stored recipient could not be decrypted");
+              return AesGcmTokenProtection.UNREADABLE;
+            });
   }
 
   static Notification toDomain(final NotificationDocument document) {

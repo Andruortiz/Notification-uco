@@ -1,12 +1,16 @@
 package co.edu.uco.notification.infrastructure.adapter.out.security;
 
 import co.edu.uco.notification.utils.Preconditions;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
@@ -16,6 +20,11 @@ public final class AesGcmTokenProtection {
 
   public static final String PREFIX_ROOT = "enc:v";
 
+  public static final String UNREADABLE = "[unreadable]";
+  public static final String UNREADABLE_METER = "encryption.unreadable";
+
+  private static final Pattern ENVELOPE =
+      Pattern.compile("^enc:v(\\d{1,9}):([A-Za-z0-9+/]{38,}={0,2})$");
   private static final int KEY_BYTES = 32;
   private static final int IV_BYTES = 12;
   private static final int TAG_BITS = 128;
@@ -25,6 +34,7 @@ public final class AesGcmTokenProtection {
   private final SecretKeySpec fingerprintKey;
   private final int keyVersion;
   private final int fingerprintKeyVersion;
+  private MeterRegistry meterRegistry;
 
   public AesGcmTokenProtection(
       final byte[] encryptionKey,
@@ -67,8 +77,29 @@ public final class AesGcmTokenProtection {
     return fingerprintKeyVersion;
   }
 
+  public AesGcmTokenProtection withMeters(final MeterRegistry registry) {
+    this.meterRegistry = registry;
+    return this;
+  }
+
+  public Optional<String> tryReveal(final String value, final String aad) {
+    try {
+      return Optional.ofNullable(reveal(value, aad));
+    } catch (IllegalStateException error) {
+      if (meterRegistry != null) {
+        meterRegistry.counter(UNREADABLE_METER).increment();
+      }
+      return Optional.empty();
+    }
+  }
+
+  public static Integer versionOf(final String value) {
+    final Matcher matcher = value == null ? null : ENVELOPE.matcher(value);
+    return matcher != null && matcher.matches() ? Integer.valueOf(matcher.group(1)) : null;
+  }
+
   public boolean isProtected(final String value) {
-    return value != null && value.startsWith(PREFIX_ROOT);
+    return value != null && ENVELOPE.matcher(value).matches();
   }
 
   public String protect(final String plain, final String aad) {

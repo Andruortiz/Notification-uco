@@ -283,11 +283,28 @@ public class DeviceMongoAdapter implements DeviceRegistryPort, DeviceLifecyclePo
         TenantId.of(document.tenantId()),
         document.recipientIdentityId(),
         DevicePlatform.of(document.platform()),
-        protection.reveal(
-            document.protectedToken(), deviceAad(document.tenantId(), document.deviceId())),
+        revealToken(document),
         document.originComponent(),
         document.createdAt(),
         document.lastSeenAt());
+  }
+
+  private String revealToken(final DeviceDocument document) {
+    return protection
+        .tryReveal(document.protectedToken(), deviceAad(document.tenantId(), document.deviceId()))
+        .orElseGet(
+            () -> {
+              LOGGER.warn(
+                  LogFields.fields(
+                      "tenantId",
+                      document.tenantId(),
+                      "deviceId",
+                      document.deviceId(),
+                      "keyVersion",
+                      document.keyVersion()),
+                  "Stored device token could not be decrypted");
+              return AesGcmTokenProtection.UNREADABLE;
+            });
   }
 
   private static RecipientIdentity toIdentity(final RecipientIdentityDocument document) {

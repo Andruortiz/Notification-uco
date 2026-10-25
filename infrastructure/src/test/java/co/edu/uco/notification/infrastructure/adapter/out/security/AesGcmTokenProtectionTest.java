@@ -87,4 +87,31 @@ class AesGcmTokenProtectionTest {
 
     assertEquals("x", ephemeral.reveal(ephemeral.protect("x", "a"), "a"));
   }
+
+  @Test
+  void onlyTheCompleteEnvelopeCountsAsProtected() {
+    final String valid = protection.protect("x", "aad");
+
+    assertTrue(protection.isProtected(valid));
+    assertFalse(protection.isProtected("enc:v1:"));
+    assertFalse(protection.isProtected("enc:v1:short"));
+    assertFalse(protection.isProtected("enc:vx:" + valid.substring(7)));
+    assertFalse(protection.isProtected("enc:v1:" + "!".repeat(48)));
+    assertFalse(protection.isProtected("enc:visible-name"));
+    assertEquals(1, AesGcmTokenProtection.versionOf(valid));
+    assertEquals(null, AesGcmTokenProtection.versionOf("plain"));
+  }
+
+  @Test
+  void anUnreadableValueYieldsEmptyAndIsCountedWithoutLabels() {
+    final io.micrometer.core.instrument.simple.SimpleMeterRegistry meters =
+        new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    final AesGcmTokenProtection counting =
+        new AesGcmTokenProtection(key(1), 1, key(2), 1).withMeters(meters);
+    final String foreign = new AesGcmTokenProtection(key(9), 1, key(2), 1).protect("x", "aad");
+
+    assertTrue(counting.tryReveal(foreign, "aad").isEmpty());
+    assertEquals("x", counting.tryReveal(counting.protect("x", "aad"), "aad").orElseThrow());
+    assertEquals(1.0, meters.counter(AesGcmTokenProtection.UNREADABLE_METER).count());
+  }
 }

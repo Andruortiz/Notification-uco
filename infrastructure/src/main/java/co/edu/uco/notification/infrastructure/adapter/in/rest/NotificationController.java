@@ -160,7 +160,9 @@ public class NotificationController {
             to,
             limit,
             offset);
-    return searchNotificationsUseCase.search(query).map(NotificationSearchResponse::from);
+    return searchNotificationsUseCase
+        .search(query)
+        .map(page -> NotificationSearchResponse.from(page, principal.role()));
   }
 
   private static SendNotificationCommand toCommand(

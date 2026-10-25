@@ -17,6 +17,10 @@ public final class TestTokens {
     return bearer(tenantId, Role.ADMINISTRADOR);
   }
 
+  public static String bearer(final String tenantId, final Role role, final String subject) {
+    return "Bearer " + ISSUER.issue(TenantId.of(tenantId), role, subject, Duration.ofMinutes(15));
+  }
+
   public static String bearer(final String tenantId, final Role role) {
     return "Bearer "
         + ISSUER.issue(TenantId.of(tenantId), role, "test-client", Duration.ofMinutes(15));

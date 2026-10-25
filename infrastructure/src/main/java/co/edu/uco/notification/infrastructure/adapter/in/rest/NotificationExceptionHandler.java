@@ -6,6 +6,8 @@ import co.edu.uco.notification.core.exception.AttachmentNotUploadedException;
 import co.edu.uco.notification.core.exception.AttachmentUploadExpiredException;
 import co.edu.uco.notification.core.exception.AttachmentUploadNotFoundException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.DeviceNotFoundException;
+import co.edu.uco.notification.core.exception.DeviceSubjectForbiddenException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.exception.InvalidRecipientException;
@@ -84,6 +86,18 @@ public class NotificationExceptionHandler {
       final RecipientUndeliverableException e, final ServerWebExchange exchange) {
     return respond(
         HttpStatus.CONFLICT, ErrorCode.RECIPIENT_UNDELIVERABLE, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(DeviceNotFoundException.class)
+  public ResponseEntity<ErrorResponse> handleDeviceNotFound(
+      final DeviceNotFoundException e, final ServerWebExchange exchange) {
+    return respond(HttpStatus.NOT_FOUND, ErrorCode.DEVICE_NOT_FOUND, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(DeviceSubjectForbiddenException.class)
+  public ResponseEntity<ErrorResponse> handleDeviceSubjectForbidden(
+      final DeviceSubjectForbiddenException e, final ServerWebExchange exchange) {
+    return respond(HttpStatus.FORBIDDEN, ErrorCode.INSUFFICIENT_ROLE, e.getMessage(), exchange);
   }
 
   @ExceptionHandler(WebhookSecretInvalidException.class)

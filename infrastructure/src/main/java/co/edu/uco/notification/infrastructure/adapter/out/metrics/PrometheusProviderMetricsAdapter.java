@@ -9,8 +9,13 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeoutException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 import reactor.core.publisher.Mono;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -18,6 +23,8 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class PrometheusProviderMetricsAdapter implements ProviderMetricsQueryPort {
 
+  private static final Logger LOGGER =
+      LoggerFactory.getLogger(PrometheusProviderMetricsAdapter.class);
   private static final JsonMapper MAPPER = JsonMapper.builder().build();
   private static final long STEP_SECONDS = 60;
   private static final String DEFAULT_URL = "http://localhost:9090";
@@ -55,7 +62,20 @@ public class PrometheusProviderMetricsAdapter implements ProviderMetricsQueryPor
     return Mono.zip(instant(counts), instant(latency), range(errors, now.minus(lookback), now))
         .map(t -> new Snapshot(countsOf(t.getT1()), latenciesOf(t.getT2()), errorsOf(t.getT3())))
         .timeout(timeout)
-        .onErrorMap(e -> new ProviderMetricsUnavailableException());
+        .onErrorMap(PrometheusProviderMetricsAdapter::isSourceFailure, this::unavailable);
+  }
+
+  private static boolean isSourceFailure(final Throwable e) {
+    return e instanceof WebClientResponseException
+        || e instanceof WebClientRequestException
+        || e instanceof TimeoutException;
+  }
+
+  private ProviderMetricsUnavailableException unavailable(final Throwable e) {
+    final int status = e instanceof WebClientResponseException r ? r.getStatusCode().value() : 0;
+    LOGGER.warn(
+        "Prometheus query failed: cause={} status={}", e.getClass().getSimpleName(), status);
+    return new ProviderMetricsUnavailableException();
   }
 
   private Mono<JsonNode> instant(final String promql) {

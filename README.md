@@ -181,7 +181,7 @@ Que demuestra cada panel de RNF y que no:
 
 - `PROMETHEUS_URL` (por defecto `http://localhost:9090`) y `GRAFANA_URL` (vacia por defecto).
 - Ajustes opcionales: `PROVIDER_HEALTH_WINDOW` (5m), `PROVIDER_HEALTH_LOOKBACK` (15m), `PROVIDER_HEALTH_TIMEOUT` (2s), `PROVIDER_HEALTH_MIN_SAMPLES` (5), `PROVIDER_HEALTH_HEALTHY_THRESHOLD` (0,95), `PROVIDER_HEALTH_DOWN_THRESHOLD` (0,5) y `PROVIDER_HEALTH_RECOVERABLE_THRESHOLD` (0,5).
-- Limites: un proveedor desactivado con trafico sale `DOWN` porque la metrica no distingue `ProviderDisabledException` de un fallo (dueno: equipo de backend, fecha 2026-12-15); los proveedores sin trafico en la ventana no aparecen; el instante del ultimo error tiene resolucion de 60 segundos.
+- Limites: con el breaker de E3 abierto el proveedor puede salir `UNKNOWN` o ausente y no `DOWN` (dueno: equipo de backend, fecha 2026-12-15); un proveedor desactivado con trafico sale `DOWN` porque la metrica no distingue `ProviderDisabledException` de un fallo (dueno: equipo de backend, fecha 2026-12-15); los proveedores sin trafico en la ventana no aparecen; el instante del ultimo error tiene resolucion de 60 segundos.
 
 ## Azure Key Vault
 

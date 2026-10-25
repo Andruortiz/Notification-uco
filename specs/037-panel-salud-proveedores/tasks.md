@@ -29,3 +29,4 @@
 - D9: `CIRCUIT_OPEN` y `failedOver` no se modelan en el enum ni en la respuesta (reservados en el contrato).
 - La respuesta serializa directamente `ProviderHealthReport` de `core`; no hay DTO REST aparte.
 - T010: `RouteAuthorizationPolicyContractTest` falla por `GET /notifications/timeline` (historia ajena, contrato adelantado); `GET /provider-health` coincide.
+- Ajustes de revisión: `x-status` correcto es `available`; `ProviderHealthProperties` valida rangos al arrancar; el adaptador solo convierte errores de transporte, HTTP y timeout en 503 y registra clase y estado sin URL; `PrometheusProviderMetricsAdapterTest` cubre respuesta válida, NaN, vacía, 500, estado de error, timeout, conexión rechazada y error de parseo. Con el circuito de E3 abierto el proveedor puede salir `UNKNOWN` o ausente (plan, límite conocido).

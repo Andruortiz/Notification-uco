@@ -21,12 +21,12 @@ Un caso de uso en `core` pide a un puerto de salida las series de Prometheus, ca
 - D8 (Q4, hallazgo 7): el 503 usa `INFRASTRUCTURE_ERROR` (5000). Se descarta `AUTHENTICATION_UNAVAILABLE` (2003).
 - D9 (Q6): esquema extensible: `status` incluye `CIRCUIT_OPEN` reservado (no lo produce esta historia) y `failedOver` queda como campo opcional futuro; ambos son aditivos y no rompen consumidores.
 
-## Contrato (lo que lista Contrato; no se edita `api-notificaciones.yaml` aquí)
+## Cambios de contrato requeridos (los lista Contrato; no se edita `api-notificaciones.yaml` aquí)
 
-- `GET /provider-health`, `x-minimum-role: OPERADOR`, `x-status: implemented`, sin parámetros, 200 `ProviderHealthResponse`; 401, 403, 503 con `ErrorResponse`.
+- `GET /provider-health`, `x-minimum-role: OPERADOR`, `x-status: available`, sin parámetros, 200 `ProviderHealthResponse`; 401, 403, 503 con `ErrorResponse`.
 - `ProviderHealthResponse`: `{ generatedAt, windowSeconds, grafanaUrl|null, providers: [ProviderHealth] }`.
 - `ProviderHealth`: `{ provider, channel, status: HEALTHY|DEGRADED|DOWN|UNKNOWN (CIRCUIT_OPEN reservado), successRate|null (0..1), sampleCount, latencyP95Millis|null (por proveedor, repetida por canal), lastError: { result: recoverable|failed, at, code?, category? } | null, failedOver? }`.
-- Límites documentados: proveedor desactivado con tráfico cuenta como `failed`; retraso del scrape (15 s) más la ventana; proveedores sin tráfico no aparecen.
+- Límites documentados: con el circuito de E3 abierto el proveedor puede salir `UNKNOWN` o ausente y no `DOWN`, porque no recibe intentos (límite conocido, Equipo de backend, 2026-12-15; Contrato debe citarlo en la descripción de la operación); proveedor desactivado con tráfico cuenta como `failed`; retraso del scrape (15 s) más la ventana; proveedores sin tráfico no aparecen.
 
 Consumo por la UI (repo aparte): tabla que sondea cada 15 s, colorea `status`, abre `grafanaUrl` en pestaña nueva.
 

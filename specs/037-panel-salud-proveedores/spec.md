@@ -55,7 +55,7 @@ Como OP quiero ver, por proveedor y canal, estado, tasa de éxito, latencia y ú
 - **FR-006**: El endpoint MUST requerir rol `OPERADOR` mediante la regla de ruta del PEP/PDP (`RouteAuthorizationPolicy`); la identidad llega por la sesión del PDP y no de parámetros. El panel no usa `tenantId` porque la salud es global.
 - **FR-007**: El enmascarado de datos personales por rol queda sin objeto para este endpoint: no expone datos personales. Una prueba lo afirma; el requisito se cumple por ausencia de datos.
 - **FR-008**: La respuesta MUST incluir `grafanaUrl` (nulo si no hay) y la consulta a Prometheus MUST tener tiempo límite configurable; al excederlo, 503.
-- **FR-009**: Todo `provider` y `channel` leídos de Prometheus MUST validarse contra el patrón del catálogo (`^[a-z0-9][a-z0-9_-]{0,63}$`) antes de devolverse o de usarse en una URL; los inválidos se descartan. La URL de Prometheus solo viene de configuración, nunca de la petición, y nunca aparece en el 503 ni en logs de respuesta.
+- **FR-009**: Todo `provider` y `channel` leídos de Prometheus MUST validarse contra el patrón del catálogo (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`; los canales reales son EMAIL, SMS y PUSH) antes de devolverse o de usarse en una URL; los inválidos se descartan. La URL de Prometheus solo viene de configuración, nunca de la petición, y nunca aparece en el 503 ni en logs de respuesta.
 - **FR-010**: El endpoint nuevo `GET /provider-health` lo define Contrato en `api-notificaciones.yaml` antes del controller (Principio II). Esta historia no edita ese archivo. La latencia p95 solo existe por proveedor (la métrica no tiene `channel`): se repite en cada canal del mismo proveedor y el contrato lo documenta.
 
 ## Success Criteria

@@ -16,6 +16,7 @@ import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedExcepti
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
 import co.edu.uco.notification.core.exception.NotificationStateNotAllowedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.exception.ProviderTestInProgressException;
 import co.edu.uco.notification.core.exception.RecipientUndeliverableException;
 import co.edu.uco.notification.core.exception.ResendChannelInvalidException;
 import co.edu.uco.notification.infrastructure.adapter.in.web.CorrelationIdWebFilter;
@@ -147,6 +148,16 @@ public class NotificationExceptionHandler {
         HttpStatus.PAYLOAD_TOO_LARGE,
         ErrorCode.REQUEST_BODY_TOO_LARGE,
         "the request body exceeds the maximum allowed size",
+        exchange);
+  }
+
+  @ExceptionHandler(ProviderTestInProgressException.class)
+  public ResponseEntity<ErrorResponse> handleProviderTestInProgress(
+      final ProviderTestInProgressException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.TOO_MANY_REQUESTS,
+        ErrorCode.PROVIDER_TEST_IN_PROGRESS,
+        e.getMessage(),
         exchange);
   }
 

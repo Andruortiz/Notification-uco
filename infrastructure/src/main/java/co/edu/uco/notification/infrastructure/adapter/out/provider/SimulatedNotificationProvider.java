@@ -2,9 +2,12 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ProbeErrorCode;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProbeOutcome;
+import co.edu.uco.notification.core.port.out.ProviderProbePort;
 import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.config.SimulatedProviderProperties;
 import co.edu.uco.notification.utils.Preconditions;
@@ -15,7 +18,7 @@ import reactor.core.publisher.Mono;
 
 @Component
 @EnableConfigurationProperties(SimulatedProviderProperties.class)
-public class SimulatedNotificationProvider implements NotificationSenderPort {
+public class SimulatedNotificationProvider implements NotificationSenderPort, ProviderProbePort {
 
   private static final ProviderId PROVIDER_ID = ProviderId.of("simulated");
   public static final String MESSAGE_ID_PREFIX = "simulated-";
@@ -39,6 +42,17 @@ public class SimulatedNotificationProvider implements NotificationSenderPort {
             ? MESSAGE_ID_PREFIX + notification.notificationId().value()
             : null;
     return Mono.just(new ProviderResult(result, null, null, messageId, null));
+  }
+
+  @Override
+  public Mono<ProbeOutcome> probe() {
+    if (!properties.enabled()) {
+      return Mono.just(ProbeOutcome.failed(ProbeErrorCode.CREDENTIALS_MISSING));
+    }
+    return Mono.just(
+        properties.result() == AttemptResult.ACCEPTED
+            ? ProbeOutcome.ok()
+            : ProbeOutcome.failed(ProbeErrorCode.SIMULATED_FAILURE));
   }
 
   @Override

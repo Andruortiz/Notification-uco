@@ -3,10 +3,13 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.Attachment;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ProbeErrorCode;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProbeOutcome;
+import co.edu.uco.notification.core.port.out.ProviderProbePort;
 import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.config.BrevoProviderProperties;
 import co.edu.uco.notification.utils.CorrelationId;
@@ -23,11 +26,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 @Component
-public class BrevoNotificationProvider implements NotificationSenderPort {
+public class BrevoNotificationProvider implements NotificationSenderPort, ProviderProbePort {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(BrevoNotificationProvider.class);
   private static final ProviderId PROVIDER_ID = ProviderId.of("brevo");
   private static final String SEND_PATH = "/v3/smtp/email";
+  private static final String ACCOUNT_PATH = "/v3/account";
 
   static final long MAX_ATTACHMENTS_BYTES = 4_000_000L;
 
@@ -67,6 +71,24 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
             attachmentContentLoader, "attachmentContentLoader must not be null");
     this.disabledReason = properties.disabledReason();
     disabledReason.ifPresent(reason -> ProviderLogs.disabled(LOGGER, PROVIDER_ID, reason));
+  }
+
+  @Override
+  public Mono<ProbeOutcome> probe() {
+    if (disabledReason.isPresent()) {
+      return Mono.just(ProbeOutcome.failed(ProbeErrorCode.CREDENTIALS_MISSING));
+    }
+    return ProviderProbes.classify(
+        Mono.defer(
+            () ->
+                clientSource
+                    .get()
+                    .get()
+                    .uri(ACCOUNT_PATH)
+                    .header("api-key", properties.apiKey())
+                    .exchangeToMono(
+                        response ->
+                            response.releaseBody().thenReturn(response.statusCode().value()))));
   }
 
   @Override

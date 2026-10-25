@@ -99,6 +99,12 @@ class RouteAuthorizationPolicyTest {
   }
 
   @Test
+  void providerConnectionTestRequiresAdministrador() {
+    assertEquals(
+        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.POST, "/provider-connection-tests"));
+  }
+
+  @Test
   void configurationReadRequiresAdministrador() {
     assertEquals(Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.GET, "/configuration"));
   }

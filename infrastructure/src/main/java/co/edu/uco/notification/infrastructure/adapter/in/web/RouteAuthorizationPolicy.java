@@ -19,6 +19,7 @@ public class RouteAuthorizationPolicy {
           rule(HttpMethod.GET, "/notifications", Role.OPERADOR),
           rule(HttpMethod.POST, "/notifications/batches", Role.CLIENTE),
           rule(HttpMethod.GET, "/notifications/detail", Role.CLIENTE),
+          rule(HttpMethod.GET, "/notifications/timeline", Role.OPERADOR),
           rule(HttpMethod.POST, "/notification-retries", Role.OPERADOR),
           rule(HttpMethod.GET, "/notifications/stream", Role.CLIENTE),
           rule(HttpMethod.POST, "/attachment-uploads", Role.CLIENTE),

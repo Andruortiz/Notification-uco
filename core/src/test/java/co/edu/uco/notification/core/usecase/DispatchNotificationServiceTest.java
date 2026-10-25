@@ -3,6 +3,8 @@ package co.edu.uco.notification.core.usecase;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -22,6 +24,7 @@ import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
+import co.edu.uco.notification.core.domain.valueobject.FailureCause;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
@@ -48,6 +51,7 @@ import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
 import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.core.repository.NotificationRepository;
+import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.ErrorCode;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
@@ -751,7 +755,8 @@ class DispatchNotificationServiceTest {
       StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
 
       assertEquals(1, logs.records(Level.SEVERE, "DISPATCH_EVENTS_NOT_PUBLISHED").size());
-      final String message = logs.records().get(0).getMessage();
+      final String message =
+          logs.records(Level.SEVERE, "DISPATCH_EVENTS_NOT_PUBLISHED").get(0).getMessage();
       assertTrue(message.contains("errorCode=" + ErrorCode.DISPATCH_EVENTS_NOT_PUBLISHED.format()));
       assertFalse(message.contains("category="));
     }
@@ -899,6 +904,112 @@ class DispatchNotificationServiceTest {
 
     verify(metricsPort)
         .errorRecorded(ErrorCode.DISPATCH_RESERVATION_NOT_RELEASED, ChannelType.of("EMAIL"), null);
+  }
+
+  @Test
+  void anAcceptedAttemptRecordsLatencyAndCorrelationIdWithoutCause() {
+    final Notification notification = pendingNotificationWithCorrelation();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    final DeliveryAttempt attempt = notification.deliveryAttempts().getLast();
+    assertNotNull(attempt.latencyMillis());
+    assertTrue(attempt.latencyMillis() >= 0);
+    assertNull(attempt.failureCause());
+    assertEquals("corr-1", attempt.correlationId());
+  }
+
+  @Test
+  void aPermanentFailureWithoutCauseIsRecordedAsProviderRejected() {
+    final Notification notification = pendingNotificationWithCorrelation();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.PERMANENT_FAILURE)));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    assertEquals(
+        FailureCause.PROVIDER_REJECTED, notification.deliveryAttempts().getLast().failureCause());
+  }
+
+  @Test
+  void aRecoverableFailureWithoutCauseIsRecordedAsProviderTemporary() {
+    final Notification notification = pendingNotificationWithCorrelation();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.RECOVERABLE_FAILURE)));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    assertEquals(
+        FailureCause.PROVIDER_TEMPORARY, notification.deliveryAttempts().getLast().failureCause());
+  }
+
+  @Test
+  void aCauseAlreadyClassifiedByTheProviderIsKept() {
+    final Notification notification = pendingNotificationWithCorrelation();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(
+            Mono.just(
+                new ProviderResult(
+                    AttemptResult.RECOVERABLE_FAILURE,
+                    null,
+                    null,
+                    null,
+                    FailureCause.PROVIDER_ERROR)));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    assertEquals(
+        FailureCause.PROVIDER_ERROR, notification.deliveryAttempts().getLast().failureCause());
+  }
+
+  @Test
+  void exhaustingTheRetriesRecordsRetriesExhausted() {
+    final Notification notification = pendingNotificationWithRecoverableAttempts(4);
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.RECOVERABLE_FAILURE)));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    assertEquals(NotificationStatus.FAILED, notification.status());
+    assertEquals(
+        FailureCause.RETRIES_EXHAUSTED, notification.deliveryAttempts().getLast().failureCause());
+  }
+
+  @Test
+  void unsupportedAttachmentsRecordTheirCauseWithoutLatency() {
+    final Notification notification = pendingNotificationWithAttachment();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.supportsAttachments()).thenReturn(false);
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    final DeliveryAttempt attempt = notification.deliveryAttempts().getLast();
+    assertEquals(FailureCause.ATTACHMENTS_UNSUPPORTED, attempt.failureCause());
+    assertNull(attempt.latencyMillis());
+  }
+
+  private static Notification pendingNotificationWithCorrelation() {
+    final Notification notification =
+        Notification.accept(
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL),
+            CorrelationId.of("corr-1"));
+    notification.markQueued();
+    notification.pullEvents();
+    return notification;
   }
 
   @Test

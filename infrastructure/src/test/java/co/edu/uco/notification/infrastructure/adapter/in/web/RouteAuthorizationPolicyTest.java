@@ -52,6 +52,11 @@ class RouteAuthorizationPolicyTest {
   }
 
   @Test
+  void timelineRequiresOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.GET, "/notifications/timeline"));
+  }
+
+  @Test
   void sendRequiresOnlyCliente() {
     assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications"));
   }

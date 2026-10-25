@@ -5,4 +5,6 @@ import reactor.core.publisher.Mono;
 public interface GetNotificationStatusUseCase {
 
   Mono<NotificationStatusView> getStatus(GetNotificationStatusQuery query);
+
+  Mono<NotificationTimelineView> getTimeline(GetNotificationStatusQuery query);
 }

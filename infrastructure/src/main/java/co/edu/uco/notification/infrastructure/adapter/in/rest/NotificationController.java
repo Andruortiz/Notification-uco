@@ -129,6 +129,17 @@ public class NotificationController {
     return getNotificationStatusUseCase.getStatus(query).map(NotificationStatusResponse::from);
   }
 
+  @GetMapping("/timeline")
+  public Mono<NotificationTimelineResponse> getTimeline(
+      final AuthenticatedPrincipal principal,
+      @RequestParam("notificationId") final String notificationId) {
+    final GetNotificationStatusQuery query =
+        new GetNotificationStatusQuery(principal.tenantId(), NotificationId.of(notificationId));
+    return getNotificationStatusUseCase
+        .getTimeline(query)
+        .map(view -> NotificationTimelineResponse.from(view, principal.role()));
+  }
+
   @GetMapping
   public Mono<NotificationSearchResponse> search(
       final AuthenticatedPrincipal principal,

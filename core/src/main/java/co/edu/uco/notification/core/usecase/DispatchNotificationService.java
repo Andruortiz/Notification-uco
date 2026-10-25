@@ -1,6 +1,7 @@
 package co.edu.uco.notification.core.usecase;
 
 import co.edu.uco.notification.core.domain.AttemptRecord;
+import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
@@ -190,7 +191,11 @@ public final class DispatchNotificationService implements DispatchNotificationUs
     final ProviderId providerId = providers.get(index);
     final ProviderResult result =
         new ProviderResult(
-            raw.result(), providerId, raw.latencyMillis(), raw.messageId(), raw.cause());
+            raw.result(),
+            providerId,
+            raw.latencyMillis(),
+            raw.messageId(),
+            raw.cause() == null ? defaultCause(raw.result()) : raw.cause());
     metricsPort.dispatchAttempted(notification.channelType(), providerId, result.result());
     if (result.result() != AttemptResult.RECOVERABLE_FAILURE) {
       return Mono.just(new Outcome(result, recoverables));
@@ -234,19 +239,32 @@ public final class DispatchNotificationService implements DispatchNotificationUs
       final Notification notification,
       final ProviderId providerId) {
     if (notification.content().hasAttachments() && !sender.supportsAttachments()) {
-      return Mono.just(ProviderResult.of(AttemptResult.PERMANENT_FAILURE, providerId));
+      return Mono.just(
+          new ProviderResult(
+              AttemptResult.PERMANENT_FAILURE,
+              providerId,
+              null,
+              null,
+              FailureCause.ATTACHMENTS_UNSUPPORTED));
     }
     return Mono.defer(
         () -> {
           final long startedAt = System.nanoTime();
           return sender
               .send(notification)
-              .doOnNext(
-                  result ->
-                      metricsPort.providerCalled(
-                          providerId,
-                          result.result(),
-                          Duration.ofNanos(System.nanoTime() - startedAt)));
+              .map(
+                  result -> {
+                    final Duration elapsed = Duration.ofNanos(System.nanoTime() - startedAt);
+                    metricsPort.providerCalled(providerId, result.result(), elapsed);
+                    return new ProviderResult(
+                        result.result(),
+                        result.providerId(),
+                        result.latencyMillis() == null
+                            ? Long.valueOf(elapsed.toMillis())
+                            : result.latencyMillis(),
+                        result.messageId(),
+                        result.cause());
+                  });
         });
   }
 
@@ -282,7 +300,29 @@ public final class DispatchNotificationService implements DispatchNotificationUs
         .onErrorMap(
             error -> !(error instanceof NotificationVersionConflictException),
             error -> new DispatchResultNotPersistedException(notification.notificationId(), error))
+        .doOnSuccess(saved -> logAttempts(notification, outcome.failedOver().size() + 1))
         .flatMap(saved -> publishEvents(notification, outcome.last().providerId(), events));
+  }
+
+  private static void logAttempts(final Notification notification, final int count) {
+    final List<DeliveryAttempt> attempts = notification.deliveryAttempts();
+    for (final DeliveryAttempt attempt :
+        attempts.subList(Math.max(0, attempts.size() - count), attempts.size())) {
+      LOGGER.log(
+          System.Logger.Level.INFO,
+          "DISPATCH_ATTEMPT_RECORDED notificationId="
+              + notification.notificationId().value()
+              + " correlationId="
+              + attempt.correlationId()
+              + " providerId="
+              + attempt.providerId().value()
+              + " result="
+              + attempt.result()
+              + " failureCause="
+              + attempt.failureCause()
+              + " latencyMillis="
+              + attempt.latencyMillis());
+    }
   }
 
   private Mono<Void> publishEvents(
@@ -306,15 +346,34 @@ public final class DispatchNotificationService implements DispatchNotificationUs
             });
   }
 
-  static AttemptRecord recordOf(final ProviderResult result) {
+  private static FailureCause defaultCause(final AttemptResult result) {
+    return switch (result) {
+      case PERMANENT_FAILURE -> FailureCause.PROVIDER_REJECTED;
+      case RECOVERABLE_FAILURE -> FailureCause.PROVIDER_TEMPORARY;
+      case ACCEPTED -> null;
+    };
+  }
+
+  private static FailureCause exhaustedCause(final FailureCause cause) {
+    return cause == null || cause == FailureCause.PROVIDER_TEMPORARY
+        ? FailureCause.RETRIES_EXHAUSTED
+        : cause;
+  }
+
+  static AttemptRecord recordOf(final ProviderResult result, final String correlationId) {
+    return recordOf(result, result.cause(), correlationId);
+  }
+
+  private static AttemptRecord recordOf(
+      final ProviderResult result, final FailureCause cause, final String correlationId) {
     return new AttemptRecord(
         result.result(),
         AttemptOrigin.AUTOMATIC,
         result.providerId(),
         false,
         result.latencyMillis(),
-        result.cause(),
-        null,
+        cause,
+        correlationId,
         result.messageId());
   }
 
@@ -329,17 +388,20 @@ public final class DispatchNotificationService implements DispatchNotificationUs
 
   private static void applyOutcome(
       final Notification notification, final Outcome outcome, final RetryPolicy retryPolicy) {
+    final String correlationId =
+        notification.correlationId() == null ? null : notification.correlationId().value();
     for (final ProviderResult failedOver : outcome.failedOver()) {
-      notification.recordFailedOver(recordOf(failedOver));
+      notification.recordFailedOver(recordOf(failedOver, correlationId));
     }
     final ProviderResult last = outcome.last();
-    final AttemptRecord record = recordOf(last);
+    final AttemptRecord record = recordOf(last, correlationId);
     if (last.result() == AttemptResult.ACCEPTED) {
       notification.markDelivered(record);
     } else if (last.result() == AttemptResult.RECOVERABLE_FAILURE) {
       final int attemptNumber = notification.recoverableAttemptsInCurrentCycle() + 1;
       if (retryPolicy.shouldGiveUp(attemptNumber)) {
-        notification.markRetriesExhausted(record);
+        notification.markRetriesExhausted(
+            recordOf(last, exhaustedCause(last.cause()), correlationId));
       } else {
         notification.markRecoverable(record);
       }

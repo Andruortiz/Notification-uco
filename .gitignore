@@ -48,3 +48,5 @@ secrets/
 
 # Diagramas generados por archify (regenerables)
 .archify/
+
+loadtest/resultado*.json

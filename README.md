@@ -170,6 +170,7 @@ Que demuestra cada panel de RNF y que no:
 - RNF-01: fraccion de raspados exitosos (`up`) en la ventana elegida frente al 99,5 %. Mide si el raspado funciono, no la disponibilidad percibida por los clientes; la lectura mensual necesita una ventana de 30 dias.
 - RNF-10: las filas de negocio y tecnicas leen las series del endpoint de metricas; una prueba automatizada (`ObservabilityDashboardE2ETest`) verifica que cada metrica y etiqueta del tablero y de las reglas existe y que cada consulta es valida en un Prometheus real.
 - Alertas: `observability/alerts.yml` define `NotificationDispatchFailedHigh` (mas de 5 % de despachos fallidos en 5 minutos) y `NotificationServiceDown`. Se evaluan en Prometheus sin Alertmanager; el destino externo esta pendiente (dueno: equipo de desarrollo del componente, fecha 2026-11-12).
+- Pruebas de carga: el tablero muestra el resultado de la ultima prueba de RNF-02 y RNF-03 junto a sus umbrales; la prueba, su ejecucion y su alcance estan en [loadtest/README.md](loadtest/README.md).
 
 ## Azure Key Vault
 

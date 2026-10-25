@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 class AttemptResultTest {
 
   @Test
-  void hasExactlyTheThreeExpectedValues() {
-    assertEquals(3, AttemptResult.values().length);
+  void hasExactlyTheFourExpectedValues() {
+    assertEquals(4, AttemptResult.values().length);
   }
 }

@@ -17,6 +17,7 @@ import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
+import co.edu.uco.notification.infrastructure.adapter.out.security.AesGcmTokenProtection;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.util.List;
 import java.util.Objects;
@@ -25,14 +26,38 @@ final class NotificationDocumentMapper {
 
   private NotificationDocumentMapper() {}
 
+  private static final String PUSH = "PUSH";
+  private static final String RECIPIENT_ID_FIELD = "recipientId";
+  private static final String RECIPIENT_ADDRESS_FIELD = "recipientAddress";
+
+  static String aad(final String tenantId, final String notificationId, final String field) {
+    return tenantId + "|" + notificationId + "|" + field;
+  }
+
   static NotificationDocument toDocument(final Notification notification) {
+    return toDocument(notification, null);
+  }
+
+  static NotificationDocument toDocument(
+      final Notification notification, final AesGcmTokenProtection protection) {
+    final String tenant = notification.tenantId().value();
+    final String id = notification.notificationId().value();
+    final boolean protectRecipient =
+        protection != null && PUSH.equals(notification.channelType().value());
+    final String recipientId = notification.recipientId().value();
+    final String address = notification.recipient().address();
     return new NotificationDocument(
-        notification.notificationId().value(),
-        notification.tenantId().value(),
+        id,
+        tenant,
         notification.externalId().value(),
         notification.channelType().value(),
-        notification.recipientId().value(),
-        notification.recipient().address(),
+        protectRecipient
+            ? protection.protect(recipientId, aad(tenant, id, RECIPIENT_ID_FIELD))
+            : recipientId,
+        protectRecipient
+            ? protection.protect(address, aad(tenant, id, RECIPIENT_ADDRESS_FIELD))
+            : address,
+        protectRecipient ? protection.fingerprint(recipientId) : null,
         notification.content().subject(),
         notification.content().body(),
         notification.content().attachments().stream()
@@ -51,7 +76,22 @@ final class NotificationDocumentMapper {
         notification.version());
   }
 
+  static String revealed(
+      final NotificationDocument document,
+      final String value,
+      final String field,
+      final AesGcmTokenProtection protection) {
+    return protection == null
+        ? value
+        : protection.reveal(value, aad(document.tenantId(), document.id(), field));
+  }
+
   static Notification toDomain(final NotificationDocument document) {
+    return toDomain(document, null);
+  }
+
+  static Notification toDomain(
+      final NotificationDocument document, final AesGcmTokenProtection protection) {
     final TenantId tenantId = TenantId.of(document.tenantId());
     return Notification.reconstitute(
         NotificationId.of(document.id()),
@@ -59,8 +99,11 @@ final class NotificationDocumentMapper {
             tenantId,
             ExternalId.of(document.externalId()),
             ChannelType.of(document.channelType()),
-            RecipientId.of(document.recipientId()),
-            Recipient.of(document.recipientAddress())),
+            RecipientId.of(
+                revealed(document, document.recipientId(), RECIPIENT_ID_FIELD, protection)),
+            Recipient.of(
+                revealed(
+                    document, document.recipientAddress(), RECIPIENT_ADDRESS_FIELD, protection))),
         new NotificationDetails(
             NotificationContent.of(
                 document.contentSubject(),

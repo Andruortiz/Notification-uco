@@ -12,11 +12,13 @@ import co.edu.uco.notification.core.port.out.MessageRecipientRef;
 import co.edu.uco.notification.core.port.out.ProviderMessageLookupPort;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
+import co.edu.uco.notification.infrastructure.adapter.out.security.AesGcmTokenProtection;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Supplier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Sort;
@@ -34,16 +36,31 @@ public class NotificationMongoAdapter implements NotificationRepository, Provide
 
   private final ReactiveMongoTemplate mongoTemplate;
 
+  private final AesGcmTokenProtection protection;
+
   public NotificationMongoAdapter(final ReactiveMongoTemplate mongoTemplate) {
+    this(mongoTemplate, null);
+  }
+
+  @Autowired
+  public NotificationMongoAdapter(
+      final ReactiveMongoTemplate mongoTemplate, final AesGcmTokenProtection protection) {
     this.mongoTemplate =
         Preconditions.requireNonNull(mongoTemplate, "mongoTemplate must not be null");
+    this.protection = protection;
+  }
+
+  private Notification toDomain(final NotificationDocument document) {
+    return NotificationDocumentMapper.toDomain(document, protection);
   }
 
   @Override
   public Mono<Notification> save(final Notification notification) {
     Preconditions.requireNonNull(notification, "notification must not be null");
-    return Mono.defer(() -> mongoTemplate.save(NotificationDocumentMapper.toDocument(notification)))
-        .map(NotificationDocumentMapper::toDomain)
+    return Mono.defer(
+            () ->
+                mongoTemplate.save(NotificationDocumentMapper.toDocument(notification, protection)))
+        .map(this::toDomain)
         .onErrorMap(
             OptimisticLockingFailureException.class,
             error -> new NotificationVersionConflictException(notification.notificationId()))
@@ -59,7 +76,7 @@ public class NotificationMongoAdapter implements NotificationRepository, Provide
     Preconditions.requireNonNull(notificationId, "notificationId must not be null");
     return mongoTemplate
         .findById(notificationId.value(), NotificationDocument.class)
-        .map(NotificationDocumentMapper::toDomain);
+        .map(this::toDomain);
   }
 
   @Override
@@ -73,18 +90,14 @@ public class NotificationMongoAdapter implements NotificationRepository, Provide
                 .is(tenantId.value())
                 .and("externalId")
                 .is(externalId.value()));
-    return mongoTemplate
-        .findOne(query, NotificationDocument.class)
-        .map(NotificationDocumentMapper::toDomain);
+    return mongoTemplate.findOne(query, NotificationDocument.class).map(this::toDomain);
   }
 
   @Override
   public Flux<Notification> findByStatus(final NotificationStatus status) {
     Preconditions.requireNonNull(status, "status must not be null");
     final Query query = Query.query(Criteria.where("status").is(status));
-    return mongoTemplate
-        .find(query, NotificationDocument.class)
-        .map(NotificationDocumentMapper::toDomain);
+    return mongoTemplate.find(query, NotificationDocument.class).map(this::toDomain);
   }
 
   @Override
@@ -93,7 +106,14 @@ public class NotificationMongoAdapter implements NotificationRepository, Provide
     final List<Criteria> conditions = new ArrayList<>();
     conditions.add(Criteria.where("tenantId").is(criteria.tenantId().value()));
     if (criteria.recipientId() != null) {
-      conditions.add(Criteria.where("recipientId").is(criteria.recipientId().value()));
+      final String wanted = criteria.recipientId().value();
+      conditions.add(
+          protection == null
+              ? Criteria.where("recipientId").is(wanted)
+              : new Criteria()
+                  .orOperator(
+                      Criteria.where("recipientId").is(wanted),
+                      Criteria.where("recipientIdFingerprint").is(protection.fingerprint(wanted))));
     }
     if (criteria.channelType() != null) {
       conditions.add(Criteria.where("channelType").is(criteria.channelType().value()));
@@ -113,9 +133,7 @@ public class NotificationMongoAdapter implements NotificationRepository, Provide
             .skip(criteria.offset())
             .limit(criteria.limit() + 1);
     query.fields().exclude("attachments");
-    return mongoTemplate
-        .find(query, NotificationDocument.class)
-        .map(NotificationDocumentMapper::toDomain);
+    return mongoTemplate.find(query, NotificationDocument.class).map(this::toDomain);
   }
 
   @Override
@@ -217,7 +235,8 @@ public class NotificationMongoAdapter implements NotificationRepository, Provide
                 new MessageRecipientRef(
                     TenantId.of(document.tenantId()),
                     ChannelType.of(document.channelType()),
-                    document.recipientAddress(),
+                    NotificationDocumentMapper.revealed(
+                        document, document.recipientAddress(), "recipientAddress", protection),
                     NotificationId.of(document.id())));
   }
 
@@ -228,7 +247,7 @@ public class NotificationMongoAdapter implements NotificationRepository, Provide
             update,
             FindAndModifyOptions.options().returnNew(true),
             NotificationDocument.class)
-        .map(NotificationDocumentMapper::toDomain);
+        .map(this::toDomain);
   }
 
   private static Flux<Notification> claimUpTo(

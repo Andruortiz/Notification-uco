@@ -619,6 +619,7 @@ class NotificationMongoAdapterTest {
                 "EMAIL",
                 "recipient-1",
                 "alice@example.com",
+                null,
                 "Subject",
                 "Body",
                 List.of(

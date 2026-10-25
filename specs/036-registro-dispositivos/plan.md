@@ -4,7 +4,7 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente de aprobación
+**Estado**: Aprobado
 
 **Versión del plan**: 2
 
@@ -134,3 +134,11 @@ Java 25, Spring Boot 4, WebFlux, Mongo reactivo. `javax.crypto` del JDK (AES-256
 - Rendimiento: 50 iteraciones y cálculo de p95 en la prueba (SC-001).
 - **E2E** `DeviceRegistryE2ETest` (perfil `test`, Mongo + RabbitMQ + `WebTestClient`, FCM simulado): registrar, listar, enviar PUSH
   al token con 410 y comprobar que el dispositivo desaparece en menos de 5 s; baja manual; borrado por titular; dos tenants y dos sujetos (SC-002, SC-003).
+
+## Desviaciones de implementacion
+
+- Decision 7: `INVALID_RECIPIENT` tambien es `FailureCause`; `Notification.markFailed` lo conserva como resultado del intento.
+- Decision 8: `DispatchNotificationService` tiene un segundo constructor con `DeviceLifecyclePort`; `DeviceConfig` expone el bean primario hasta que se cablee en `UseCaseConfig`.
+- Decision 4: no hay `TokenProtectionPort`; `AesGcmTokenProtection` vive en `infrastructure` y la mascara es `TokenMask` en `core`. Sin claves, `local` y `test` usan claves efimeras (no sirven para datos persistentes) y los demas perfiles no arrancan.
+- Decision 5: el AAD de los campos de la notificacion es `tenantId|notificationId|campo`; `GET /notifications/stream` tambien devuelve `recipientId` y lo enmascara igual.
+- Decision 10: solo contadores `devices.removed{reason}`; el gauge `devices.active` queda pendiente (dueno Equipo de backend, 2026-12-15).

@@ -141,6 +141,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
       skips.disabled(providerId, disabledReason.get());
       return tryProviders(notification, providers, index + 1, recoverables, skips);
     }
+    final long startedAt = System.nanoTime();
     return attempt(sender.get(), notification, providerId)
         .map(Optional::of)
         .onErrorResume(
@@ -169,7 +170,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
                       new ProviderResult(
                           AttemptResult.RECOVERABLE_FAILURE,
                           providerId,
-                          null,
+                          Long.valueOf(Duration.ofNanos(System.nanoTime() - startedAt).toMillis()),
                           null,
                           FailureCause.TRANSPORT_ERROR)));
             })

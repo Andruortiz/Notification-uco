@@ -983,6 +983,21 @@ class DispatchNotificationServiceTest {
   }
 
   @Test
+  void aTransportErrorRecordsItsCauseAndTheElapsedLatency() {
+    final Notification notification = pendingNotificationWithCorrelation();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.error(new java.io.UncheckedIOException(new java.io.IOException("x"))));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    final DeliveryAttempt attempt = notification.deliveryAttempts().getLast();
+    assertEquals(FailureCause.TRANSPORT_ERROR, attempt.failureCause());
+    assertNotNull(attempt.latencyMillis());
+    assertTrue(attempt.latencyMillis() >= 0);
+  }
+
+  @Test
   void unsupportedAttachmentsRecordTheirCauseWithoutLatency() {
     final Notification notification = pendingNotificationWithAttachment();
     notification.pullEvents();

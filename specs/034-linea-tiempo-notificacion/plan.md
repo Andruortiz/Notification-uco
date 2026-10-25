@@ -54,7 +54,8 @@ correlationId, messageId)`; `Notification.mark*` y `recordFailedOver` reciben un
   |---|---|
   | `PERMANENT_FAILURE` | `PROVIDER_REJECTED` |
   | `RECOVERABLE_FAILURE` | `PROVIDER_TEMPORARY` |
-  | recuperable que agota reintentos | `RETRIES_EXHAUSTED` |
+  | recuperable que agota reintentos sin causa o con `PROVIDER_TEMPORARY` | `RETRIES_EXHAUSTED` |
+  | recuperable que agota reintentos con causa tecnica (`TRANSPORT_ERROR`, `PROVIDER_ERROR`) | se conserva la causa raiz |
   | adjuntos no soportados | `ATTACHMENTS_UNSUPPORTED` |
   | `INVALID_RECIPIENT` (E5) | `INVALID_RECIPIENT`, que E5 agrega al enum |
 
@@ -110,3 +111,9 @@ Sin otras rutas nuevas. El esquema de `deliveryAttempts` de la busqueda NO cambi
 - Con PEP activo el rol lo decide el PDP: sin aprovisionar el recurso (HU2-099) el acceso se niega o se concede mal.
 - Latencia solo mide la llamada al proveedor, no la cola.
 - Causa gruesa: no distingue timeout de caida del proveedor.
+
+## Pendientes de integracion
+
+- G2 debe ampliar la firma de `recordOf` en `DispatchNotificationService` para pasar `AttemptOrigin.MANUAL`.
+- El script del PDP (HU2-099) debe registrar `GET /notifications/timeline` (rol OPERADOR) en su cableado.
+- La latencia de un fallo de transporte se mide desde que se invoca al proveedor hasta el error; el fallo por adjuntos no soportados no tiene llamada y queda sin latencia.

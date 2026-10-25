@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
+import co.edu.uco.notification.core.domain.valueobject.FailureCause;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
@@ -181,6 +182,10 @@ class NotificationTimelineE2ETest {
     assertNotNull(attempts.get(0).get("latencyMillis"));
     assertEquals("timeline-raw", attempts.get(1).get("providerId"));
     assertEquals("TRANSPORT_ERROR", attempts.get(1).get("failureCause"));
+    assertNotNull(attempts.get(1).get("latencyMillis"));
+    assertEquals(Boolean.TRUE, attempts.get(0).get("failedOver"));
+    assertEquals(Boolean.TRUE, attempts.get(1).get("failedOver"));
+    assertEquals(Boolean.FALSE, attempts.get(2).get("failedOver"));
     assertEquals("simulated", attempts.get(2).get("providerId"));
     assertEquals("ACCEPTED", attempts.get(2).get("result"));
     assertNull(attempts.get(2).get("failureCause"));
@@ -245,6 +250,39 @@ class NotificationTimelineE2ETest {
     assertFalse(other.contains("alice"));
     assertNotNull(unknown);
     timeline("tenant-1", Role.ADMINISTRADOR, id).expectStatus().isOk();
+  }
+
+  @Test
+  void anAttachmentsUnsupportedFailureIsExposedWithItsCauseAndWithoutLatency() {
+    final Notification notification =
+        Notification.accept(
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("timeline-attachments"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-attachments"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Body"), Priority.NORMAL));
+    notification.markQueued();
+    notification.markFailed(
+        new AttemptRecord(
+            AttemptResult.PERMANENT_FAILURE,
+            AttemptOrigin.AUTOMATIC,
+            ProviderId.of("timeline-a"),
+            false,
+            null,
+            FailureCause.ATTACHMENTS_UNSUPPORTED,
+            "corr-attachments",
+            null));
+    notificationRepository.save(notification).block();
+
+    final Map<String, Object> attempt =
+        attempts(timelineBody("tenant-1", Role.OPERADOR, notification.notificationId().value()))
+            .get(0);
+
+    assertEquals("ATTACHMENTS_UNSUPPORTED", attempt.get("failureCause"));
+    assertNull(attempt.get("latencyMillis"));
+    assertEquals(Boolean.FALSE, attempt.get("failedOver"));
   }
 
   @Test

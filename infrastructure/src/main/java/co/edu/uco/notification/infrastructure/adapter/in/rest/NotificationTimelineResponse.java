@@ -21,6 +21,7 @@ public record NotificationTimelineResponse(
       String result,
       String origin,
       int cycle,
+      boolean failedOver,
       Long latencyMillis,
       String failureCause,
       String correlationId) {
@@ -32,6 +33,7 @@ public record NotificationTimelineResponse(
           attempt.result().name(),
           attempt.origin().name(),
           attempt.cycle(),
+          attempt.failedOver(),
           attempt.latencyMillis(),
           attempt.failureCause() == null ? null : attempt.failureCause().name(),
           attempt.correlationId());

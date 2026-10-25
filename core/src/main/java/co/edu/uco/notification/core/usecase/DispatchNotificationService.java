@@ -21,6 +21,7 @@ import co.edu.uco.notification.core.exception.ProviderNotAvailableException;
 import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
+import co.edu.uco.notification.core.port.out.DeviceLifecyclePort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
@@ -40,6 +41,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
 
   private static final System.Logger LOGGER =
       System.getLogger(DispatchNotificationService.class.getName());
+  private static final String PUSH_CHANNEL = "PUSH";
   private static final long SAVE_RETRIES = 2;
   private static final Duration SAVE_RETRY_DELAY = Duration.ofMillis(100);
 
@@ -49,6 +51,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   private final NotificationEventPublisherPort eventPublisherPort;
   private final RetryPolicy retryPolicy;
   private final NotificationMetricsPort metricsPort;
+  private final DeviceLifecyclePort deviceLifecyclePort;
 
   public DispatchNotificationService(
       final NotificationRepository notificationRepository,
@@ -57,6 +60,24 @@ public final class DispatchNotificationService implements DispatchNotificationUs
       final NotificationEventPublisherPort eventPublisherPort,
       final RetryPolicy retryPolicy,
       final NotificationMetricsPort metricsPort) {
+    this(
+        notificationRepository,
+        channelCatalogPort,
+        notificationSenderRegistry,
+        eventPublisherPort,
+        retryPolicy,
+        metricsPort,
+        DeviceLifecyclePort.noop());
+  }
+
+  public DispatchNotificationService(
+      final NotificationRepository notificationRepository,
+      final ChannelCatalogPort channelCatalogPort,
+      final NotificationSenderRegistry notificationSenderRegistry,
+      final NotificationEventPublisherPort eventPublisherPort,
+      final RetryPolicy retryPolicy,
+      final NotificationMetricsPort metricsPort,
+      final DeviceLifecyclePort deviceLifecyclePort) {
     this.notificationRepository =
         Preconditions.requireNonNull(
             notificationRepository, "notificationRepository must not be null");
@@ -69,6 +90,8 @@ public final class DispatchNotificationService implements DispatchNotificationUs
         Preconditions.requireNonNull(eventPublisherPort, "eventPublisherPort must not be null");
     this.retryPolicy = Preconditions.requireNonNull(retryPolicy, "retryPolicy must not be null");
     this.metricsPort = Preconditions.requireNonNull(metricsPort, "metricsPort must not be null");
+    this.deviceLifecyclePort =
+        Preconditions.requireNonNull(deviceLifecyclePort, "deviceLifecyclePort must not be null");
   }
 
   private record Outcome(ProviderResult last, List<ProviderResult> failedOver) {}
@@ -304,7 +327,34 @@ public final class DispatchNotificationService implements DispatchNotificationUs
             error -> !(error instanceof NotificationVersionConflictException),
             error -> new DispatchResultNotPersistedException(notification.notificationId(), error))
         .doOnSuccess(saved -> logAttempts(notification, outcome.failedOver().size() + 1))
-        .flatMap(saved -> publishEvents(notification, outcome.last().providerId(), events));
+        .flatMap(saved -> publishEvents(notification, outcome.last().providerId(), events))
+        .then(Mono.defer(() -> maintainDevice(notification, outcome.last().result())));
+  }
+
+  private Mono<Void> maintainDevice(final Notification notification, final AttemptResult result) {
+    if (!PUSH_CHANNEL.equals(notification.channelType().value())) {
+      return Mono.empty();
+    }
+    final Mono<Void> action =
+        switch (result) {
+          case INVALID_RECIPIENT ->
+              deviceLifecyclePort.invalidate(
+                  notification.tenantId(), notification.recipient().address());
+          case ACCEPTED ->
+              deviceLifecyclePort.touch(
+                  notification.tenantId(), notification.recipient().address());
+          case RECOVERABLE_FAILURE, PERMANENT_FAILURE -> Mono.empty();
+        };
+    return action.onErrorResume(
+        error -> {
+          LOGGER.log(
+              System.Logger.Level.WARNING,
+              "DEVICE_MAINTENANCE_FAILED notificationId="
+                  + notification.notificationId().value()
+                  + " errorType="
+                  + error.getClass().getSimpleName());
+          return Mono.empty();
+        });
   }
 
   private static void logAttempts(final Notification notification, final int count) {
@@ -352,6 +402,7 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   private static FailureCause defaultCause(final AttemptResult result) {
     return switch (result) {
       case PERMANENT_FAILURE -> FailureCause.PROVIDER_REJECTED;
+      case INVALID_RECIPIENT -> FailureCause.INVALID_RECIPIENT;
       case RECOVERABLE_FAILURE -> FailureCause.PROVIDER_TEMPORARY;
       case ACCEPTED -> null;
     };

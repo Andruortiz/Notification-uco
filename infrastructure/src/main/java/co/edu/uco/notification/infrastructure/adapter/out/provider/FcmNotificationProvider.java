@@ -138,7 +138,8 @@ public class FcmNotificationProvider implements NotificationSenderPort {
 
   private static AttemptResult classifyAndLog(
       final Notification notification, final Outcome outcome) {
-    final AttemptResult result = FcmResponseClassifier.classifyStatus(outcome.status());
+    final AttemptResult result =
+        FcmResponseClassifier.classify(outcome.status(), outcome.errorCode());
     if (result == AttemptResult.ACCEPTED) {
       ProviderLogs.dispatched(
           LOGGER, notification, PROVIDER_ID, result, outcome.status(), outcome.messageId());

@@ -121,7 +121,7 @@ public class MicrometerNotificationMetrics implements NotificationMetricsPort {
     return switch (result) {
       case ACCEPTED -> "delivered";
       case RECOVERABLE_FAILURE -> "recoverable";
-      case PERMANENT_FAILURE -> "failed";
+      case PERMANENT_FAILURE, INVALID_RECIPIENT -> "failed";
     };
   }
 }

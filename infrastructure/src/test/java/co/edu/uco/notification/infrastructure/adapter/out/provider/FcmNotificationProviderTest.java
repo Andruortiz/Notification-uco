@@ -305,7 +305,7 @@ class FcmNotificationProviderTest {
   static Stream<Arguments> providerResponses() {
     return Stream.of(
         Arguments.of(
-            404, fcmError(404, "NOT_FOUND", "UNREGISTERED"), AttemptResult.PERMANENT_FAILURE),
+            404, fcmError(404, "NOT_FOUND", "UNREGISTERED"), AttemptResult.INVALID_RECIPIENT),
         Arguments.of(
             400,
             fcmError(400, "INVALID_ARGUMENT", "INVALID_ARGUMENT"),
@@ -538,7 +538,7 @@ class FcmNotificationProviderTest {
     StepVerifier.create(enabledProvider().send(pushTo(RECIPIENT, TITLE)))
         .assertNext(
             providerResult ->
-                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
+                assertEquals(AttemptResult.INVALID_RECIPIENT, providerResult.result()))
         .verifyComplete();
 
     final String logs = logs();

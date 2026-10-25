@@ -158,7 +158,12 @@ public final class Notification {
     transitionTo(NotificationStatus.FAILED);
     final Instant now = Instant.now();
     deliveryAttempts.add(
-        DeliveryAttempt.of(now, record.withResult(AttemptResult.PERMANENT_FAILURE), currentCycle));
+        DeliveryAttempt.of(
+            now,
+            record.result() == AttemptResult.INVALID_RECIPIENT
+                ? record
+                : record.withResult(AttemptResult.PERMANENT_FAILURE),
+            currentCycle));
     eventRecorder.registerEvent(
         new NotificationFailed(notificationId, tenantId, correlationId, now));
   }

@@ -11,12 +11,12 @@ import ch.qos.logback.core.read.ListAppender;
 import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.TokenValidationPort;
-import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenIssuer;
-import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.adapter.out.security.platform.PlatformJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.config.AuthPlatformProperties;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import java.time.Duration;
 import java.util.Date;
 import java.util.List;
@@ -37,11 +37,8 @@ import reactor.test.StepVerifier;
 
 class AuthenticationWebFilterTest {
 
-  private static final String SECRET = "test-only-secret-never-used-in-production-0123456789abcdef";
-
-  private final LocalJwtTokenIssuer issuer = new LocalJwtTokenIssuer(SECRET);
   private final TokenValidationPort tokenValidationPort =
-      new LocalJwtTokenValidationAdapter(SECRET);
+      new PlatformJwtTokenValidationAdapter(TestTokens.properties());
   private final AuthenticationWebFilter filter =
       new AuthenticationWebFilter(tokenValidationPort, new RouteAuthorizationPolicy());
 
@@ -83,7 +80,7 @@ class AuthenticationWebFilterTest {
   @Test
   void rejectsExpiredToken() {
     final String token =
-        issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(-5));
+        TestTokens.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(-5));
     final ServerWebExchange exchange =
         exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer " + token);
     final AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -97,13 +94,12 @@ class AuthenticationWebFilterTest {
   @Test
   void rejectsTokenMissingTenantIdClaim() {
     final String token =
-        Jwts.builder()
-            .subject("client-1")
-            .claim("role", "CLIENTE")
-            .issuedAt(new Date())
-            .expiration(new Date(System.currentTimeMillis() + 60_000))
-            .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
-            .compact();
+        TestTokens.sign(
+            Jwts.builder()
+                .subject("client-1")
+                .claim("role", "CLIENTE")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60_000)));
     final ServerWebExchange exchange =
         exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer " + token);
     final AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -117,14 +113,13 @@ class AuthenticationWebFilterTest {
   @Test
   void rejectsTokenWithUnknownRole() {
     final String token =
-        Jwts.builder()
-            .subject("client-1")
-            .claim("tenantId", "tenant-a")
-            .claim("role", "SUPERADMIN")
-            .issuedAt(new Date())
-            .expiration(new Date(System.currentTimeMillis() + 60_000))
-            .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
-            .compact();
+        TestTokens.sign(
+            Jwts.builder()
+                .subject("client-1")
+                .claim("tenantId", "tenant-a")
+                .claim("role", "SUPERADMIN")
+                .issuedAt(new Date())
+                .expiration(new Date(System.currentTimeMillis() + 60_000)));
     final ServerWebExchange exchange =
         exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer " + token);
     final AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -138,7 +133,7 @@ class AuthenticationWebFilterTest {
   @Test
   void acceptsValidTokenAndContinuesChain() {
     final String token =
-        issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
+        TestTokens.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
     final ServerWebExchange exchange =
         exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer " + token);
     final AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -151,7 +146,7 @@ class AuthenticationWebFilterTest {
   @Test
   void rejectsInsufficientRoleWithForbidden() {
     final String token =
-        issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
+        TestTokens.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
     final ServerWebExchange exchange =
         exchangeWithHeader(HttpMethod.GET, "/notifications", "Bearer " + token);
     final AtomicBoolean chainInvoked = new AtomicBoolean(false);
@@ -165,7 +160,7 @@ class AuthenticationWebFilterTest {
   @Test
   void acceptsSufficientRoleAndContinuesChain() {
     final String operadorToken =
-        issuer.issue(TenantId.of("tenant-a"), Role.OPERADOR, "client-1", Duration.ofMinutes(5));
+        TestTokens.issue(TenantId.of("tenant-a"), Role.OPERADOR, "client-1", Duration.ofMinutes(5));
     final ServerWebExchange operadorExchange =
         exchangeWithHeader(HttpMethod.GET, "/notifications", "Bearer " + operadorToken);
     final AtomicBoolean operadorChainInvoked = new AtomicBoolean(false);
@@ -174,7 +169,7 @@ class AuthenticationWebFilterTest {
     assertTrue(operadorChainInvoked.get());
 
     final String adminToken =
-        issuer.issue(
+        TestTokens.issue(
             TenantId.of("tenant-a"), Role.ADMINISTRADOR, "client-1", Duration.ofMinutes(5));
     final ServerWebExchange adminExchange =
         exchangeWithHeader(HttpMethod.GET, "/notifications", "Bearer " + adminToken);
@@ -189,7 +184,8 @@ class AuthenticationWebFilterTest {
     final ListAppender<ILoggingEvent> logs = captureLogs();
     try {
       final String token =
-          issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
+          TestTokens.issue(
+              TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
       final ServerWebExchange exchange =
           exchangeWithHeader(HttpMethod.GET, "/notifications", "Bearer " + token);
 
@@ -209,7 +205,8 @@ class AuthenticationWebFilterTest {
     final ListAppender<ILoggingEvent> logs = captureLogs();
     try {
       final String token =
-          issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(-5));
+          TestTokens.issue(
+              TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(-5));
       final ServerWebExchange exchange =
           exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer " + token);
 
@@ -219,7 +216,7 @@ class AuthenticationWebFilterTest {
       final List<String> lines = lines(logs);
       assertTrue(lines.stream().anyMatch(line -> line.contains("EXPIRED")));
       assertTrue(lines.stream().noneMatch(line -> line.contains(token)));
-      assertTrue(lines.stream().noneMatch(line -> line.contains(SECRET)));
+      assertTrue(lines.stream().noneMatch(line -> line.contains(TestTokens.PRIVATE_KEY)));
     } finally {
       release(logs);
     }
@@ -286,7 +283,7 @@ class AuthenticationWebFilterTest {
   @Test
   void accessTokenQueryParamIsNoLongerAcceptedOnSubscribe() {
     final String token =
-        issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
+        TestTokens.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
     final ServerWebExchange exchange = subscribeExchange("access_token=" + token);
     final AtomicBoolean chainInvoked = new AtomicBoolean(false);
 
@@ -336,7 +333,8 @@ class AuthenticationWebFilterTest {
     final ListAppender<ILoggingEvent> logs = captureLogs();
     try {
       final String token =
-          issuer.issue(TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
+          TestTokens.issue(
+              TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
       final ServerWebExchange exchange =
           exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer " + token);
       final WebFilterChain failingChain =
@@ -461,28 +459,25 @@ class AuthenticationWebFilterTest {
     final ListAppender<ILoggingEvent> logs = captureLogs();
     try {
       final String unknownRole =
-          Jwts.builder()
-              .subject("client-1")
-              .claim("tenantId", "tenant-a")
-              .claim("role", "SUPERADMIN")
-              .expiration(new Date(System.currentTimeMillis() + 60_000))
-              .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
-              .compact();
+          TestTokens.sign(
+              Jwts.builder()
+                  .subject("client-1")
+                  .claim("tenantId", "tenant-a")
+                  .claim("role", "SUPERADMIN")
+                  .expiration(new Date(System.currentTimeMillis() + 60_000)));
       final String wrongTenantType =
-          Jwts.builder()
-              .subject("client-1")
-              .claim("tenantId", 42)
-              .claim("role", "CLIENTE")
-              .expiration(new Date(System.currentTimeMillis() + 60_000))
-              .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
-              .compact();
+          TestTokens.sign(
+              Jwts.builder()
+                  .subject("client-1")
+                  .claim("tenantId", 42)
+                  .claim("role", "CLIENTE")
+                  .expiration(new Date(System.currentTimeMillis() + 60_000)));
       final String noExpiration =
-          Jwts.builder()
-              .subject("client-1")
-              .claim("tenantId", "tenant-b")
-              .claim("role", "CLIENTE")
-              .signWith(Keys.hmacShaKeyFor(SECRET.getBytes()))
-              .compact();
+          TestTokens.sign(
+              Jwts.builder()
+                  .subject("client-1")
+                  .claim("tenantId", "tenant-b")
+                  .claim("role", "CLIENTE"));
       for (final String token : List.of(unknownRole, wrongTenantType, noExpiration)) {
         StepVerifier.create(
                 filter.filter(
@@ -497,6 +492,117 @@ class AuthenticationWebFilterTest {
       assertTrue(lines.stream().anyMatch(l -> l.contains("MISSING_CLAIMS")));
       assertTrue(
           lines.stream().anyMatch(l -> l.contains("MISSING_EXPIRATION") && l.contains("tenant-b")));
+    } finally {
+      release(logs);
+    }
+  }
+
+  private static String body(final ServerWebExchange exchange) {
+    return ((org.springframework.mock.http.server.reactive.MockServerHttpResponse)
+            exchange.getResponse())
+        .getBodyAsString()
+        .block();
+  }
+
+  private String rejectionBody(final String token) {
+    final ServerWebExchange exchange =
+        exchangeWithHeader(HttpMethod.POST, "/notifications", "Bearer " + token);
+    StepVerifier.create(filter.filter(exchange, recordingChain(new AtomicBoolean())))
+        .verifyComplete();
+    assertEquals(HttpStatus.UNAUTHORIZED, exchange.getResponse().getStatusCode());
+    return body(exchange);
+  }
+
+  @Test
+  void missingClaimsAnswerTheDedicatedCodeWithoutLeakingTokenValues() {
+    final String withoutTenant =
+        TestTokens.sign(
+            Jwts.builder()
+                .subject("secret-subject")
+                .claim("role", "CLIENTE")
+                .expiration(new Date(System.currentTimeMillis() + 60_000)));
+    final String unknownRole =
+        TestTokens.sign(
+            Jwts.builder()
+                .subject("secret-subject")
+                .claim("tenantId", "tenant-a")
+                .claim("role", "SUPERADMIN")
+                .expiration(new Date(System.currentTimeMillis() + 60_000)));
+
+    for (final String token : List.of(withoutTenant, unknownRole)) {
+      final String body = rejectionBody(token);
+      assertTrue(body.contains("NTF-2004"), body);
+      assertFalse(body.contains("secret-subject") || body.contains("SUPERADMIN"), body);
+    }
+  }
+
+  @Test
+  void otherRejectionsKeepTheAuthenticationRequiredCode() {
+    assertTrue(rejectionBody("not-a-jwt").contains("NTF-2001"));
+    assertTrue(
+        rejectionBody(
+                TestTokens.issue(
+                    TenantId.of("tenant-a"), Role.CLIENTE, "client-1", Duration.ofMinutes(-10)))
+            .contains("NTF-2001"));
+  }
+
+  @Test
+  void wrongIssuerAnswersAuthenticationRequiredAndTheLogCarriesTheSameCode() {
+    final var strict =
+        new AuthenticationWebFilter(
+            new PlatformJwtTokenValidationAdapter(
+                new AuthPlatformProperties(
+                    TestTokens.PUBLIC_KEY,
+                    "https://idp.example",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null)),
+            new RouteAuthorizationPolicy());
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      final ServerWebExchange exchange =
+          exchangeWithHeader(
+              HttpMethod.POST,
+              "/notifications",
+              "Bearer "
+                  + TestTokens.sign(
+                      Jwts.builder()
+                          .issuer("https://evil")
+                          .subject("client-1")
+                          .claim("tenantId", "tenant-a")
+                          .claim("role", "CLIENTE")
+                          .expiration(new Date(System.currentTimeMillis() + 60_000))));
+
+      StepVerifier.create(strict.filter(exchange, recordingChain(new AtomicBoolean())))
+          .verifyComplete();
+
+      assertTrue(body(exchange).contains("NTF-2001"));
+      assertTrue(
+          lines(logs).stream()
+              .anyMatch(l -> l.contains("INVALID_ISSUER_OR_AUDIENCE") && l.contains("NTF-2001")));
+    } finally {
+      release(logs);
+    }
+  }
+
+  @Test
+  void theLogOfAMissingClaimsRejectionCarriesTheDedicatedCode() {
+    final ListAppender<ILoggingEvent> logs = captureLogs();
+    try {
+      rejectionBody(
+          TestTokens.sign(
+              Jwts.builder()
+                  .subject("client-1")
+                  .claim("role", "CLIENTE")
+                  .expiration(new Date(System.currentTimeMillis() + 60_000))));
+
+      assertTrue(
+          lines(logs).stream()
+              .anyMatch(l -> l.contains("MISSING_CLAIMS") && l.contains("NTF-2004")));
     } finally {
       release(logs);
     }

@@ -9,8 +9,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
-import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenIssuer;
-import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.adapter.out.security.platform.PlatformJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.support.TestTokens;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -26,8 +26,6 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 class CorrelationIdWebFilterTest {
-
-  private static final String SECRET = "test-only-secret-never-used-in-production-0123456789abcdef";
 
   private final CorrelationIdWebFilter filter = new CorrelationIdWebFilter();
 
@@ -143,7 +141,8 @@ class CorrelationIdWebFilterTest {
   void aRejectedRequestStillCarriesTheCorrelationIdInHeaderAndBody() {
     final AuthenticationWebFilter authentication =
         new AuthenticationWebFilter(
-            new LocalJwtTokenValidationAdapter(SECRET), new RouteAuthorizationPolicy());
+            new PlatformJwtTokenValidationAdapter(TestTokens.properties()),
+            new RouteAuthorizationPolicy());
     final MockServerWebExchange exchange =
         MockServerWebExchange.from(
             MockServerHttpRequest.post("/notifications").header(CorrelationId.HEADER, "req-401"));
@@ -162,10 +161,10 @@ class CorrelationIdWebFilterTest {
   void aRoleRejectionAlsoCarriesTheCorrelationIdAndTheTenantIsAddedToTheContext() {
     final AuthenticationWebFilter authentication =
         new AuthenticationWebFilter(
-            new LocalJwtTokenValidationAdapter(SECRET), new RouteAuthorizationPolicy());
+            new PlatformJwtTokenValidationAdapter(TestTokens.properties()),
+            new RouteAuthorizationPolicy());
     final String token =
-        new LocalJwtTokenIssuer(SECRET)
-            .issue(TenantId.of("tenant-z"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
+        TestTokens.issue(TenantId.of("tenant-z"), Role.CLIENTE, "client-1", Duration.ofMinutes(5));
     final MockServerWebExchange forbidden =
         MockServerWebExchange.from(
             MockServerHttpRequest.post("/channels")

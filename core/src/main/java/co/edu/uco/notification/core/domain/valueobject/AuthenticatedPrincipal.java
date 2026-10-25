@@ -2,7 +2,12 @@ package co.edu.uco.notification.core.domain.valueobject;
 
 import co.edu.uco.notification.utils.Preconditions;
 
-public record AuthenticatedPrincipal(String subject, TenantId tenantId, Role role) {
+public record AuthenticatedPrincipal(
+    String subject, TenantId tenantId, Role role, String clientId) {
+
+  public AuthenticatedPrincipal(final String subject, final TenantId tenantId, final Role role) {
+    this(subject, tenantId, role, null);
+  }
 
   public AuthenticatedPrincipal {
     Preconditions.requireNonBlank(subject, "AuthenticatedPrincipal subject must not be blank");

@@ -22,4 +22,6 @@ public interface NotificationMetricsPort {
   void recipientRejected(TenantId tenantId, ChannelType channel, String reason);
 
   void recipientMarkedUndeliverable(TenantId tenantId, ChannelType channel);
+
+  void bounceUnresolved();
 }

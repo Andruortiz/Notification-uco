@@ -1,6 +1,8 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import co.edu.uco.notification.core.port.in.RegisterRecipientBounceUseCase;
+import co.edu.uco.notification.infrastructure.adapter.out.provider.SimulatedNotificationProvider;
+import co.edu.uco.notification.infrastructure.config.SimulatedProviderProperties;
 import co.edu.uco.notification.utils.Preconditions;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -24,28 +26,42 @@ public class BrevoBounceWebhookController {
 
   private final RegisterRecipientBounceUseCase registerBounce;
   private final byte[] secret;
+  private final boolean simulatedEnabled;
 
   public BrevoBounceWebhookController(
       final RegisterRecipientBounceUseCase registerBounce,
+      final SimulatedProviderProperties simulatedProperties,
       @Value("${notification.brevo.webhook-secret:}") final String secret) {
     this.registerBounce =
         Preconditions.requireNonNull(registerBounce, "registerBounce must not be null");
     this.secret = secret == null ? new byte[0] : secret.getBytes(StandardCharsets.UTF_8);
+    this.simulatedEnabled = simulatedProperties.enabled();
   }
 
   @PostMapping
   public Mono<ResponseEntity<Void>> receive(
       @RequestHeader(value = SECRET_HEADER, required = false) final String provided,
-      @RequestBody final BrevoBounceEvent event) {
+      @RequestBody final Mono<BrevoBounceEvent> body) {
     if (!secretMatches(provided)) {
       return Mono.error(new WebhookSecretInvalidException());
     }
+    return body.flatMap(this::register).thenReturn(ResponseEntity.ok().build());
+  }
+
+  private Mono<Boolean> register(final BrevoBounceEvent event) {
     if (event.event() == null || !HARD_BOUNCES.contains(event.event())) {
-      return Mono.just(ResponseEntity.ok().build());
+      return Mono.empty();
     }
-    return registerBounce
-        .registerHardBounce(event.messageId(), event.event())
-        .thenReturn(ResponseEntity.ok().build());
+    return registerBounce.registerHardBounce(resolvableMessageId(event.messageId()), event.event());
+  }
+
+  private String resolvableMessageId(final String messageId) {
+    if (!simulatedEnabled
+        && messageId != null
+        && messageId.startsWith(SimulatedNotificationProvider.MESSAGE_ID_PREFIX)) {
+      return null;
+    }
+    return messageId;
   }
 
   private boolean secretMatches(final String provided) {

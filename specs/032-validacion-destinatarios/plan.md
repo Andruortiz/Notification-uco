@@ -94,3 +94,23 @@ existente (`GET`/`POST /providers` es otro path) ni con `/recipients/preferences
 - Depende de que E3 integre antes `messageId` en `ProviderResult` y `AttemptRecord`; el orden E3 -> G3 -> G2 -> E10 lo garantiza.
 - Regla de correo demasiado estricta: se usa una regla pragmatica y la verificacion real queda en el proveedor.
 - El webhook es publico para el PEP y solo lo protege el secreto: rotacion por variable de entorno.
+
+## Decisiones conocidas
+
+- La validacion de formato corre antes de resolver el canal: con direccion invalida y canal inexistente responde 1006 `INVALID_RECIPIENT`, no 1003.
+- El destinatario se guarda tal cual llego (sin recortar ni pasar a minusculas); solo se normaliza para validar y para la clave de la marca.
+- El reintento manual y el requeue de notificaciones ya aceptadas no pasan por la guarda de no entregable: la marca solo bloquea envios nuevos (ver spec, Assumptions).
+- El webhook comprueba la cabecera de secreto antes de leer el cuerpo (`Mono<BrevoBounceEvent>`); un cuerpo grande o mal formado sin secreto responde 401 sin procesarse.
+- El prefijo `simulated-<notificationId>` solo se resuelve con `notification.provider.simulated.enabled=true`; con el flag en false el evento se cuenta como no resuelto.
+- Contador `notification.recipient.bounce.unresolved` (sin etiquetas) cuando un evento duro se descarta por `messageId` ausente o no resoluble.
+
+## Riesgos conocidos a validar
+
+- Formato de `message-id` del webhook de Brevo (con angulos, `<...@smtp-relay...>`) frente al `messageId` de la API de envio, y soporte de una cabecera personalizada (`X-Brevo-Webhook-Secret`) en la configuracion del webhook de Brevo: validar con una captura real antes de produccion.
+- Si `SECURITY_PEP_PUBLIC_PATHS` se define en el despliegue debe incluir `/providers/brevo/bounce-events`, o Brevo recibe 401 del PEP.
+
+## Pendientes de integracion (agente de cableado)
+
+- `PublicRoutesConsistencyTest` fallara en: `DOCUMENTATION` sin el webhook (`theServiceFilterExemptsEveryContractRouteAndNothingElseOfTheContract` compara `PublicRoutes.DOCUMENTATION` con las rutas publicas del contrato), la regla "toda ruta publica es GET" (`everyPublicRouteIsAReadOnlyGetWithoutSecurityRequirements`) y el contador de 16 operaciones (`publicRoutesAreNotProtectedResourcesOfThePdpCatalog`).
+- `ApiContractMatchesControllersTest`: contadores de disponibles/planificadas y que el webhook publico cuente como ruta servida.
+- Pasar a `available` las dos operaciones, registrar los dos recursos en el PDP (el webhook no), y plegar o conservar el decorador `@Primary` de `RecipientValidationConfig`.

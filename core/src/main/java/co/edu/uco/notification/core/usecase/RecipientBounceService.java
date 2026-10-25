@@ -35,6 +35,7 @@ public final class RecipientBounceService implements RegisterRecipientBounceUseC
   @Override
   public Mono<Boolean> registerHardBounce(final String providerMessageId, final String reason) {
     if (providerMessageId == null || providerMessageId.isBlank()) {
+      metricsPort.bounceUnresolved();
       return Mono.just(false);
     }
     return lookupPort
@@ -43,6 +44,7 @@ public final class RecipientBounceService implements RegisterRecipientBounceUseC
         .switchIfEmpty(
             Mono.fromSupplier(
                 () -> {
+                  metricsPort.bounceUnresolved();
                   LOGGER.log(System.Logger.Level.INFO, "BOUNCE_EVENT_UNRESOLVED_MESSAGE_DISCARDED");
                   return false;
                 }));

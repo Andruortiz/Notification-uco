@@ -161,6 +161,7 @@ class RecipientGuardTest {
         .expectNext(false)
         .verifyComplete();
 
+    verify(metrics, times(3)).bounceUnresolved();
     verify(repository, never()).markIfAbsent(any());
   }
 

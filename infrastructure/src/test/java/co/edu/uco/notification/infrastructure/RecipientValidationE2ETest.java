@@ -364,6 +364,23 @@ class RecipientValidationE2ETest {
   }
 
   @Test
+  void
+      anUnauthenticatedHugeBodyIsRejectedAndTheSimulatedPrefixIsIgnoredWhileTheSimulatedProviderIsDisabled() {
+    web.post()
+        .uri("/providers/brevo/bounce-events")
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue("{\"event\":\"hard_bounce\",\"junk\":\"" + "x".repeat(3_000_000))
+        .exchange()
+        .expectStatus()
+        .isUnauthorized();
+
+    final String id = deliveredEmail("tenant-sim", "sim-1");
+    bounce(SECRET, "hard_bounce", "simulated-" + id).expectStatus().isOk();
+
+    assertFalse((Boolean) lookup("tenant-sim", Role.OPERADOR).get("marked"));
+  }
+
+  @Test
   void aBounceOfOneTenantNeverAffectsAnotherTenantSendingToTheSameAddress() {
     final String first = deliveredEmail("tenant-x", "iso-x");
     deliveredEmail("tenant-y", "iso-y");

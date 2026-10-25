@@ -23,6 +23,7 @@ public class MicrometerNotificationMetrics implements NotificationMetricsPort {
   static final String RECIPIENT_REJECTED = "notification.recipient.rejected";
   static final String RECIPIENT_UNDELIVERABLE_MARKED =
       "notification.recipient.undeliverable.marked";
+  static final String BOUNCE_UNRESOLVED = "notification.recipient.bounce.unresolved";
 
   private static final String NONE = "none";
 
@@ -109,6 +110,11 @@ public class MicrometerNotificationMetrics implements NotificationMetricsPort {
         .counter(
             RECIPIENT_UNDELIVERABLE_MARKED, "tenant", tenantId.value(), "channel", channel.value())
         .increment();
+  }
+
+  @Override
+  public void bounceUnresolved() {
+    registry.counter(BOUNCE_UNRESOLVED).increment();
   }
 
   public static String resultLabel(final AttemptResult result) {

@@ -137,6 +137,7 @@ Esta resolucion de identidad es provisional (excepcion registrada en `specs/025-
 El starter del PEP exige credencial en toda ruta salvo las de `security.pep.enforcement.public-paths` (`SECURITY_PEP_PUBLIC_PATHS`, separadas por comas, patrones de ruta completa; `/**` final cubre el subarbol; no distingue metodo). Por defecto son solo lectura de documentacion y sondas: `GET /openapi/api-notificaciones.yaml` y `GET /v3/api-docs` (contrato, sin datos) y, en el puerto de gestion, `/actuator/health`, `/actuator/health/**` y `/actuator/prometheus`. Estan declaradas en `x-public-routes` del contrato y no son recursos que haya que registrar en el PDP.
 
 - **Swagger UI** (`/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/swagger-config`) esta deshabilitada y no es publica por defecto; el perfil `local` la habilita. Para otro entorno: `SWAGGER_UI_ENABLED=true` y anadir esas rutas a `SECURITY_PEP_PUBLIC_PATHS`. El criterio esta en `specs/027-rutas-publicas-pep/research.md`.
+- **Webhook de rebotes de Brevo** (`POST /providers/brevo/bounce-events`, HU2-116) es publico y se protege con el secreto `BREVO_WEBHOOK_SECRET` en la cabecera `X-Brevo-Webhook-Secret`. Si `SECURITY_PEP_PUBLIC_PATHS` se define en el despliegue debe incluir `/providers/brevo/bounce-events`; de lo contrario el PEP responde 401 a Brevo.
 - Una prueba compara el contrato, `application.yml`, `application-local.yml` y la lista del filtro del servicio.
 
 ## Credenciales de GitHub Packages (starter del PEP)

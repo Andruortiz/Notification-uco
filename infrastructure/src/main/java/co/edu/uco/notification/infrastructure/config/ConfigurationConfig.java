@@ -42,6 +42,7 @@ import tools.jackson.databind.json.JsonMapper;
   BrevoProviderProperties.class,
   TwilioProviderProperties.class,
   FcmProviderProperties.class,
+  SimulatedProviderProperties.class,
   ParametersProperties.class
 })
 public class ConfigurationConfig {
@@ -74,9 +75,12 @@ public class ConfigurationConfig {
       final BrevoProviderProperties brevo,
       final TwilioProviderProperties twilio,
       final FcmProviderProperties fcm,
+      final SimulatedProviderProperties simulated,
       @Value("${notification.attachments.sweeper.scan-deadline:1h}") final String sweepWindow) {
     final Set<String> enabledProviders = new HashSet<>();
-    enabledProviders.add(SIMULATED);
+    if (simulated.enabled()) {
+      enabledProviders.add(SIMULATED);
+    }
     if (brevo.disabledReason().isEmpty()) {
       enabledProviders.add(BREVO);
     }

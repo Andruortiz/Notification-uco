@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
 import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.FailureCause;
 import java.time.Instant;
 
 public record DeliveryAttemptDocument(
@@ -9,4 +10,9 @@ public record DeliveryAttemptDocument(
     AttemptResult result,
     AttemptOrigin origin,
     String providerId,
-    Integer cycle) {}
+    Integer cycle,
+    Boolean failedOver,
+    Long latencyMillis,
+    FailureCause failureCause,
+    String correlationId,
+    String messageId) {}

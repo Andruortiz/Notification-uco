@@ -6,6 +6,7 @@ import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.config.FcmCredentials;
 import co.edu.uco.notification.infrastructure.config.FcmProviderProperties;
 import co.edu.uco.notification.infrastructure.config.FcmServiceAccount;
@@ -73,7 +74,11 @@ public class FcmNotificationProvider implements NotificationSenderPort {
   }
 
   @Override
-  public Mono<AttemptResult> send(final Notification notification) {
+  public Mono<ProviderResult> send(final Notification notification) {
+    return sendResult(notification).map(ProviderResult::of);
+  }
+
+  private Mono<AttemptResult> sendResult(final Notification notification) {
     Preconditions.requireNonNull(notification, "notification must not be null");
     if (disabledReason.isPresent()) {
       return Mono.error(new ProviderDisabledException(PROVIDER_ID, disabledReason.get()));

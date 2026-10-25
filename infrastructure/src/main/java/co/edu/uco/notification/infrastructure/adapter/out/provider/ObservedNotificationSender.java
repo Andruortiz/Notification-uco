@@ -1,9 +1,9 @@
 package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.adapter.out.metrics.MicrometerNotificationMetrics;
 import co.edu.uco.notification.infrastructure.config.ReactorObservations;
 import co.edu.uco.notification.utils.CorrelationId;
@@ -28,7 +28,7 @@ public class ObservedNotificationSender implements NotificationSenderPort {
   }
 
   @Override
-  public Mono<AttemptResult> send(final Notification notification) {
+  public Mono<ProviderResult> send(final Notification notification) {
     return Mono.deferContextual(
         context -> {
           final Observation.Context observationContext = new Observation.Context();
@@ -53,7 +53,7 @@ public class ObservedNotificationSender implements NotificationSenderPort {
               .doOnNext(
                   result ->
                       observation.lowCardinalityKeyValue(
-                          "result", MicrometerNotificationMetrics.resultLabel(result)))
+                          "result", MicrometerNotificationMetrics.resultLabel(result.result())))
               .doOnError(observation::error)
               .doFinally(signal -> observation.stop())
               .contextWrite(inner -> ReactorObservations.with(inner, observation));

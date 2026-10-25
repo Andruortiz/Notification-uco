@@ -118,17 +118,18 @@ notification:
     refresh-interval-ms: ${NOTIFICATION_CATALOG_REFRESH_INTERVAL_MS:30000}
     channels:
       EMAIL:
-        providers: ${NOTIFICATION_EMAIL_PROVIDERS:simulated,brevo}
+        providers: ${NOTIFICATION_EMAIL_PROVIDERS:brevo,simulated}
         content-schema: '{"type":"object","properties":{"attachments":{"type":"array","maxItems":5,"items":{"type":"object","properties":{"sizeBytes":{"type":"integer","maximum":4000000}}}},"attachmentsTotalBytes":{"type":"integer","maximum":4000000}}}'
       SMS:
-        providers: ${NOTIFICATION_SMS_PROVIDERS:simulated,twilio}
+        providers: ${NOTIFICATION_SMS_PROVIDERS:twilio,simulated}
         content-schema: '{"type":"object","required":["body"],"properties":{"body":{"type":"string","maxLength":160}}}'
       PUSH:
-        providers: ${NOTIFICATION_PUSH_PROVIDERS:simulated,fcm}
+        providers: ${NOTIFICATION_PUSH_PROVIDERS:fcm,simulated}
         content-schema: '{"type":"object","required":["body"],"properties":{"subject":{"maxLength":100},"body":{"type":"string","maxLength":900}}}'
   provider:
     simulated:
       result: ${SIMULATED_PROVIDER_RESULT:ACCEPTED}
+      enabled: ${SIMULATED_PROVIDER_ENABLED:false}
     brevo:
       api-key: ${BREVO_API_KEY:}
       sender-email: ${BREVO_SENDER_EMAIL:}

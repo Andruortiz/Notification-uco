@@ -138,15 +138,25 @@ final class NotificationDocumentMapper {
         attempt.result(),
         attempt.origin(),
         attempt.providerId().value(),
-        attempt.cycle());
+        attempt.cycle(),
+        attempt.failedOver(),
+        attempt.latencyMillis(),
+        attempt.failureCause(),
+        attempt.correlationId(),
+        attempt.messageId());
   }
 
   private static DeliveryAttempt toDomain(final DeliveryAttemptDocument document) {
-    return DeliveryAttempt.of(
+    return new DeliveryAttempt(
         document.occurredOn(),
         document.result(),
         document.origin(),
         ProviderId.of(document.providerId()),
-        document.cycle() == null ? 1 : document.cycle());
+        document.cycle() == null ? 1 : document.cycle(),
+        Boolean.TRUE.equals(document.failedOver()),
+        document.latencyMillis(),
+        document.failureCause(),
+        document.correlationId(),
+        document.messageId());
   }
 }

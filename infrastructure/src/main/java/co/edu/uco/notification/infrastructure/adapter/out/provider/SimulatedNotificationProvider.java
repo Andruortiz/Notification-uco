@@ -1,9 +1,11 @@
 package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import co.edu.uco.notification.core.domain.Notification;
-import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
+import co.edu.uco.notification.infrastructure.config.SimulatedProviderProperties;
 import co.edu.uco.notification.utils.Preconditions;
 import java.util.Optional;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -15,6 +17,7 @@ import reactor.core.publisher.Mono;
 public class SimulatedNotificationProvider implements NotificationSenderPort {
 
   private static final ProviderId PROVIDER_ID = ProviderId.of("simulated");
+  private static final String DISABLED_REASON = "notification.provider.simulated.enabled=false";
 
   private final SimulatedProviderProperties properties;
 
@@ -23,9 +26,12 @@ public class SimulatedNotificationProvider implements NotificationSenderPort {
   }
 
   @Override
-  public Mono<AttemptResult> send(final Notification notification) {
+  public Mono<ProviderResult> send(final Notification notification) {
     Preconditions.requireNonNull(notification, "notification must not be null");
-    return Mono.just(properties.result());
+    if (!properties.enabled()) {
+      return Mono.error(new ProviderDisabledException(PROVIDER_ID, DISABLED_REASON));
+    }
+    return Mono.just(ProviderResult.of(properties.result()));
   }
 
   @Override
@@ -35,7 +41,7 @@ public class SimulatedNotificationProvider implements NotificationSenderPort {
 
   @Override
   public Optional<String> disabledReason() {
-    return Optional.empty();
+    return properties.enabled() ? Optional.empty() : Optional.of(DISABLED_REASON);
   }
 
   @Override

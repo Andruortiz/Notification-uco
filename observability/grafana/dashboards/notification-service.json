@@ -408,6 +408,140 @@
       ]
     },
     {
+      "id": 29,
+      "type": "timeseries",
+      "title": "Ultima prueba de carga: p95 de aceptacion (s)",
+      "description": "Resultado de la prueba de carga de RNF-02 (umbral 0,2 s). Sin datos si no se ha ejecutado",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.2
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "k6_notificaciones_aceptacion_seconds_p95",
+          "legendFormat": "p95 de la prueba",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "type": "timeseries",
+      "title": "Ultima prueba de carga: despachadas por minuto",
+      "description": "Resultado de la prueba de carga de RNF-03 (umbral 500 por minuto). Sin datos si no se ha ejecutado",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 500
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "k6_notificaciones_despachadas_por_minuto",
+          "legendFormat": "despachadas por minuto",
+          "editorMode": "code",
+          "range": true
+        }
+      ]
+    },
+    {
       "id": 9,
       "type": "row",
       "title": "RNF-01 Disponibilidad",
@@ -416,7 +550,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 25
+        "y": 33
       },
       "panels": []
     },
@@ -433,7 +567,7 @@
         "h": 6,
         "w": 8,
         "x": 0,
-        "y": 26
+        "y": 34
       },
       "fieldConfig": {
         "defaults": {
@@ -490,7 +624,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 40
       },
       "panels": []
     },
@@ -502,7 +636,7 @@
         "h": 5,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 41
       },
       "options": {
         "mode": "markdown",
@@ -518,7 +652,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 46
       },
       "panels": []
     },
@@ -535,7 +669,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 39
+        "y": 47
       },
       "fieldConfig": {
         "defaults": {
@@ -598,7 +732,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 39
+        "y": 47
       },
       "fieldConfig": {
         "defaults": {
@@ -661,7 +795,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 47
+        "y": 55
       },
       "fieldConfig": {
         "defaults": {
@@ -724,7 +858,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 47
+        "y": 55
       },
       "fieldConfig": {
         "defaults": {
@@ -791,7 +925,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 47
+        "y": 55
       },
       "fieldConfig": {
         "defaults": {
@@ -854,7 +988,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 55
+        "y": 63
       },
       "fieldConfig": {
         "defaults": {
@@ -917,7 +1051,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 55
+        "y": 63
       },
       "fieldConfig": {
         "defaults": {
@@ -976,7 +1110,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 71
       },
       "panels": []
     },
@@ -993,7 +1127,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 64
+        "y": 72
       },
       "fieldConfig": {
         "defaults": {
@@ -1056,7 +1190,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 64
+        "y": 72
       },
       "fieldConfig": {
         "defaults": {
@@ -1119,7 +1253,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "fieldConfig": {
         "defaults": {
@@ -1182,7 +1316,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 72
+        "y": 80
       },
       "fieldConfig": {
         "defaults": {
@@ -1267,7 +1401,7 @@
         "h": 8,
         "w": 8,
         "x": 0,
-        "y": 80
+        "y": 88
       },
       "fieldConfig": {
         "defaults": {
@@ -1330,7 +1464,7 @@
         "h": 8,
         "w": 8,
         "x": 8,
-        "y": 80
+        "y": 88
       },
       "fieldConfig": {
         "defaults": {
@@ -1393,7 +1527,7 @@
         "h": 8,
         "w": 8,
         "x": 16,
-        "y": 80
+        "y": 88
       },
       "fieldConfig": {
         "defaults": {

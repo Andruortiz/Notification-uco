@@ -132,7 +132,7 @@ Esta resolucion de identidad es provisional (excepcion registrada en `specs/025-
 
 ## Rutas publicas con el PEP activo
 
-El starter del PEP exige credencial en toda ruta salvo las de `security.pep.enforcement.public-paths` (`SECURITY_PEP_PUBLIC_PATHS`, separadas por comas, patrones de ruta completa; `/**` final cubre el subarbol; no distingue metodo). Por defecto son solo lectura de documentacion y sondas: `GET /openapi/api-notificaciones.yaml` y `GET /v3/api-docs` (contrato, sin datos) y, en el puerto de gestion, `/actuator/health`, `/actuator/health/**` y `/actuator/prometheus`. Estan declaradas en `x-public-routes` del contrato y no son recursos que haya que registrar en el PDP.
+El starter del PEP exige credencial en toda ruta salvo las de `security.pep.enforcement.public-paths` (`SECURITY_PEP_PUBLIC_PATHS`, separadas por comas, patrones de ruta completa; `/**` final cubre el subarbol; no distingue metodo). Por defecto son lectura de documentacion y sondas, mas el webhook de Brevo: `GET /openapi/api-notificaciones.yaml` y `GET /v3/api-docs` (contrato, sin datos), `POST /providers/brevo/bounce-events` y, en el puerto de gestion, `/actuator/health`, `/actuator/health/**` y `/actuator/prometheus`. Estan declaradas en `x-public-routes` del contrato y no son recursos que haya que registrar en el PDP.
 
 - **Swagger UI** (`/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/swagger-config`) esta deshabilitada y no es publica por defecto; el perfil `local` la habilita. Para otro entorno: `SWAGGER_UI_ENABLED=true` y anadir esas rutas a `SECURITY_PEP_PUBLIC_PATHS`. El criterio esta en `specs/027-rutas-publicas-pep/research.md`.
 - **Webhook de rebotes de Brevo** (`POST /providers/brevo/bounce-events`, HU2-116) es publico y se protege con el secreto `BREVO_WEBHOOK_SECRET` en la cabecera `X-Brevo-Webhook-Secret`. Si `SECURITY_PEP_PUBLIC_PATHS` se define en el despliegue debe incluir `/providers/brevo/bounce-events`; de lo contrario el PEP responde 401 a Brevo.
@@ -182,6 +182,16 @@ Que demuestra cada panel de RNF y que no:
 - `PROMETHEUS_URL` (por defecto `http://localhost:9090`) y `GRAFANA_URL` (vacia por defecto).
 - Ajustes opcionales: `PROVIDER_HEALTH_WINDOW` (5m), `PROVIDER_HEALTH_LOOKBACK` (15m), `PROVIDER_HEALTH_TIMEOUT` (2s), `PROVIDER_HEALTH_MIN_SAMPLES` (5), `PROVIDER_HEALTH_HEALTHY_THRESHOLD` (0,95), `PROVIDER_HEALTH_DOWN_THRESHOLD` (0,5) y `PROVIDER_HEALTH_RECOVERABLE_THRESHOLD` (0,5).
 - Limites: con el breaker de E3 abierto el proveedor puede salir `UNKNOWN` o ausente y no `DOWN` (dueno: equipo de backend, fecha 2026-12-15); un proveedor desactivado con trafico sale `DOWN` porque la metrica no distingue `ProviderDisabledException` de un fallo (dueno: equipo de backend, fecha 2026-12-15); los proveedores sin trafico en la ventana no aparecen; el instante del ultimo error tiene resolucion de 60 segundos.
+
+## Conmutacion entre proveedores y prueba de conexion
+
+Cada canal tiene una lista de proveedores en orden de preferencia (`NOTIFICATION_EMAIL_PROVIDERS`, `NOTIFICATION_SMS_PROVIDERS`, `NOTIFICATION_PUSH_PROVIDERS`). Si un proveedor falla o su breaker esta abierto, el despacho pasa al siguiente; el intento queda en el historial con `failedOver` y no cuenta para el tope de reintentos. El breaker es por proveedor y canal y se ajusta con `notification.provider.circuit-breaker.*`: `failure-rate-threshold` (50), `minimum-calls` (5), `sliding-window-size` (10), `open-wait` (30s) y `half-open-calls` (2); como variables de entorno, `NOTIFICATION_PROVIDER_CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD` y las equivalentes. `SIMULATED_PROVIDER_ENABLED` solo debe ser `true` en local y pruebas.
+
+`POST /provider-connection-tests` (rol `ADMINISTRADOR`) ejecuta una sonda sin crear notificaciones; su limite de tiempo es `notification.provider.probe.timeout` (`NOTIFICATION_PROVIDER_PROBE_TIMEOUT`, 5s).
+
+## Registro de dispositivos push
+
+`POST /devices`, `GET /devices`, `POST /device-removals` y `POST /device-erasures` guardan los tokens push cifrados con AES-GCM. `DEVICE_TOKEN_KEY` y `DEVICE_FINGERPRINT_KEY` (claves de 32 bytes en Base64, por ejemplo `openssl rand -base64 32`) son obligatorias salvo que todos los perfiles activos sean `local` o `test`, donde se usan claves efimeras; `DEVICE_TOKEN_KEY_VERSION` y `DEVICE_FINGERPRINT_KEY_VERSION` (1) permiten rotarlas. Ajustes: `notification.devices.retention-days` (270), `notification.devices.sweep-enabled` (true) y `notification.devices.sweep-batch-size` (200). Nunca pongas claves reales en el repositorio ni en el `.env.example`.
 
 ## Azure Key Vault
 

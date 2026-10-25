@@ -78,18 +78,18 @@
     <tr><th>Método</th><th>Ruta</th><th>Caso de uso</th></tr>
     <tr><td>POST</td><td><code>/notifications</code></td><td>CU-01 enviar (responde 202)</td></tr>
     <tr><td>POST</td><td><code>/notifications/batches</code></td><td>CU-02 lote</td></tr>
-    <tr><td>GET</td><td><code>/notifications/{id}</code></td><td>CU-04 estado</td></tr>
+    <tr><td>GET</td><td><code>/notifications/detail?notificationId={id}</code></td><td>CU-04 estado</td></tr>
     <tr><td>GET</td><td><code>/notifications</code></td><td>CU-05 búsqueda (recipientId, channelType, status, from, to, limit, offset)</td></tr>
     <tr><td>GET / POST</td><td><code>/notifications/stream</code> y <code>/notifications/stream/tickets</code></td><td>Panel en vivo por SSE</td></tr>
-    <tr><td>POST / GET</td><td><code>/attachment-uploads</code>, <code>/attachment-upload-completions</code>, <code>/attachment-uploads/{id}</code></td><td>Adjuntos</td></tr>
+    <tr><td>POST / GET</td><td><code>/attachment-uploads</code>, <code>/attachment-upload-completions</code>, <code>/attachment-uploads/status?uploadId={id}</code></td><td>Adjuntos</td></tr>
     <tr><td>GET</td><td><code>/channels</code>, <code>/providers</code>, <code>/configuration</code></td><td>Catálogo y configuración</td></tr>
   </table></div>
 
   <h3>Especificado en <code>docs/casos-de-uso.md</code> y sin construir</h3>
   <div class="table-wrap"><table>
     <tr><th>Pendiente</th><th>Endpoint propuesto</th><th>Nota</th></tr>
-    <tr><td>Reintento manual (CU-06, spec 018)</td><td><code>POST /notifications/{id}:retry</code></td><td>Hueco más visible: una <code>FAILED</code> solo se recupera por el reencolado automático. Decidir antes si el reintento reinicia el contador de intentos.</td></tr>
-    <tr><td>Preferencias del destinatario (CU-09, spec 013)</td><td><code>GET/PUT /recipients/{id}/preferences</code></td><td>Incluye baja total y exclusión de envíos no esenciales. Quedan por responder las clarificaciones Q1–Q4 de la spec.</td></tr>
+    <tr><td>Reintento manual (CU-06, spec 018)</td><td><code>POST /notification-retries</code></td><td>Hueco más visible: una <code>FAILED</code> solo se recupera por el reencolado automático. Decidir antes si el reintento reinicia el contador de intentos.</td></tr>
+    <tr><td>Preferencias del destinatario (CU-09, spec 013)</td><td><code>GET/PUT /recipients/preferences?recipientId={id}</code></td><td>Incluye baja total y exclusión de envíos no esenciales. Quedan por responder las clarificaciones Q1–Q4 de la spec.</td></tr>
     <tr><td>Administración del catálogo (CU-07/08)</td><td>Registrar y deshabilitar canal y proveedor</td><td>Hoy <code>/channels</code> y <code>/providers</code> son solo lectura.</td></tr>
     <tr><td>Plantillas (CU-12) y programación (CU-13)</td><td>—</td><td>Fuera de alcance del periodo según el roadmap.</td></tr>
   </table></div>
@@ -97,12 +97,12 @@
   <h3>Huecos que no están en ningún caso de uso</h3>
   <div class="table-wrap"><table>
     <tr><th>Propuesta</th><th>Por qué</th></tr>
-    <tr><td>Cancelar: <code>POST /notifications/{id}:cancel</code></td><td>Contraparte natural del reintento; comparte <code>StatusTransitionPolicy</code>.</td></tr>
-    <tr><td>Historial de intentos: <code>GET /notifications/{id}/attempts</code></td><td>La spec 017 ya modela el ciclo de intentos pero la API no lo expone. Depura fallos sin ir a logs.</td></tr>
+    <tr><td>Cancelar: <code>POST /notification-cancellations</code></td><td>Contraparte natural del reintento; comparte <code>StatusTransitionPolicy</code>.</td></tr>
+    <tr><td>Historial de intentos: <code>GET /notifications/timeline?notificationId={id}</code></td><td>La spec 017 ya modela el ciclo de intentos pero la API no lo expone. Depura fallos sin ir a logs.</td></tr>
     <tr><td>Estado del lote: <code>GET /batches/{batchId}</code></td><td><code>sendBatch</code> devuelve un <code>batchId</code> sin forma de ver el progreso ni los resultados por ítem.</td></tr>
     <tr><td>Paginación real en la búsqueda</td><td><code>limit/offset</code> sin total ni cursor se degrada con volumen. Falta ordenamiento y filtros por <code>externalId</code>, <code>priority</code> y <code>batchId</code>.</td></tr>
     <tr><td>Búsqueda por <code>externalId</code></td><td>El cliente manda su propio ID para idempotencia y no puede consultarlo por ese ID.</td></tr>
-    <tr><td>Estadísticas: <code>GET /notifications:stats</code></td><td>Conteos por estado, canal y proveedor en una ventana de tiempo; alimenta el panel.</td></tr>
+    <tr><td>Estadísticas: <code>GET /notifications/stats</code></td><td>Conteos por estado, canal y proveedor en una ventana de tiempo; alimenta el panel.</td></tr>
     <tr><td>Webhooks de proveedor (Brevo, Twilio, FCM)</td><td>Cerrar <code>SENT → DELIVERED / BOUNCED</code>. Hoy el ciclo parece terminar en el envío.</td></tr>
     <tr><td>Callback saliente al cliente</td><td>Alternativa al SSE cuando cambia el estado.</td></tr>
     <tr><td>Listar, descargar y eliminar adjuntos</td><td>No hay listado por notificación.</td></tr>
@@ -193,7 +193,7 @@
   <p>Para este servicio, poco: casi todo se resuelve con una petición REST mientras el SSE sigue abierto.</p>
   <div class="table-wrap"><table>
     <tr><th>Caso</th><th>Hoy</th><th>Con WS</th><th>Alternativa sin WS</th></tr>
-    <tr><td>Cambiar filtros sin reconectar</td><td>Cerrar y reabrir, con snapshot nuevo</td><td>Mensaje <code>subscribe</code></td><td><code>PUT /notifications:subscriptions/{id}</code> sobre el stream existente</td></tr>
+    <tr><td>Cambiar filtros sin reconectar</td><td>Cerrar y reabrir, con snapshot nuevo</td><td>Mensaje <code>subscribe</code></td><td><code>PUT /notifications/subscriptions?id={id}</code> sobre el stream existente</td></tr>
     <tr><td>Ack y reanudación</td><td>Cada reconexión repite el snapshot</td><td>El cliente confirma el último evento</td><td><code>id:</code> en cada evento SSE y soporte de <code>Last-Event-ID</code></td></tr>
     <tr><td>Backpressure real</td><td>No hay forma</td><td>El cliente pide menos tráfico</td><td>Política de cierre por cliente lento</td></tr>
     <tr><td>Acciones del operador</td><td><code>POST</code> aparte</td><td>Comando por el socket</td><td>Mantener <code>POST</code>: más simple de auditar y proteger por roles</td></tr>
@@ -231,7 +231,7 @@
   </div>
 
   <h3>Problema de fondo a corregir</h3>
-  <div class="note">El detalle obtiene los intentos con <code>GET /notifications?limit=200</code> y busca el id en memoria. Si la notificación no está entre las últimas 200, los intentos y la fecha de aceptación desaparecen sin aviso. Solución: que <code>GET /notifications/{id}</code> devuelva <code>acceptedAt</code>, <code>externalId</code>, <code>recipientId</code> y <code>deliveryAttempts</code>.</div>
+  <div class="note">El detalle obtiene los intentos con <code>GET /notifications?limit=200</code> y busca el id en memoria. Si la notificación no está entre las últimas 200, los intentos y la fecha de aceptación desaparecen sin aviso. Solución: que <code>GET /notifications/detail?notificationId={id}</code> devuelva <code>acceptedAt</code>, <code>externalId</code>, <code>recipientId</code> y <code>deliveryAttempts</code>.</div>
 
   <h3>Lo que requiere cambios en el backend</h3>
   <div class="table-wrap"><table>
@@ -249,7 +249,7 @@
   <h2 id="orden">6. Orden sugerido</h2>
   <ol>
     <li><strong>Medir</strong>: conexiones SSE activas y lecturas por evento; prueba con ~200 clientes.</li>
-    <li><strong>Backend pequeño</strong>: detalle completo en <code>GET /notifications/{id}</code> y motivo del fallo por intento.</li>
+    <li><strong>Backend pequeño</strong>: detalle completo en <code>GET /notifications/detail?notificationId={id}</code> y motivo del fallo por intento.</li>
     <li><strong>Frontend</strong>: línea de tiempo, cabecera resumen y campos copiables.</li>
     <li><strong>Rendimiento SSE</strong>: lectura compartida por evento, límites por tenant, jitter en la reconexión.</li>
     <li><strong>Funcionalidad</strong>: reintento manual (018), cancelación, estado de lote, búsqueda por <code>externalId</code>.</li>

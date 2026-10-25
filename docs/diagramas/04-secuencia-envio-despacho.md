@@ -44,7 +44,7 @@ sequenceDiagram
     DISP->>DISP: markDelivered / markRecoverable / markFailed
     DISP->>REPO: save(notification)
 
-    C->>API: GET /notifications/{id}
+    C->>API: GET /notifications/detail?notificationId={id}
     API->>REPO: (vía GetNotificationStatusService)
     REPO-->>API: NotificationStatusView
     API-->>C: 200 OK

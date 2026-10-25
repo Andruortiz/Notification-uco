@@ -7,7 +7,7 @@ Cada flujo tiene su diagrama editable en draw.io (`.drawio`). Se dibujaron a par
 
 | Flujo | Diagrama | Punto de entrada | Specs |
 |---|---|---|---|
-| F01 Envío y despacho (incluye el reintento manual, planificado) | [`F01-envio-y-despacho.drawio`](F01-envio-y-despacho.drawio) | `POST /notifications`, `GET /notifications/{id}`, `POST /notifications/{id}:retry` (018, por implementar) | 001, 004, 007, 017 (E4), 018 |
+| F01 Envío y despacho (incluye el reintento manual, planificado) | [`F01-envio-y-despacho.drawio`](F01-envio-y-despacho.drawio) | `POST /notifications`, `GET /notifications/detail`, `POST /notification-retries` (018) | 001, 004, 007, 017 (E4), 018 |
 | F02 Reencolado y recuperación | [`F02-reencolado-y-recuperacion.drawio`](F02-reencolado-y-recuperacion.drawio) | Planificador | 001, 017 (E4) |
 | F03 Adjuntos: subida y escaneo | [`F03-adjuntos-subida-y-escaneo.drawio`](F03-adjuntos-subida-y-escaneo.drawio) | `POST /attachment-uploads`, `POST /attachment-upload-completions` | 012 |
 | F04 Lote y adjuntos en el envío | [`F04-lote-y-adjuntos-en-envio.drawio`](F04-lote-y-adjuntos-en-envio.drawio) | `POST /notifications/batches` | 012, 014, 017 (E3) |

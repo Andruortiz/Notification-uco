@@ -72,6 +72,9 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://host.docker.internal:9090}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8060:8060"
 

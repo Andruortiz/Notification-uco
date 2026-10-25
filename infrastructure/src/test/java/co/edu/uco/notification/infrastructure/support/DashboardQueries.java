@@ -23,6 +23,7 @@ public final class DashboardQueries {
   private static final ObjectMapper MAPPER = JsonMapper.builder().build();
   private static final Set<String> TARGET_LABELS = Set.of("job", "instance");
   private static final Set<String> SYNTHESIZED_METRICS = Set.of("up");
+  private static final String EXTERNAL_PREFIX = "k6_";
   private static final Pattern FORBIDDEN =
       Pattern.compile(
           "tenant|notificationid|correlationid|recipient|destinatario|subject",
@@ -99,7 +100,7 @@ public final class DashboardQueries {
       final PrometheusExpression parsed = PrometheusExpression.parse(render(query.expression()));
       final Set<String> allowed = new HashSet<>(TARGET_LABELS);
       for (final String metric : parsed.metrics()) {
-        if (SYNTHESIZED_METRICS.contains(metric)) {
+        if (SYNTHESIZED_METRICS.contains(metric) || metric.startsWith(EXTERNAL_PREFIX)) {
           continue;
         }
         final Set<String> labels = scrapedLabelsByMetric.get(metric);

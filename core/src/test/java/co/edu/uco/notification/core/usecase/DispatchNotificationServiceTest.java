@@ -197,6 +197,33 @@ class DispatchNotificationServiceTest {
   }
 
   @Test
+  void aManualDispatchRecordsEveryAttemptWithManualOrigin() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
+
+    StepVerifier.create(service.dispatch(notification.notificationId(), AttemptOrigin.MANUAL))
+        .verifyComplete();
+
+    assertEquals(AttemptOrigin.MANUAL, notification.deliveryAttempts().getFirst().origin());
+  }
+
+  @Test
+  void anAutomaticDispatchRecordsTheAttemptWithAutomaticOrigin() {
+    final Notification notification = pendingNotification();
+    notification.pullEvents();
+    stubHappyPathUpTo(notification);
+    when(notificationSenderPort.send(notification))
+        .thenReturn(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED)));
+
+    StepVerifier.create(service.dispatch(notification.notificationId())).verifyComplete();
+
+    assertEquals(AttemptOrigin.AUTOMATIC, notification.deliveryAttempts().getFirst().origin());
+  }
+
+  @Test
   void dispatchMarksRecoverableOnRecoverableFailureOutcome() {
     final Notification notification = pendingNotification();
     notification.pullEvents();

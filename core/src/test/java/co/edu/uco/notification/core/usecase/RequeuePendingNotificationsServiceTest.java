@@ -86,13 +86,14 @@ class RequeuePendingNotificationsServiceTest {
         .thenReturn(Flux.just(dueNotification));
     when(notificationRepository.save(dueNotification)).thenReturn(Mono.just(dueNotification));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(dueNotification)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(dueNotification, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
     assertEquals(NotificationStatus.PENDING, dueNotification.status());
     verify(notificationRepository).save(dueNotification);
-    verify(eventPublisherPort).enqueueForDispatch(dueNotification);
+    verify(eventPublisherPort).enqueueForDispatch(dueNotification, AttemptOrigin.AUTOMATIC);
   }
 
   @Test
@@ -127,11 +128,12 @@ class RequeuePendingNotificationsServiceTest {
         .thenReturn(Mono.error(new IllegalStateException("mongo down")));
     when(notificationRepository.save(healthy)).thenReturn(Mono.just(healthy));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(healthy)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(healthy, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
-    verify(eventPublisherPort).enqueueForDispatch(healthy);
+    verify(eventPublisherPort).enqueueForDispatch(healthy, AttemptOrigin.AUTOMATIC);
   }
 
   @Test
@@ -140,23 +142,25 @@ class RequeuePendingNotificationsServiceTest {
         .thenReturn(Flux.error(new IllegalStateException("mongo down")));
     final Notification orphaned = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
     when(notificationRepository.claimForRequeue(any(), anyInt())).thenReturn(Flux.just(orphaned));
-    when(eventPublisherPort.enqueueForDispatch(orphaned)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(orphaned, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
-    verify(eventPublisherPort).enqueueForDispatch(orphaned);
+    verify(eventPublisherPort).enqueueForDispatch(orphaned, AttemptOrigin.AUTOMATIC);
   }
 
   @Test
   void aPendingNotificationWithPreviousAttemptsIsAnOrphanByPendingSince() {
     final Notification orphaned = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
     when(notificationRepository.claimForRequeue(any(), anyInt())).thenReturn(Flux.just(orphaned));
-    when(eventPublisherPort.enqueueForDispatch(orphaned)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(orphaned, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
     assertEquals(NotificationStatus.PENDING, orphaned.status());
-    verify(eventPublisherPort).enqueueForDispatch(orphaned);
+    verify(eventPublisherPort).enqueueForDispatch(orphaned, AttemptOrigin.AUTOMATIC);
     verify(notificationRepository, never()).save(any());
   }
 
@@ -179,16 +183,17 @@ class RequeuePendingNotificationsServiceTest {
     when(notificationRepository.claimForRequeue(any(), anyInt()))
         .thenReturn(Flux.just(failing, healthy))
         .thenReturn(Flux.just(failing));
-    when(eventPublisherPort.enqueueForDispatch(failing))
+    when(eventPublisherPort.enqueueForDispatch(failing, AttemptOrigin.AUTOMATIC))
         .thenReturn(Mono.error(new IllegalStateException("broker down")))
         .thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(healthy)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(healthy, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
-    verify(eventPublisherPort).enqueueForDispatch(healthy);
+    verify(eventPublisherPort).enqueueForDispatch(healthy, AttemptOrigin.AUTOMATIC);
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
-    verify(eventPublisherPort, times(2)).enqueueForDispatch(failing);
+    verify(eventPublisherPort, times(2)).enqueueForDispatch(failing, AttemptOrigin.AUTOMATIC);
   }
 
   @Test
@@ -221,7 +226,7 @@ class RequeuePendingNotificationsServiceTest {
   void nothingIsEnqueuedNorSavedWhenThereIsNothingToRecover() {
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
-    verify(eventPublisherPort, never()).enqueueForDispatch(any());
+    verify(eventPublisherPort, never()).enqueueForDispatch(any(), any());
     verify(notificationRepository, never()).save(any());
   }
 
@@ -242,7 +247,8 @@ class RequeuePendingNotificationsServiceTest {
           recoverableNotification(NotificationId.newId(), Instant.now().minusSeconds(120));
       due.add(notification);
       when(notificationRepository.save(notification)).thenReturn(Mono.just(notification));
-      when(eventPublisherPort.enqueueForDispatch(notification)).thenReturn(Mono.empty());
+      when(eventPublisherPort.enqueueForDispatch(notification, AttemptOrigin.AUTOMATIC))
+          .thenReturn(Mono.empty());
     }
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
     when(notificationRepository.findByStatus(NotificationStatus.RECOVERABLE))
@@ -250,7 +256,7 @@ class RequeuePendingNotificationsServiceTest {
 
     StepVerifier.create(smallBatch.requeuePending()).verifyComplete();
 
-    verify(eventPublisherPort, times(2)).enqueueForDispatch(any());
+    verify(eventPublisherPort, times(2)).enqueueForDispatch(any(), any());
     verify(notificationRepository).claimForRequeue(any(), eq(2));
     verify(notificationRepository).claimStuckInProcess(any(), eq(2));
   }
@@ -282,11 +288,12 @@ class RequeuePendingNotificationsServiceTest {
         .thenReturn(Flux.just(afterManualRetry));
     when(notificationRepository.save(afterManualRetry)).thenReturn(Mono.just(afterManualRetry));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(afterManualRetry)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(afterManualRetry, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
-    verify(eventPublisherPort).enqueueForDispatch(afterManualRetry);
+    verify(eventPublisherPort).enqueueForDispatch(afterManualRetry, AttemptOrigin.AUTOMATIC);
   }
 
   @Test
@@ -320,12 +327,13 @@ class RequeuePendingNotificationsServiceTest {
         .thenReturn(Flux.just(switched));
     when(notificationRepository.save(switched)).thenReturn(Mono.just(switched));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(switched)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(switched, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
     assertEquals(1, switched.recoverableAttemptsInCurrentCycle());
-    verify(eventPublisherPort).enqueueForDispatch(switched);
+    verify(eventPublisherPort).enqueueForDispatch(switched, AttemptOrigin.AUTOMATIC);
   }
 
   @Test
@@ -337,11 +345,12 @@ class RequeuePendingNotificationsServiceTest {
         .thenReturn(Flux.just(released));
     when(notificationRepository.save(released)).thenReturn(Mono.just(released));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(released)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(released, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
-    verify(eventPublisherPort).enqueueForDispatch(released);
+    verify(eventPublisherPort).enqueueForDispatch(released, AttemptOrigin.AUTOMATIC);
   }
 
   @Test
@@ -357,12 +366,13 @@ class RequeuePendingNotificationsServiceTest {
             Mono.error(new NotificationVersionConflictException(conflicting.notificationId())));
     when(notificationRepository.save(healthy)).thenReturn(Mono.just(healthy));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(healthy)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(healthy, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 
     verify(notificationRepository).save(healthy);
-    verify(eventPublisherPort).enqueueForDispatch(healthy);
+    verify(eventPublisherPort).enqueueForDispatch(healthy, AttemptOrigin.AUTOMATIC);
   }
 
   @Test
@@ -391,7 +401,8 @@ class RequeuePendingNotificationsServiceTest {
         .thenReturn(Flux.just(due));
     when(notificationRepository.save(due)).thenReturn(Mono.just(due));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(due)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(due, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(
             service.requeuePending().contextWrite(c -> c.put("correlationId", "sched-x")))
@@ -494,7 +505,7 @@ class RequeuePendingNotificationsServiceTest {
   void aFailedEnqueueIsReportedWithItsErrorCode() {
     final Notification failing = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
     when(notificationRepository.claimForRequeue(any(), anyInt())).thenReturn(Flux.just(failing));
-    when(eventPublisherPort.enqueueForDispatch(failing))
+    when(eventPublisherPort.enqueueForDispatch(failing, AttemptOrigin.AUTOMATIC))
         .thenReturn(Mono.error(new IllegalStateException("broker down")));
 
     assertReported("ENQUEUE_FAILED", ErrorCode.ENQUEUE_FAILED);
@@ -548,7 +559,7 @@ class RequeuePendingNotificationsServiceTest {
   void aFailedEnqueueCountsOneErrorWithItsCode() {
     final Notification failing = pendingNotificationWithAttempts(Instant.now().minusSeconds(120));
     when(notificationRepository.claimForRequeue(any(), anyInt())).thenReturn(Flux.just(failing));
-    when(eventPublisherPort.enqueueForDispatch(failing))
+    when(eventPublisherPort.enqueueForDispatch(failing, AttemptOrigin.AUTOMATIC))
         .thenReturn(Mono.error(new IllegalStateException("broker down")));
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
@@ -584,7 +595,8 @@ class RequeuePendingNotificationsServiceTest {
         .thenReturn(Flux.just(dueNotification));
     when(notificationRepository.save(dueNotification)).thenReturn(Mono.just(dueNotification));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(dueNotification)).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(dueNotification, AttemptOrigin.AUTOMATIC))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.requeuePending()).verifyComplete();
 

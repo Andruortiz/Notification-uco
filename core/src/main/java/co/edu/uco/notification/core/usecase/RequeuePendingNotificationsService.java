@@ -4,6 +4,7 @@ import co.edu.uco.notification.core.domain.DeliveryAttempt;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.policy.RetryPolicy;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.NotificationStatus;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.port.in.RequeuePendingNotificationsUseCase;
@@ -87,7 +88,7 @@ public final class RequeuePendingNotificationsService
         .flatMap(
             notification ->
                 eventPublisherPort
-                    .enqueueForDispatch(notification)
+                    .enqueueForDispatch(notification, AttemptOrigin.AUTOMATIC)
                     .onErrorResume(
                         error ->
                             logFailure(
@@ -167,7 +168,7 @@ public final class RequeuePendingNotificationsService
             saved ->
                 eventPublisherPort
                     .publish(events)
-                    .then(eventPublisherPort.enqueueForDispatch(saved)))
+                    .then(eventPublisherPort.enqueueForDispatch(saved, AttemptOrigin.AUTOMATIC)))
         .then();
   }
 }

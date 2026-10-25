@@ -74,12 +74,13 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   private record Outcome(ProviderResult last, List<ProviderResult> failedOver) {}
 
   @Override
-  public Mono<Void> dispatch(final NotificationId notificationId) {
+  public Mono<Void> dispatch(final NotificationId notificationId, final AttemptOrigin origin) {
     Preconditions.requireNonNull(notificationId, "notificationId must not be null");
+    Preconditions.requireNonNull(origin, "origin must not be null");
 
     return notificationRepository
         .reserveForDispatch(notificationId)
-        .flatMap(reserved -> dispatchReserved(reserved).thenReturn(Boolean.TRUE))
+        .flatMap(reserved -> dispatchReserved(reserved, origin).thenReturn(Boolean.TRUE))
         .defaultIfEmpty(Boolean.FALSE)
         .flatMap(reserved -> reserved ? Mono.<Void>empty() : handleNotReserved(notificationId));
   }
@@ -99,11 +100,11 @@ public final class DispatchNotificationService implements DispatchNotificationUs
         .then();
   }
 
-  private Mono<Void> dispatchReserved(final Notification notification) {
+  private Mono<Void> dispatchReserved(final Notification notification, final AttemptOrigin origin) {
     notification.announceQueued();
     return Mono.defer(() -> resolveOutcome(notification))
         .onErrorResume(error -> releaseAndPropagate(notification, error))
-        .flatMap(outcome -> persistAndPublish(notification, outcome));
+        .flatMap(outcome -> persistAndPublish(notification, outcome, origin));
   }
 
   private Mono<Outcome> resolveOutcome(final Notification notification) {
@@ -289,8 +290,9 @@ public final class DispatchNotificationService implements DispatchNotificationUs
         .then(Mono.<Outcome>error(error));
   }
 
-  private Mono<Void> persistAndPublish(final Notification notification, final Outcome outcome) {
-    applyOutcome(notification, outcome, retryPolicy);
+  private Mono<Void> persistAndPublish(
+      final Notification notification, final Outcome outcome, final AttemptOrigin origin) {
+    applyOutcome(notification, outcome, retryPolicy, origin);
     final List<DomainEvent> events = notification.pullEvents();
 
     return Mono.defer(() -> notificationRepository.save(notification))
@@ -361,15 +363,19 @@ public final class DispatchNotificationService implements DispatchNotificationUs
         : cause;
   }
 
-  static AttemptRecord recordOf(final ProviderResult result, final String correlationId) {
-    return recordOf(result, result.cause(), correlationId);
+  static AttemptRecord recordOf(
+      final ProviderResult result, final AttemptOrigin origin, final String correlationId) {
+    return recordOf(result, result.cause(), origin, correlationId);
   }
 
   private static AttemptRecord recordOf(
-      final ProviderResult result, final FailureCause cause, final String correlationId) {
+      final ProviderResult result,
+      final FailureCause cause,
+      final AttemptOrigin origin,
+      final String correlationId) {
     return new AttemptRecord(
         result.result(),
-        AttemptOrigin.AUTOMATIC,
+        origin,
         result.providerId(),
         false,
         result.latencyMillis(),
@@ -388,21 +394,24 @@ public final class DispatchNotificationService implements DispatchNotificationUs
   }
 
   private static void applyOutcome(
-      final Notification notification, final Outcome outcome, final RetryPolicy retryPolicy) {
+      final Notification notification,
+      final Outcome outcome,
+      final RetryPolicy retryPolicy,
+      final AttemptOrigin origin) {
     final String correlationId =
         notification.correlationId() == null ? null : notification.correlationId().value();
     for (final ProviderResult failedOver : outcome.failedOver()) {
-      notification.recordFailedOver(recordOf(failedOver, correlationId));
+      notification.recordFailedOver(recordOf(failedOver, origin, correlationId));
     }
     final ProviderResult last = outcome.last();
-    final AttemptRecord record = recordOf(last, correlationId);
+    final AttemptRecord record = recordOf(last, origin, correlationId);
     if (last.result() == AttemptResult.ACCEPTED) {
       notification.markDelivered(record);
     } else if (last.result() == AttemptResult.RECOVERABLE_FAILURE) {
       final int attemptNumber = notification.recoverableAttemptsInCurrentCycle() + 1;
       if (retryPolicy.shouldGiveUp(attemptNumber)) {
         notification.markRetriesExhausted(
-            recordOf(last, exhaustedCause(last.cause()), correlationId));
+            recordOf(last, exhaustedCause(last.cause()), origin, correlationId));
       } else {
         notification.markRecoverable(record);
       }

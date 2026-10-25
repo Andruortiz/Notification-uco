@@ -177,16 +177,6 @@ public final class Notification {
         new NotificationRequeued(notificationId, tenantId, correlationId, Instant.now()));
   }
 
-  public void retryManually() {
-    if (status != NotificationStatus.FAILED) {
-      throw new InvalidStatusTransitionException(status, NotificationStatus.PENDING);
-    }
-    transitionTo(NotificationStatus.PENDING);
-    currentCycle++;
-    eventRecorder.registerEvent(
-        new NotificationRequeued(notificationId, tenantId, correlationId, Instant.now()));
-  }
-
   public int recoverableAttemptsInCurrentCycle() {
     return (int)
         deliveryAttempts.stream()

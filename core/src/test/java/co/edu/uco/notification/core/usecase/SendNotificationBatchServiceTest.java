@@ -535,7 +535,8 @@ class SendNotificationBatchServiceTest {
       when(notificationRepository.save(any(Notification.class)))
           .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
       when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-      when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+      when(eventPublisherPort.enqueueForDispatch(any(Notification.class), any()))
+          .thenReturn(Mono.empty());
       when(detector.detect(any(), any())).thenReturn(Mono.just("application/pdf"));
       when(cache.find(any(), any())).thenReturn(Mono.empty());
       when(cache.save(any(), any(), any())).thenReturn(Mono.empty());
@@ -635,7 +636,7 @@ class SendNotificationBatchServiceTest {
     when(repository.save(any(Notification.class)))
         .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
     when(publisher.publish(any())).thenReturn(Mono.empty());
-    when(publisher.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+    when(publisher.enqueueForDispatch(any(Notification.class), any())).thenReturn(Mono.empty());
     final SendNotificationBatchService batch =
         new SendNotificationBatchService(
             new SendNotificationService(catalog, repository, publisher, resolver, metrics),

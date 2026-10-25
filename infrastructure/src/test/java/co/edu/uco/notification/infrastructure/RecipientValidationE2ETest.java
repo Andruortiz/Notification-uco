@@ -9,8 +9,12 @@ import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.domain.valueobject.Role;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
+import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
 import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
@@ -127,12 +131,15 @@ class RecipientValidationE2ETest {
 
   @Autowired private MessageIdProvider bounceSms;
 
+  @Autowired private ChannelCatalogPort channelCatalogPort;
+
   private FailoverClient client;
   private WebTestClient web;
   private ConcurrentListAppender appender;
 
   @BeforeEach
   void setUp() {
+    awaitCatalog();
     client = new FailoverClient(port);
     web =
         WebTestClient.bindToServer()
@@ -148,6 +155,29 @@ class RecipientValidationE2ETest {
   void tearDown() {
     ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).detachAppender(appender);
     appender.stop();
+  }
+
+  private void awaitCatalog() {
+    final Instant deadline = Instant.now().plus(Duration.ofSeconds(60));
+    while (Instant.now().isBefore(deadline)) {
+      final ChannelRoute email =
+          channelCatalogPort
+              .findActiveRoute(ChannelType.of("EMAIL"), TenantId.of("tenant-a"))
+              .block();
+      final ChannelRoute sms =
+          channelCatalogPort
+              .findActiveRoute(ChannelType.of("SMS"), TenantId.of("tenant-a"))
+              .block();
+      if (email != null && sms != null) {
+        return;
+      }
+      try {
+        Thread.sleep(100);
+      } catch (InterruptedException interrupted) {
+        Thread.currentThread().interrupt();
+      }
+    }
+    throw new IllegalStateException("the channel catalog was never loaded");
   }
 
   private WebTestClient.ResponseSpec send(

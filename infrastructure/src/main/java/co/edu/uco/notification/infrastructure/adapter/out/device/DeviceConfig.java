@@ -1,16 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.out.device;
 
-import co.edu.uco.notification.core.domain.policy.RetryPolicy;
-import co.edu.uco.notification.core.port.in.DispatchNotificationUseCase;
-import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
-import co.edu.uco.notification.core.port.out.DeviceLifecyclePort;
 import co.edu.uco.notification.core.port.out.DeviceRegistryPort;
-import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
-import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
-import co.edu.uco.notification.core.port.out.NotificationSenderRegistry;
-import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.usecase.DeviceService;
-import co.edu.uco.notification.core.usecase.DispatchNotificationService;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.DeviceMongoAdapter;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.PushRecipientEncryptionSweep;
 import co.edu.uco.notification.infrastructure.adapter.out.security.AesGcmTokenProtection;
@@ -24,7 +15,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.core.env.Environment;
 import org.springframework.data.mongodb.core.ReactiveMongoTemplate;
 import reactor.core.scheduler.Schedulers;
@@ -82,26 +72,6 @@ class DeviceConfig {
   @Bean
   DeviceService deviceService(final DeviceRegistryPort registry) {
     return new DeviceService(registry);
-  }
-
-  @Bean
-  @Primary
-  DispatchNotificationUseCase deviceAwareDispatchNotificationUseCase(
-      final NotificationRepository notificationRepository,
-      final ChannelCatalogPort channelCatalogPort,
-      final NotificationSenderRegistry notificationSenderRegistry,
-      final NotificationEventPublisherPort eventPublisherPort,
-      final RetryPolicy retryPolicy,
-      final NotificationMetricsPort metricsPort,
-      final DeviceLifecyclePort deviceLifecyclePort) {
-    return new DispatchNotificationService(
-        notificationRepository,
-        channelCatalogPort,
-        notificationSenderRegistry,
-        eventPublisherPort,
-        retryPolicy,
-        metricsPort,
-        deviceLifecyclePort);
   }
 
   @Bean

@@ -9,6 +9,7 @@ import co.edu.uco.notification.core.port.out.AttachmentScanRequestPort;
 import co.edu.uco.notification.core.port.out.AttachmentStoragePort;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ContentTypeDetectorPort;
+import co.edu.uco.notification.core.port.out.DeviceLifecyclePort;
 import co.edu.uco.notification.core.port.out.LastKnownConfigurationPort;
 import co.edu.uco.notification.core.port.out.MalwareScannerPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
@@ -180,14 +181,16 @@ public class UseCaseConfig {
       final NotificationSenderRegistry notificationSenderRegistry,
       final NotificationEventPublisherPort eventPublisherPort,
       final RetryPolicy retryPolicy,
-      final NotificationMetricsPort metricsPort) {
+      final NotificationMetricsPort metricsPort,
+      final DeviceLifecyclePort deviceLifecyclePort) {
     return new DispatchNotificationService(
         notificationRepository,
         channelCatalogPort,
         notificationSenderRegistry,
         eventPublisherPort,
         retryPolicy,
-        metricsPort);
+        metricsPort,
+        deviceLifecyclePort);
   }
 
   @Bean

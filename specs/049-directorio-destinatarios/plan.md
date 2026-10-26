@@ -54,19 +54,21 @@ Java 25, Spring Boot 4, WebFlux, Mongo reactivo. Sin dependencias nuevas.
    recipientIdentityId, address?, deviceId?)>`. `ChannelAddressSource`: EMAIL -> correo; SMS y WHATSAPP -> teléfono; PUSH ->
    `DeviceRegistryPort.findByIdentity`; IN_APP -> identidad, sin `address`. Otro canal: 400 `NTF-1003`. Dato vacío: 422 `NTF-3043`.
    Entrada ausente: 404 `NTF-3042`. Refresca `lastActivityAt` solo si supera 24 h y su fallo no cambia el resultado.
-6. **Envío por usuario** (`SendToUserService`): cada `SendNotificationCommand` lleva `recipientId` y `recipientIdentityId` con el
-   `recipientIdentityId` de la entrada, y `recipientAddress` resuelta (ausente en IN_APP; verificar que el comando lo admite).
+6. **Envío por usuario** (`SendToUserService`): cada `SendNotificationCommand` recibe `recipientId` con la dirección resuelta
+   (semántica existente, sin cambio) y `recipientIdentityId` con la identidad de la entrada. No se iguala uno al otro. En IN_APP no
+   hay dirección: verificar al rebasar que el comando admite `recipientId` vacío.
    Uno -> `SendNotificationService`; varios (PUSH) -> `SendNotificationBatchService`. Preferencias de F1 y compuerta de D5 se
    aplican al delegar. 404 y 422 ocurren antes de delegar: nada persiste.
 7. **Validación de escritura**: `RecipientFormatPolicy` con canal EMAIL y SMS; correo normalizado (recorte y minúsculas). Longitudes:
    `userId` <= 128, correo <= 254, `subject` <= el máximo de E5.
-8. **Borrado por titular común** (FR-014): `EraseRecipientDataUseCase.erase(tenantId, recipientIdentityId)` en `core`, con
-   `RecipientDataEraser.erase(tenantId, recipientIdentityId): Mono<Void>`. Orden fijado en `UseCaseConfig`: E5 (dispositivos e
-   identidad con `RecipientIdentityPort.delete`), E6, F1 y F6 (entrada, la última). Fallo de un contribuyente: 5xx; el reintento
-   repite todo.
-   - `/recipient-directory-erasures`: busca la entrada por `userId` (404 si no existe) y delega.
-   - `/device-erasures` (E5), refactor mínimo: `RecipientIdentityPort.findBySubject` y mismo caso de uso. **Cambio de
-     comportamiento**: pasa a borrar también identidad, entrada, bandeja y preferencias; el código de respuesta no cambia.
+8. **Borrado por titular** (FR-014): `EraseRecipientDataUseCase.erase(tenantId, recipientIdentityId)` en `core`, con
+   `RecipientDataEraser.erase(tenantId, recipientIdentityId): Mono<Void>`. Orden fijado en `UseCaseConfig`: E5 (dispositivos),
+   E6, F1, F6 (entrada, localizada con `RecipientDirectoryPort.findByIdentity`) y, la última, E5 (identidad con
+   `RecipientIdentityPort.delete`). Fallo de un contribuyente: 5xx; el reintento repite todo.
+   - `/recipient-directory-erasures` es la única vía de borrado completo: busca la entrada por `userId` (404 si no existe), toma
+     su identidad y delega. `/device-erasures` de E5 no cambia: ni contrato, ni pruebas, ni código.
+   - Hueco residual: si falla el último paso, la entrada ya está borrada y el reintento responde 404; la identidad residual queda.
+     Declarado en Excepciones.
    - La marca de no entregable de E10 no se borra.
 9. **Auditoría**: cada escritura, baja y borrado registra en log estructurado `tenantId`, actor (identificador opaco del principal),
    operación, resultado y huella de 8 caracteres del `userId` (HMAC de E5). Ningún correo, teléfono ni token.
@@ -113,7 +115,10 @@ Java 25, Spring Boot 4, WebFlux, Mongo reactivo. Sin dependencias nuevas.
 
 - Precondición de roles por sesión (B2): dueño Seguridad, fecha 2026-12-15, bloqueante antes de producción.
 - Rotación de claves y renombrado de `DEVICE_TOKEN_KEY`: dueño Seguridad, fecha 2026-12-15.
-- Base legal, retención de 270 días y papel de encargado: dueño Equipo de backend, fecha 2026-12-15.
+- Base legal, retención de 270 días (tabla de retención aprobada, Nivel 2, sección 6 del lote) y papel de encargado: dueño
+  Responsable de datos, fecha 2026-12-15.
+- Hueco de reintento del borrado por titular (identidad residual si falla el último paso): dueño Equipo de backend, fecha
+  2026-12-15.
 - Borrado por titular de la marca de no entregable (E10): dueño Equipo de backend, fecha 2026-12-15.
 - Límite de SC-003: correo y teléfono en claro en documentos de notificación EMAIL y SMS (E5 solo cifra PUSH). Dueño Equipo de
   backend, fecha 2026-12-15. Opción futura: cifrar o enmascarar en el documento de notificación (cambio en E5 y E10).
@@ -129,6 +134,9 @@ Pregunta menor abierta (no es excepción): si `CLIENTE` es productor legítimo d
   retención, documento sin correo ni teléfono en claro (SC-003).
 - Seguridad: máscara por rol con control positivo; captura de logs (SC-003); `userId` ajeno con la misma 404 (SC-002); `CLIENTE`
   recibe 403 en el borrado por titular.
+- Observabilidad (FR-012): captura de logs con `tenantId`, huella de 8 caracteres y sin correo ni teléfono; registro de actor,
+  operación y resultado en cada escritura, baja y borrado; contadores `directory.upserts`, `directory.resolutions{channel,outcome}`,
+  `directory.removed{reason}` y gauge `directory.entries` verificados con el registro de métricas.
 - Rendimiento: p95 de 50 iteraciones (SC-001); `Duration` de 1 s para la 422 (SC-005).
 - **E2E** `RecipientDirectoryE2ETest` (perfil `test`, Mongo + RabbitMQ + `WebTestClient`): upsert, consulta, EMAIL, PUSH con 3
   dispositivos (3 notificaciones), 422 por dato ausente, no entregable E10 como `rejected`, baja, borrado por titular (SC-006), dos

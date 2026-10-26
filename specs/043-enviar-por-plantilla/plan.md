@@ -68,10 +68,10 @@ evento, encolado). Sin `templateId` el flujo no cambia.
 
 - E10 (032): la guarda de formato sigue donde la deje esa historia, antes de persistir. Prueba unitaria: direccion invalida responde 400 aunque la plantilla sea valida.
 - E5 (036): sin cambios; el cifrado PUSH actua al persistir sobre token y `recipientId`.
-- G2 (033): reintento y reenvio copian el contenido persistido; no se invoca render. E2E: archivar y reenviar.
+- G2 (033): reenvio copia el contenido persistido; no se renderiza. E2E: archivar y reenviar.
 - HU2-112: `providerTemplate` no cambia; la exclusividad se valida en el DTO y en el servicio.
 - D2 (`SmsSegmenter`, sin cambios), D4 (`ResolveTemplateValuesUseCase`, memoizado en scope), D5 (vinculo plantilla propia - aprobada; aqui solo el punto de extension).
-- Asimetria SMS: el cuerpo directo conserva su tope de 160 caracteres (HU2-112) y el renderizado exige un segmento segun D2. Se declara; alinear el cuerpo directo con `SmsSegmenter` es decision posterior (dueno: Equipo de backend).
+- Asimetria SMS: cuerpo directo con tope de 160 caracteres (HU2-112); renderizado con un segmento (D2). Declarada; alinear es decision posterior (dueno: backend).
 
 ## Estrategia de pruebas
 

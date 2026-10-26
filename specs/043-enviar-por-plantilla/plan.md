@@ -29,8 +29,7 @@ evento, encolado). Sin `templateId` el flujo no cambia.
 - IV E2E `TemplateSendE2ETest` (SC-001 a SC-004, SC-008), unitarias con `StepVerifier`, `Duration` en SC-005. Cobertura >=80 % lineas / >=70 % ramas.
 - V Commits de una linea. VI Plan aprobado antes de `tasks`.
 - VII Excepcion: wiring de `UseCaseConfig` (nuevos argumentos de `SendNotificationService`) y bloqueo por el YAML. Dueno: Equipo de backend. Fecha: 2026-12-15.
-- VIII Confiabilidad: el render ocurre antes de persistir; un fallo de plantilla no deja nada aceptado. Despues de aceptar, todo el camino usa el texto persistido.
-- Consumidores RabbitMQ: no se toca ninguno. Sin excepcion.
+- VIII Confiabilidad: el render ocurre antes de persistir; despues de aceptar se usa solo el texto persistido. Consumidores RabbitMQ: no se tocan.
 
 ## Diseno
 
@@ -71,9 +70,7 @@ evento, encolado). Sin `templateId` el flujo no cambia.
 - E5 (036): sin cambios; el cifrado PUSH actua al persistir sobre token y `recipientId`.
 - G2 (033): reintento y reenvio copian el contenido persistido; no se invoca render. E2E: archivar y reenviar.
 - HU2-112: `providerTemplate` no cambia; la exclusividad se valida en el DTO y en el servicio.
-- D2: `SmsSegmenter` (conteo) y `RenderedTemplate` (sin cambios).
-- D4: `ResolveTemplateValuesUseCase` y la definicion de mapeo (memoizada en scope).
-- D5: el vinculo plantilla propia - plantilla aprobada lo resuelve D5; aqui solo el punto de extension.
+- D2 (`SmsSegmenter`, sin cambios), D4 (`ResolveTemplateValuesUseCase`, memoizado en scope), D5 (vinculo plantilla propia - aprobada; aqui solo el punto de extension).
 - Asimetria SMS: el cuerpo directo conserva su tope de 160 caracteres (HU2-112) y el renderizado exige un segmento segun D2. Se declara; alinear el cuerpo directo con `SmsSegmenter` es decision posterior (dueno: Equipo de backend).
 
 ## Estrategia de pruebas
@@ -107,5 +104,4 @@ evento, encolado). Sin `templateId` el flujo no cambia.
   (b) D3 define el puerto con implementacion vacia hasta D4 (limite: `event` sin efecto; upgrade: D4; dueno: Equipo de backend; fecha: 2026-12-15).
 - Depende de D1 (HU2-119, `RenderTemplateUseCase`, `Template`, errores de plantilla), D2 (`SmsSegmenter`, `RenderedTemplate`) y HU2-112 (`providerTemplate`). Ninguna esta en la base de la rama hoy; esta historia se implementa despues de ellas.
 - Toca los mismos archivos que E10 (`SendNotificationService`), G2 (reenvio) y E5 (documento de notificacion): integrar en orden y resolver conflictos al rebasar.
-- Cambio compartido con D1/D2: `resolve`, `ResolvedTemplate` y `RenderScope`. D2 no se ve afectada.
-- Quitar `body` de `required` es un cambio visible para generadores de cliente; el comportamiento sin `templateId` es identico.
+- Cambio compartido con D1: `resolve`, `ResolvedTemplate` y `RenderScope`. Quitar `body` de `required` es visible para generadores de cliente.

@@ -36,7 +36,7 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
 - **Q7 - Roles** (nombres de B2): escribir (upsert y baja) es de `ADMINISTRADOR_APLICACION`; consultar, de `CLIENTE` (enmascarado),
   `ADMINISTRADOR_APLICACION` y `ADMINISTRADOR_PLATAFORMA` (completo); el borrado por titular, de los dos administradores. Pregunta
   menor abierta: si `CLIENTE` es productor legítimo de la escritura. Afecta FR-005, FR-010.
-- **Q8 - Retención**: 270 días sin actividad, según la tabla de retención aprobada (Nivel 2, sección 6 del lote). Afecta FR-011.
+- **Q8 - Retención**: 270 días sin actividad (tabla en Datos personales). Afecta FR-011.
 - **Q9 - IN_APP**: se resuelve por identidad; no hay dato de contacto, así que no da 422 `NTF-3043`, pero exige la entrada (404
   `NTF-3042`). Afecta FR-007.
 - **Q10 - Borrado por titular**: un único `EraseRecipientDataUseCase` en `core` con el puerto `RecipientDataEraser`; cada historia
@@ -78,8 +78,13 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
    correo y teléfono; la identidad y los dispositivos de E5 permanecen.
 3. **Given** una solicitud de borrado del titular, **When** un administrador invoca `POST /recipient-directory-erasures`,
    **Then** 204 y se borran entrada, identidad, dispositivos y datos de los demás contribuyentes (FR-014); un `CLIENTE` recibe 403.
-4. **Given** un `userId` ajeno, de otro tenant o inexistente, **When** se consulta, se borra o se pide borrado por titular,
+4. **Given** un `userId` ajeno, de otro tenant o inexistente, **When** se consulta o se borra la entrada (lookups o removals),
    **Then** la misma 404.
+5. **Given** un borrado por titular con entrada presente, **When** `POST /recipient-directory-erasures`, **Then** 204 y se borran
+   entrada, dispositivos, bandeja, preferencias e identidad.
+6. **Given** un borrado por titular sin entrada pero con identidad (reintento tras fallo del último paso), **When** se invoca,
+   **Then** se borran los contribuyentes restantes y la identidad, y 204. La identidad se localiza por `subject` de la solicitud.
+7. **Given** un borrado por titular sin entrada ni identidad, **When** se invoca, **Then** la misma 404.
 
 ### User Story 4 - Retención (Priority: P2)
 
@@ -93,8 +98,8 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
 - Canal sin regla de resolución (fuera de EMAIL, SMS, WHATSAPP, PUSH e IN_APP): 400 `NTF-1003`.
 - `externalId` mayor de 200 caracteres en el envío por usuario: 400 (el derivado por dispositivo debe caber en 255).
 - Dispositivo dado de baja entre resolución y despacho: el despacho ya lo tolera (E5, fallo permanente).
-- Identidad sin entrada (borrado por titular ya iniciado y fallido en la última etapa): el reintento responde 404 y la identidad
-  residual queda sin borrar. Límite declarado en Datos personales.
+- Identidad sin entrada tras un fallo del último paso: el reintento con `subject` borra lo que queda y responde 204; sin `subject`
+  la identidad no se localiza. Límite declarado en Datos personales.
 
 ## Requirements
 
@@ -125,12 +130,13 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
   es de F6, porque B6 no audita datos de usuario. Métricas `directory.upserts`, `directory.resolutions{channel,outcome}`,
   `directory.removed{reason}` y `directory.entries`.
 - **FR-013**: Base legal, retención y borrado documentados en la sección siguiente.
-- **FR-014**: `POST /recipient-directory-erasures` es la única vía de borrado completo del titular. Localiza la entrada por `userId`
-  (404 si no existe), obtiene su identidad y llama a `EraseRecipientDataUseCase(tenantId, recipientIdentityId)`, que invoca a cada
-  `RecipientDataEraser` registrado en este orden: E5 (dispositivos), E6 (bandeja), F1 (preferencias), F6 (entrada, localizada por
-  identidad con `findByIdentity`) y, la última, E5 (identidad). Así la entrada nunca queda apuntando a una identidad borrada. Los
-  contribuyentes son idempotentes. `/device-erasures` de E5 no cambia. La marca de no entregable de E10 no se borra: es dato de la
-  dirección, no del titular.
+- **FR-014**: `POST /recipient-directory-erasures` es la única vía de borrado completo del titular. Recibe `{userId, subject?}`.
+  Resuelve la identidad: desde la entrada por `userId`; si no hay entrada y viene `subject`, desde `RecipientIdentityPort.findBySubject`.
+  Si no hay entrada ni identidad: 404. Si hay identidad, llama a `EraseRecipientDataUseCase(tenantId, recipientIdentityId)`, que invoca
+  a cada `RecipientDataEraser` registrado en este orden: E5 (dispositivos), E6 (bandeja), F1 (preferencias), F6 (entrada, localizada
+  por identidad con `findByIdentity`; si no existe, no hace nada) y, la última, E5 (identidad). La entrada nunca queda apuntando a
+  una identidad borrada. Los contribuyentes son idempotentes, así que un reintento completa el borrado. `/device-erasures` de E5
+  no cambia. La marca de no entregable de E10 no se borra: es dato de la dirección, no del titular.
 
 ## Datos personales
 
@@ -141,10 +147,17 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
   notificaciones que la aplicación solicita.
 - **Por qué se guardan**: sin ellos el envío por identificador exige a la aplicación conocer la dirección. Alternativa descartada:
   consultar el correo a un sistema externo en cada envío (acopla la disponibilidad del envío).
-- **Retención**: 270 días sin actividad (tabla de retención aprobada, Nivel 2, sección 6 del lote); eliminación inmediata al borrar
-  la entrada. Dueño de la base legal y de la retención: Responsable de datos; fecha: 2026-12-15.
-- **Límite declarado (borrado)**: si falla el último paso (borrado de la identidad) después de borrar la entrada, el reintento
-  responde 404 y la identidad residual, con `subject` si lo tiene, queda sin borrar. Dueño: Equipo de backend; fecha: 2026-12-15.
+- **Retención** (filas de F6 y de los contribuyentes del borrado por titular; eliminación inmediata al borrar la entrada):
+
+  | Dato | Retención | Dueño de la base legal | Fecha |
+  |---|---|---|---|
+  | Directorio de destinatarios (F6) | 270 días sobre `lastActivityAt` | Responsable de datos | 2026-12-15 |
+  | Dispositivos (E5) | 270 días | Responsable de datos | 2026-12-15 |
+  | Bandeja in-app (E6) | 90 días | Responsable de datos | 2026-12-15 |
+  | Preferencias (F1) | Mientras exista la identidad | Responsable de datos | 2026-12-15 |
+
+- **Límite declarado (borrado)**: una identidad sin entrada y sin `subject` en la solicitud no se localiza; queda sin borrar tras un
+  fallo del último paso. Dueño: Equipo de backend; fecha: 2026-12-15.
 - **Borrado**: físico por baja, retención o borrado por titular (FR-014), que arrastra identidad y dispositivos de E5. La auditoría
   conserva solo la huella de 8 caracteres.
 - **Acceso**: correo y teléfono completos solo para `ADMINISTRADOR_APLICACION` y `ADMINISTRADOR_PLATAFORMA`.

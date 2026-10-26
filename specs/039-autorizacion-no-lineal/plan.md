@@ -35,7 +35,7 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
 1. **Roles.** `Role` = `ADMINISTRADOR_PLATAFORMA`, `ADMINISTRADOR_APLICACION`, `EDITOR_PLANTILLAS`, `OPERADOR`, `AUDITOR`,
    `CLIENTE`. Se elimina `satisfies`; `Role.of` se conserva. El nombre del rol es el del PDP y el del claim.
 2. **Principal.** `AuthenticatedPrincipal(subject, tenantId, Set<Role> roles, clientId)`. Se conserva un constructor con un solo
-   `Role` para no tocar los ~15 usos y las ~24 clases de prueba que lo instancian (mismo criterio que B1 con `clientId`).
+   `Role` para no tocar los 15 `new AuthenticatedPrincipal(` (3 en `main`, 12 en `test`; 10 archivos, recuento del 2026-10-25).
    `role()` se retira; quien lo usa pasa a `roles()`.
 3. **Política.** `RouteAuthorizationPolicy.allowedRolesFor(method, path)` devuelve `Set<Role>`: el conjunto del mapa, o
    `{ADMINISTRADOR_PLATAFORMA}` si la ruta no está declarada, o todos los roles si el PEP está activo. El mapa sigue en código
@@ -56,6 +56,7 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
    | Operaciones | Roles permitidos |
    | --- | --- |
    | `POST /notifications`, `/notifications/batches`, adjuntos (3) | CL, AA |
+   | `POST /notifications` con plantilla de categoría SEGURIDAD (crítica) | AA, AP (rama interna: CL no) |
    | `GET /notifications/detail`, `/notifications/stream` | CL, OP, AA, AP |
    | `GET /notifications`, `/notifications/timeline`, `/provider-health` | OP, AA, AP |
    | `POST /notification-retries`, `/notification-resends`, `/recipients/undeliverable-lookups` | OP, AP |
@@ -65,7 +66,8 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
    | `/devices` (POST, GET), `/device-removals` | CL |
    | `/recipients/preferences` (GET, PUT) | CL; AA solo para `subject` ajeno |
    | `POST/PUT /templates`, `/template-archivals`, `/template-variable-detections` | ET, AP |
-   | `GET /templates`, `/templates/detail`, `POST /template-renders` | CL, ET, AA, AP, y OP en lecturas |
+   | `GET /templates`, `/templates/detail` | CL, OP, ET, AA, AP |
+   | `POST /template-renders` | CL, ET, AA, AP (OP no) |
    | `POST /template-previews` | ET, AA, AP |
    | `PUT /template-mappings` | ET, AP |
    | `GET /template-mappings` | CL, OP, ET, AA, AP |
@@ -73,6 +75,7 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
    | `POST /template-provider-links`, `POST /template-approval-syncs` | ET, AP |
    | `GET /template-provider-links` | CL, OP, ET, AA, AP |
    | `POST /template-publications`, `POST /template-unpublications` | AA, AP |
+   | `POST /provider-template-allowlist-entries`, `GET /provider-template-allowlist-entries`, `POST /provider-template-allowlist-removals` | AP, AA (D5, spec 045; entran al contrato con su historia, FR-011) |
    | `PUT` y `POST /template-blocks`, `POST /template-block-archivals` | ET, AP |
    | `GET /template-blocks`, `GET /template-blocks/detail` | CL, OP, ET, AA, AP |
    | `/inbox-items`, `/inbox-unread-counts`, `/inbox-reads`, `/inbox-read-alls`, `/inbox-removals`, `/inbox-stream` | CL |
@@ -81,15 +84,14 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
    | `GET /recipient-directory/lookups` | CL, AA, AP |
    | `POST /recipient-directory-erasures` | AA, AP |
    | `POST /user-notifications` | CL, AA |
-   | `GET /audit-entries`, `GET /audit-entries/detail` | AU, AP |
+   | `GET /audit-entries`, `GET /audit-entries/detail` | AU, AP únicamente (AA no) |
 
-   Las operaciones de nivel 2 en estado `planned` solo llevan la lista; no se registran en el PDP (spec, Edge Cases). `H6`
-   (`/platform-status`) está cancelada y no figura. AU ya tiene sus rutas de auditoría; resumen por aplicación y consentimientos
-   entran con FR-011.
+   Rutas `planned`: solo lista, sin registro en el PDP (spec, Edge Cases). `H6` (`/platform-status`) cancelada. Resumen por
+   aplicación y consentimientos: FR-011.
 
    Desenmascarar datos: solo AP y AA; el resto los ve enmascarados (spec, Clarifications).
 
-   Impacto en nivel 1: E5 y E10 deben reescribir sus ramas de desenmascarar y de borrado a los roles de esta tabla (`/recipient-directory-erasures`, `/inbox-erasures`, `/device-erasures`), no a `ADMINISTRADOR`.
+   Impacto en nivel 1: E5 y E10 deben reescribir sus ramas de desenmascarar y de borrado a los roles de esta tabla (`/inbox-erasures`, `/device-erasures`), no a `ADMINISTRADOR`. `/recipient-directory-erasures` es de F6, no de E5 ni E10.
 
 ## Cambios de contrato requeridos (los aplica el agente del contrato; aquí no se edita el YAML)
 

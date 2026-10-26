@@ -6,7 +6,7 @@
 
 **Status**: Pendiente de aprobacion
 
-**Depende de**: D1 (spec 035, `Template` y `TemplateEngine`), B2 (spec 039, roles), B6 (spec 041, `RecordAuditEntryUseCase`). Alimenta a C7 (tema y marca) y H4 (catalogo institucional). Orden de la cadena de plantillas: D2, D7, D3, D4, D5.
+**Depende de**: D1 (spec 035, `Template` y `TemplateEngine`), B2 (spec 039, roles), B6 (spec 041, `RecordAuditEntryUseCase`). Alimenta a C7 (tema y marca) y H4 (catalogo institucional). Orden de la cadena de plantillas: D2, D7, D4 (evento), D3, D5.
 
 ## Contexto
 
@@ -32,8 +32,7 @@ Esta historia solo define bloques y su resolucion; no cambia como se envia (D3),
 
 - Aprobados: profundidad 3, 5000 caracteres por bloque y `BLOCK_REQUIRED_VARIABLE_IN_USE` (409).
 - Codigos NTF fijos: `BLOCK_NOT_FOUND` 3080, `BLOCK_ALREADY_EXISTS` 3081, `BLOCK_VERSION_CONFLICT` 3082, `BLOCK_IN_USE` 3083, `BLOCK_REQUIRED_VARIABLE_IN_USE` 3084, `BLOCK_CYCLE_DETECTED` 3085, `BLOCK_DEPTH_EXCEEDED` 3086, `BLOCK_EXPANSION_TOO_LARGE` 3087, `BLOCK_ARCHIVED` 3088. `BLOCK_NOT_FOUND` es 400 al guardar y 409 al renderizar.
-- Renderizador unico: la expansion vive dentro de `RenderTemplateService` (D1); D2 y D3 la usan siempre. Ningun codigo fuera de el llama `TemplateEngine.render` sobre el cuerpo de una plantilla (FR-014).
-- Auditoria: `TEMPLATE_BLOCK` es recurso auditado de B6 (FR-013).
+- Renderizador unico: `RenderTemplateService` (D1) es dueno de `ResolvedTemplate` (forma de D3: subject, body, channelType, category, critical, mas variables y blockRefs). Tiene entrada por plantilla guardada y por contenido (introducida por D2); D7 reutiliza la de contenido para la vista previa. D2, D3 y D5 renderizan solo por ahi; D4 es pura y no renderiza (FR-014).
 
 ## User Scenarios & Testing
 
@@ -45,7 +44,7 @@ El ET crea un bloque con clave, canal, idioma y cuerpo (puede llevar variables),
 
 1. **Given** un cuerpo `Universidad {{institucion}}`, **When** se crea el bloque `cabecera` (EMAIL, es), **Then** se detecta `institucion` obligatoria.
 2. **Given** un bloque con la misma clave, canal e idioma en el tenant, **When** se crea, **Then** 409 `BLOCK_ALREADY_EXISTS`.
-3. **Given** un canal sin ruta activa para el tenant, **When** se crea, **Then** 400 `CHANNEL_NOT_AVAILABLE`.
+3. **Given** un canal sin ruta activa para el tenant, **When** se crea, **Then** 400 `CHANNEL_NOT_AVAILABLE` (NTF-1003).
 4. **Given** una version desfasada, **When** se actualiza, **Then** 409 `BLOCK_VERSION_CONFLICT`.
 5. **Given** un bloque usado por alguna plantilla activa, **When** se archiva, **Then** 409 `BLOCK_IN_USE`; sin uso, queda `ARCHIVADA`.
 6. **Given** un bloque en uso, **When** una actualizacion agrega una variable obligatoria que no tenia, **Then** 409 `BLOCK_REQUIRED_VARIABLE_IN_USE` (evita romper envios existentes con 422).
@@ -101,10 +100,10 @@ Al guardar una plantilla (D1) cuyo cuerpo contiene `{{> pie-legal}}`, el sistema
 - **FR-008**: La deteccion de variables y el render de plantillas sin bloques MUST comportarse exactamente como en D1.
 - **FR-009**: El tenant MUST salir de la sesion; toda lectura, escritura y resolucion de bloques filtra por el.
 - **FR-010**: Crear, actualizar y archivar MUST requerir EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA; listar y consultar, los roles de la tabla de Contrato.
-- **FR-013**: Cada alta, actualizacion y archivo MUST registrar en B6 un evento `TEMPLATE_BLOCK` con tenant, actor, clave, canal, idioma, version y estado antes y despues. No registra el cuerpo, las variables ni sus valores.
-- **FR-014**: La expansion y la sustitucion MUST ocurrir solo dentro de `RenderTemplateService`, que devuelve el texto resuelto para D2, D3, D4 y D5. Una prueba de arquitectura MUST impedir cualquier otra llamada a `TemplateEngine.render`.
 - **FR-011**: Los valores no se persisten ni se registran en logs ni metricas; los logs de error pueden llevar claves de bloque y plantilla, no valores.
 - **FR-012**: La expansion MUST cargar bloques por nivel en lote (como maximo 3 consultas por render), no uno a uno.
+- **FR-013**: Cada alta, actualizacion y archivo MUST registrar en B6 un evento `TEMPLATE_BLOCK` con tenant, actor, clave, canal, idioma, version y estado antes y despues. No registra el cuerpo, las variables ni sus valores.
+- **FR-014**: La expansion y la sustitucion MUST ocurrir solo dentro de `RenderTemplateService`, por plantilla guardada o por contenido (D2), y devolver `ResolvedTemplate`. La prueba de arquitectura `NoDirectTemplateRenderTest` (creada por D2; D7 le añade casos) MUST impedir cualquier otra llamada a `TemplateEngine.render`.
 
 ### Key Entities
 
@@ -130,7 +129,7 @@ Las rutas de D1 cambian de forma compatible: `TemplateResponse` y la deteccion d
 - **SC-004**: El render del peor caso permitido (3 niveles, 30 expansiones, 20000 caracteres) y la expansion adversa tardan menos de 200 ms, con aserciones de `Duration`.
 - **SC-005**: Tras renderizar con un valor centinela, ni los logs ni los documentos Mongo lo contienen.
 - **SC-006**: Las plantillas sin bloques pasan intactas las pruebas de D1 (regresion).
-- **SC-007**: Una prueba de arquitectura falla si cualquier clase fuera de `RenderTemplateService` llama a `TemplateEngine.render` (FR-014).
+- **SC-007**: `NoDirectTemplateRenderTest` falla si cualquier clase fuera de `RenderTemplateService` llama a `TemplateEngine.render` (FR-014).
 - **SC-008**: Alta, cambio y archivo de un bloque dejan un registro `TEMPLATE_BLOCK` en B6 sin cuerpo ni valores (E2E).
 
 ## Preguntas abiertas

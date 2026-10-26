@@ -8,9 +8,7 @@
 
 ## Summary
 
-Agregado `TemplateBlock` en `core`, extension del `TemplateEngine` de D1 para reconocer `{{> clave}}`, un `BlockExpander` puro que
-resuelve por niveles con tope de profundidad, expansiones y tamano, un puerto de persistencia, un adaptador Mongo y un controller.
-`RenderTemplateService` de D1 pasa a expandir antes de sustituir variables.
+`TemplateBlock` en `core`, `BlockExpander` por niveles con topes, puerto y adaptador Mongo, controller. `RenderTemplateService` (D1) expande antes de sustituir variables.
 
 ## Technical Context
 
@@ -30,10 +28,9 @@ Alcance: backend; la UI (Front-Notification-mfe) consume la tabla de rutas de [s
 
 ### Motor de resolucion (decision central)
 
-Dos fases, ambas puras: (1) `BlockExpander.expand(body, loader)` sustituye `{{> clave}}` por el cuerpo del bloque; (2) `TemplateEngine.render`
-de D1 sustituye variables sobre el texto ya expandido, una sola pasada. Los valores llegan en la fase 2, por eso nunca se expanden.
+Dos fases puras: (1) `BlockExpander.expand(body, loader)` sustituye `{{> clave}}`; (2) `TemplateEngine.render` de D1 sustituye variables en una pasada. Los valores llegan en la fase 2, por eso nunca se expanden.
 
-- Renderizador unico (FR-014): `RenderTemplateService` (D1) carga la plantilla, expande con `BlockExpander`, llama a `TemplateEngine.render` y devuelve `ResolvedTemplate(text, variables efectivas, blockRefs)`. D2-D5 usan solo ese resultado.
+- Renderizador unico (FR-014): `RenderTemplateService` (D1) es dueno de `ResolvedTemplate(subject, body, channelType, category, critical, variables, blockRefs)`, forma de D3. Expande con `BlockExpander` y llama a `TemplateEngine.render`. Entradas: plantilla guardada y contenido (introducida por D2; D7 la reutiliza en la vista previa). D2, D3 y D5 usan solo ese resultado; D4 es pura.
 - Un solo patron compuesto `\{\{\s{0,5}>\s{0,5}([A-Za-z0-9._-]{1,60})\s{0,5}\}\}` con cuantificadores acotados; sin retroceso catastrofico.
 - Iterativo por niveles, sin recursion: nivel 0 = cuerpo de la plantilla; se recogen las claves del nivel, se cargan en lote con
   `TemplateBlockRepository.findActiveByKeys(tenant, keys, channel, language)` (una consulta por nivel, maximo 3), se expande y se repite.
@@ -48,7 +45,7 @@ de D1 sustituye variables sobre el texto ya expandido, una sola pasada. Los valo
 
 ### core
 
-- `domain/template/block/`: `TemplateBlock` (agregado, record como `Template`), `TemplateBlockId`, `BlockExpander` (uso interno de `RenderTemplateService`), `ResolvedTemplate(text, variables, blockRefs)`.
+- `domain/template/block/`: `TemplateBlock` (agregado, record como `Template`), `TemplateBlockId`, `BlockExpander` (uso interno de `RenderTemplateService`). `ResolvedTemplate` es de D1 (ver arriba).
 - `TemplateEngine` (D1): se agrega `detectBlocks(String) -> Set<String>` y `detect` ignora las coincidencias de bloque en lugar de tratarlas como llaves residuales.
 - `Template` (D1): nuevo componente `blockRefs` (lista de claves, derivada del cuerpo en `resolve`); `{{>` en el asunto -> `InvalidTemplateSyntaxException`.
 - Excepciones en `exception/`: `BlockNotFoundException`, `BlockAlreadyExistsException`, `BlockVersionConflictException`, `BlockInUseException`,
@@ -58,7 +55,7 @@ de D1 sustituye variables sobre el texto ya expandido, una sola pasada. Los valo
   `existsActiveReferencing(tenant,key,channel,language)`; siempre con tenant. Las plantillas activas que referencian un bloque se consultan por `TemplateRepository.existsActiveWithBlockRef(tenant,key,channel,language)` (metodo nuevo en el puerto de D1).
 - Servicios de D1 que cambian: `CreateTemplateService` y `UpdateTemplateService` validan con el expansor; `RenderTemplateService` expande
   antes de `TemplateEngine.render` y calcula faltantes sobre las variables efectivas; `DetectTemplateVariablesService` devuelve efectivas y `blockRefs`.
-- Auditoria (FR-013): `Create`, `Update` y `ArchiveTemplateBlockService` llaman a `RecordAuditEntryUseCase` (B6) tras guardar, con `TEMPLATE_BLOCK` y solo metadatos; el fallo del registro sigue la politica de B6.
+- Auditoria (FR-013): los servicios de bloque llaman a `RecordAuditEntryUseCase` (B6) tras guardar, solo metadatos.
 
 ### infrastructure
 
@@ -77,7 +74,9 @@ de D1 sustituye variables sobre el texto ya expandido, una sola pasada. Los valo
 | Privacidad | SC-005: logs capturados y documentos tras valor centinela |
 | Regresion D1 | SC-006: suite de D1 sin cambios en verde |
 | Seguridad de ruta | una prueba por ruta y rol, incluido un rol denegado por ruta |
-| Renderizador unico (SC-007) | regla ArchUnit en `HexagonalArchitectureTest`: solo `RenderTemplateService` llama a `TemplateEngine.render` |
+| Renderizador unico (SC-007) | `NoDirectTemplateRenderTest` (creada por D2); D7 añade casos de bloques y su regla ArchUnit |
+| FR-006 | `BLOCK_REQUIRED_VARIABLE_IN_USE` en servicio (unitaria) y en `TemplateBlockE2ETest` |
+| FR-012 | como maximo 3 consultas por render en el peor caso, con repositorio contador (unitaria) |
 | Auditoria (SC-008) | en `TemplateBlockE2ETest`, registro `TEMPLATE_BLOCK` sin cuerpo tras alta, cambio y archivo |
 | Arquitectura | `HexagonalArchitectureTest` y `ModularityTests` |
 
@@ -87,19 +86,20 @@ de D1 sustituye variables sobre el texto ya expandido, una sola pasada. Los valo
 - Esquemas nuevos: `TemplateBlockResponse`, `TemplateBlockListResponse`, `CreateTemplateBlockRequest`, `UpdateTemplateBlockRequest`, `ArchiveTemplateBlockRequest`; `TemplateBlockKey` reutiliza las reglas de clave de `Template`.
 - `TemplateResponse`: nuevo `blockRefs` (array de claves). Respuesta de `/template-variable-detections`: `blockRefs` y variables efectivas; documentar que la deteccion y el render resuelven bloques.
 - `/templates` POST/PUT: 400 adicionales (`BLOCK_NOT_FOUND`, ciclo, profundidad, expansion). `/template-renders`: 409 adicionales y 422 con faltantes del bloque.
-- Codigos NTF fijados en [spec.md](spec.md): 3080 a 3088 para los 9 `BLOCK_*`; reutilizan `TEMPLATE_LIMIT_EXCEEDED` e `INVALID_TEMPLATE_SYNTAX`.
+- Codigos NTF fijados en [spec.md](spec.md): 3080 a 3088 para los 9 `BLOCK_*`; reutilizan `TEMPLATE_LIMIT_EXCEEDED` e `INVALID_TEMPLATE_SYNTAX`; `CHANNEL_NOT_AVAILABLE` es NTF-1003.
+- D2 y D3 declaran en sus rutas de render los 409 `BLOCK_NOT_FOUND`, `BLOCK_ARCHIVED`, `BLOCK_CYCLE_DETECTED`, `BLOCK_DEPTH_EXCEEDED` y `BLOCK_EXPANSION_TOO_LARGE`, y el 422 con `missingVariables` de bloques.
 
 ## Puntos compartidos con otras historias
 
 - D1: cambios en `Template` (componente `blockRefs`), `TemplateEngine`, `TemplateRepository`, `Create/Update/Render/DetectTemplate*Service`. D7 se ramifica despues de D1.
-- Cadena de plantillas en serie: D2, D7, D3, D4, D5. D2 y D7 tocan ambos `Template`, el controller y el documento Mongo; D7 se integra despues de D2.
-- D2, D3, D4, D5: obtienen el texto final solo de `RenderTemplateService` (FR-014). Llamar `TemplateEngine.render` sobre `template.body()` deja `{{> x}}` sin expandir y rompe SC-007.
+- Cadena de plantillas en serie: D2, D7, D4 (evento), D3, D5. D2 y D7 tocan ambos `Template`, el controller y el documento Mongo; D7 se integra despues de D2.
+- D2, D3 y D5 obtienen el texto final solo de `RenderTemplateService` (FR-014). D4 es pura y no renderiza. Llamar `TemplateEngine.render` sobre `template.body()` deja `{{> x}}` sin expandir y rompe SC-007.
 - B2: la precondicion de roles por sesion (sesion siempre CLIENTE) impide que EDITOR_PLANTILLAS llegue en produccion; sin ella las escrituras de D7 no se usan.
 - C7 y H4: crean y consumen bloques por `CreateTemplateBlockUseCase` y las rutas; no hay bloques globales.
-- D5/D8: la clave `(canal, idioma)` del bloque alinea con la de la plantilla; D8 podria agregar respaldo de idioma sin cambiar el contrato.
+- D5/D8: misma clave `(canal, idioma)`; D8 podria añadir respaldo de idioma sin cambiar el contrato.
 
 ## Riesgos
 
 - Bloqueo por el YAML de Contrato y por el wiring externo (2026-12-15).
-- Un cambio de bloque afecta de inmediato a todas las plantillas que lo usan (decision explicita); la regla de variable obligatoria nueva reduce el riesgo, no el de texto.
+- Un cambio de bloque afecta de inmediato a sus plantillas (decision explicita).
 - Ciclos por guardados concurrentes: cubiertos en render (409); no se bloquean en base de datos.

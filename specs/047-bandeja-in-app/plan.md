@@ -14,8 +14,8 @@ solo ids. Retencion TTL. Sin UI.
   y `ModularityTests` verdes.
 - II Contrato primero: operaciones de la seccion Contrato antes de los controladores; rutas literales.
 - III Sin comentarios. IV E2E `InboxE2ETest`; `verify` completo solo al cierre. V Commits de una linea.
-- VII Excepciones EX-1 a EX-5 en la spec, con dueno y fecha. VIII/IX: decisiones 4, 6 y 8.
-- Consumidor RabbitMQ nuevo (difusion en vivo): **excepcion a ack manual y DLQ**. Es una cola exclusiva por replica,
+- VII Excepciones EX-1 a EX-6 en la spec, con dueno y fecha. VIII/IX: decisiones 4, 6 y 8.
+- Consumidor RabbitMQ nuevo (difusion en vivo): **excepcion a ack manual y DLQ (EX-6)**. Es una cola exclusiva por replica,
   auto-borrable, sin persistencia ni efecto de negocio. Perder un mensaje equivale a un cliente desconectado y la lista de la API
   lo corrige. Mismo criterio que `NotificationUpdatesRabbitAdapter` (spec 006). Es el unico consumidor nuevo.
 
@@ -56,8 +56,8 @@ solo ids. Retencion TTL. Sin UI.
     expirados. El borrado por titular no es un endpoint con logica propia: `InboxRecipientDataEraser` (core, `application`)
     es un contribuyente de `EraseRecipientDataUseCase` (F6). `POST /inbox-erasures` delega en ese caso de uso.
 11. **Seguridad**: rutas bajo el PEP con `x-allowed-roles` (B2): CLIENTE en `/inbox-*` salvo erasures; ADMINISTRADOR_APLICACION y
-    ADMINISTRADOR_PLATAFORMA en `/inbox-erasures`. Identidad: B1 (token) o cookie de sesion (HU2-111) via
-    `AuthenticatedPrincipal`. Credencial nunca en la URL. CORS con credenciales: EX-2.
+    ADMINISTRADOR_PLATAFORMA en `/inbox-erasures`. Ninguna otra ruta de E6 usa roles de administracion (coincide con B2). Identidad: B1 (token) o cookie de sesion (HU2-111) via
+    `AuthenticatedPrincipal`. Credencial nunca en la URL. CORS: solo configurar el origen del host (EX-2; `CorsConfig` ya permite credenciales con origenes explicitos, B5).
 12. **Limites y errores**: validados en `InAppNotificationProvider`: `title` 200, `body` 4000. Excedido: `INBOX_CONTENT_TOO_LARGE`
     (3101), fallo permanente sin item. Recurso no visible para el usuario: `INBOX_ITEM_NOT_FOUND` (3100), 404. Cuerpo en claro
     durante 90 dias: EX-5.
@@ -78,7 +78,7 @@ solo ids. Retencion TTL. Sin UI.
 | Unitaria infra | `InAppNotificationProviderTest` | exito, limite de contenido, redelivery |
 | Integracion Mongo | `InboxMongoAdapterTest` | indices unico/TTL, aislamiento dos tenants y dos usuarios, 20 marcas concurrentes |
 | Integracion Rabbit | `InboxRabbitAdapterTest` | publica `InboxEvent` real, solo llega al suscriptor, control positivo |
-| E2E | `InboxE2ETest` (`@SpringBootTest` + Mongo + RabbitMQ + `WebTestClient`) | envio -> `CREATED` en menos de 5 s, listar, contar, leer, `READ` en otra conexion, borrar, erasure, 2 tenants x 2 usuarios, p95, sin contenido en logs |
+| E2E | `InboxE2ETest` (`@SpringBootTest` + Mongo + RabbitMQ + `WebTestClient`) | envio -> `CREATED` en menos de 5 s, listar, contar, leer, `READ` en otra conexion, borrar, erasure, 2 tenants x 2 usuarios, p95, sin contenido en logs, broker caido (contenedor detenido): item persistido y resultado de la notificacion sin cambio (FR-010) |
 | Arquitectura | `HexagonalArchitectureTest`, `ModularityTests` | sin regresion |
 
 ## Contrato (cambios requeridos, los aplica Contrato; todos `x-status: planned`, tag `Bandeja`)

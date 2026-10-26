@@ -11,19 +11,18 @@ Criterios: actualizacion en tiempo real con SSE; componente embebible en cualqui
 
 ## Contexto
 
-`GET /notifications/stream` (spec 006) es un panel de operadores del tenant: no esta acotado a una persona, no tiene estado de
-lectura y expone metadatos de entrega. Esta historia agrega el **backend** de la bandeja: canal `IN_APP`, almacenamiento por
-tenant y destinatario, listado, contador, marca de leido, borrado, SSE por destinatario y retencion. El componente de campana
-vive en `Front-Notification-mfe` (C1b) y es el limite EX-1.
+`GET /notifications/stream` (spec 006) es un panel de operadores: no esta acotado a una persona ni tiene estado de lectura. Esta
+historia agrega el **backend** de la bandeja: canal `IN_APP`, almacenamiento por tenant y destinatario, listado, contador, leido,
+borrado, SSE y retencion. El componente de campana es el limite EX-1.
 
-Dependencias: B1 (spec 029: identidad desde token o sesion), E5 (spec 036: `RecipientIdentity`, `RecipientIdentityPort`,
-borrado comun) y B2 (spec 039: roles). F4 (digest) depende de esta historia (FR-014).
+Dependencias: B1 (spec 029), E5 (spec 036: `RecipientIdentity`, `RecipientIdentityPort`, borrado comun), B2 (spec 039: roles).
+F4 (digest) depende de esta historia (FR-014).
 
 ## Clarifications
 
 ### Session 2026-10-25 (valores por defecto asumidos; el usuario los confirma al aprobar)
 
-- Q1 - **Canal**: `IN_APP` es un canal mas del catalogo (08-decisiones, E6) con proveedor `in-app` sin credenciales ni red. FR-001.
+- Q1 - **Canal**: `IN_APP` es un canal mas del catalogo, con proveedor `in-app` sin credenciales ni red. FR-001.
 - Q2 - **"Leido" es por usuario**: el estado vive en el item de cada destinatario; N destinatarios son N items. FR-003.
 - Q3 - **Identidad (regla unica del lote)**: el campo `recipientIdentityId` de E5 es el que usan F1, F6 y E6. E6 acepta `subject`
   como atajo documentado: lo resuelve con `findOrCreateBySubject` y rellena `recipientIdentityId` en la notificacion antes de la
@@ -78,14 +77,15 @@ borrado comun) y B2 (spec 039: roles). F4 (digest) depende de esta historia (FR-
 1. **Given** un item con mas de 90 dias, **Then** el sistema lo elimina solo.
 2. **Given** una solicitud del titular, **When** ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA invoca `POST /inbox-erasures`
    con el `subject`, **Then** 204, se eliminan todos sus items del tenant y no queda contenido recuperable; 204 tambien si no
-   tenia. El endpoint delega en el borrado comun (FR-016).
+   tenia (FR-016).
 3. **Given** el mismo caso, **When** lo invoca CLIENTE, OPERADOR, AUDITOR o EDITOR_PLANTILLAS, **Then** 403.
 
 ### Edge Cases
 
 - Usuario sin identidad previa: listado vacio y contador 0, sin crear identidad (solo el envio la crea).
 - Marca de leido concurrente de dos pestanas: idempotente, un solo `readAt`.
-- Broker caido al publicar el evento en vivo: el item ya esta persistido; el fallo se registra y no cambia el resultado.
+- Broker caido al publicar el evento en vivo: el item ya esta persistido; el fallo se registra y no cambia el resultado
+  (prueba `InboxE2ETest`, FR-010).
 - Cliente SSE lento: se descarta por contrapresion; la lista de la API es la fuente de verdad.
 - `status` desconocido o `limit` fuera de 1..50: 400.
 
@@ -109,13 +109,13 @@ borrado comun) y B2 (spec 039: roles). F4 (digest) depende de esta historia (FR-
   entre replicas llevan solo ids y `subject`; cada replica lee el item con el filtro del suscriptor. Eventos `SNAPSHOT`,
   `CREATED`, `READ`, `REMOVED`, todos con `unreadCount`.
 - **FR-009**: Difusion entre replicas por el broker existente (patron de `NotificationUpdatesRabbitAdapter`); sink
-  `directBestEffort`; sin persistencia, asi que sin ack manual ni DLQ (justificado en plan).
+  `directBestEffort`; sin persistencia: sin ack manual ni DLQ (EX-6).
 - **FR-010**: Un fallo al publicar el evento en vivo nunca cambia el resultado del intento ni pierde el item (Principio VIII).
 - **FR-011**: Retencion 90 dias por indice TTL sobre `expiresAt`; borrado fisico por vencimiento, por el usuario y por titular.
 - **FR-012**: Base legal, retencion y borrado en "Datos personales"; `title` y `body` nunca aparecen en logs, metricas ni mensajes
   del broker.
-- **FR-013**: Metricas `inbox.items.created`, `inbox.items.read`, `inbox.stream.connections` (sin etiquetas de usuario) y logs con
-  `tenantId`, `notificationId` e `itemId`.
+- **FR-013**: Metricas `inbox.items.created`, `inbox.items.read`, `inbox.stream.connections` (sin etiquetas de usuario); logs con
+  `tenantId`, `notificationId`, `itemId`.
 - **FR-014**: Puerto estable para F4: un digest se emite como notificacion normal por IN_APP; tipos compartidos `InboxEntry` e
   `InboxPort` (plan).
 - **FR-015**: Cambios de contrato listados en `plan.md`, todos con `x-status: planned`; esta historia no edita
@@ -136,26 +136,30 @@ borrado comun) y B2 (spec 039: roles). F4 (digest) depende de esta historia (FR-
 ## Success Criteria
 
 - **SC-001**: Con el stream abierto, `CREATED` llega en menos de 5 s desde `POST /notifications` (asercion de `Duration`).
-- **SC-002**: Con dos tenants con el mismo `subject` y dos usuarios del mismo tenant, ninguna operacion (listar, contar, leer, borrar,
-  SSE, erasure) de uno modifica ni revela datos del otro; control positivo en cada caso (prueba automatizada).
+- **SC-002**: Con dos tenants con el mismo `subject` y dos usuarios del mismo tenant, ninguna operacion de uno (listar, contar,
+  leer, borrar, SSE, erasure) modifica ni revela datos del otro; control positivo (prueba automatizada).
 - **SC-003**: 20 marcas de leido concurrentes del mismo item dejan un solo `readAt` y el contador baja exactamente en uno.
 - **SC-004**: Con redelivery forzada del despacho, queda exactamente un item por notificacion.
 - **SC-005**: 50 ejecuciones secuenciales de listar, contar y marcar con 200 items: p95 menor de 300 ms.
 - **SC-006**: Ningun log ni mensaje del broker contiene `title` ni `body` del item; el `subject` seudonimo del evento si puede viajar.
   Control positivo: la captura registra el envio y el usuario ve el contenido por la API.
-- **SC-007**: El indice TTL tiene `expireAfter` igual a la retencion configurada y `POST /inbox-erasures` borra al instante.
+- **SC-007**: El indice TTL tiene `expireAfter` igual a la retencion configurada; `POST /inbox-erasures` borra al instante.
 
 ## Excepciones y limites (Principio VII)
 
-- **EX-1**: Componente de campana, montaje en el host y contrato host-MFE: fuera de este repositorio (`Front-Notification-mfe`, C1b).
-  Dueno: equipo del MFE. Fecha: 2026-12-15.
-- **EX-2**: Perfil del usuario final en el PDP para `/inbox-*` y CORS con credenciales hacia el origen del host. Dueno: Seguridad.
+- **EX-1**: Componente de campana y contrato host-MFE: fuera de este repositorio (`Front-Notification-mfe`, C1b). Dueno: equipo
+  del MFE. Fecha: 2026-12-15.
+- **EX-2**: Perfil del usuario final en el PDP para `/inbox-*`. CORS: solo configurar el origen del host (`CorsConfig` ya exige
+  origenes explicitos y credenciales, B5). Dueno: Seguridad.
   Fecha: 2026-12-15.
-- **EX-3**: Confirmacion de la base legal. Dueno: responsable de datos. Fecha: 2026-12-15.
+- **EX-3**: Confirmacion de la base legal y de la retencion de 90 dias (tabla unica de retencion, lote nivel 2, sec. 6). Dueno: Responsable de datos. Fecha: 2026-12-15.
 - **EX-4**: Reanudacion SSE con `Last-Event-ID` y limite de items por usuario: no se construyen; la lista de la API es la fuente de
   verdad. Dueno: backend notificaciones. Fecha: 2026-12-15.
 - **EX-5**: `body` en claro 90 dias en `inbox_items`, incluidos OTP y avisos de seguridad. Limite aceptado por la retencion de 90
   dias; alternativa: cifrado AES-GCM de E5 sobre `body`. Dueno: Seguridad. Fecha: 2026-12-15.
+- **EX-6**: Consumidor RabbitMQ de difusion en vivo (FR-009) sin ack manual ni DLQ: cola exclusiva por replica, sin persistencia;
+  perder un mensaje equivale a un cliente desconectado y la API lo corrige. Precedente: stream de operadores (spec 006,
+  `NotificationUpdatesRabbitAdapter`). Dueno: Equipo de backend. Fecha: 2026-12-15.
 
 ## Preguntas abiertas
 
@@ -163,5 +167,4 @@ Ninguna. Q-A queda resuelta por Q3.
 
 ## Out of Scope
 
-Componente visual y contrato host-MFE (EX-1), preferencias por categoria (F1), digest (F4), fan-out por persona (F6), push (FCM)
-y edicion de `api-notificaciones.yaml` (lo hace Contrato).
+Campana y host-MFE (EX-1), preferencias (F1), digest (F4), fan-out por persona (F6), push (FCM) y `api-notificaciones.yaml`.

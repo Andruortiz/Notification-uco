@@ -24,7 +24,7 @@ El render lo hace solo el `RenderTemplateUseCase` de D1 al aceptar la notificaci
 - Q: Que variante se usa -> A: `templateId` identifica una variante `(clave, canal, idioma)`; no hay seleccion por idioma ([FR-003](#requirements)).
 - Q: Cuando se renderiza -> A: una sola vez, al aceptar; se persiste el texto, no los valores. Editar o archivar despues no altera lo aceptado, ni reintentos ni reenvio de G2 (spec 033) ([FR-006](#requirements)).
 - Q: Idempotencia -> A: con el mismo `(tenant, externalId)` ya aceptado se devuelve la original con `duplicate=true` sin renderizar, aunque la plantilla este archivada o editada ([FR-007](#requirements)).
-- Q: Errores -> A: los de D1: 404 `TEMPLATE_NOT_FOUND` (NTF-3050, tambien si es de otro tenant), 409 `TEMPLATE_ARCHIVED` (NTF-3053), 422 `MISSING_VARIABLES` (NTF-1010) con `missingVariables` completa, 400 `TEMPLATE_LIMIT_EXCEEDED` (NTF-1009). Nuevos: 400 `TEMPLATE_CONTENT_CONFLICT` (NTF-1011) y 400 `TEMPLATE_CHANNEL_MISMATCH` (NTF-1012) ([FR-002](#requirements), [FR-003](#requirements)).
+- Q: Errores -> A: los de D1: 404 `TEMPLATE_NOT_FOUND` (NTF-3050, tambien otro tenant), 409 `TEMPLATE_ARCHIVED` (NTF-3053), 422 `MISSING_VARIABLES` (NTF-1010) con `missingVariables`, 400 `TEMPLATE_LIMIT_EXCEEDED` (NTF-1009). Nuevos: 400 `TEMPLATE_CONTENT_CONFLICT` (NTF-1011) y 400 `TEMPLATE_CHANNEL_MISMATCH` (NTF-1012) ([FR-002](#requirements), [FR-003](#requirements)).
 - Q: Lote -> A: cada elemento se renderiza por separado; un fallo de plantilla rechaza solo ese elemento, con `rejectionReason` que empieza por el codigo NTF y lleva los nombres faltantes (por ejemplo `NTF-1010 MISSING_VARIABLES: nombre, curso`); los demas siguen ([FR-008](#requirements)).
 - Q: Categoria critica -> A: solo trazabilidad; se guarda la referencia sin cambiar prioridad ni ruta; F1 y F3 la consumen ([FR-009](#requirements)).
 - Q: Rol -> A: el de `POST /notifications` (CLIENTE), sin cambio en el PEP.
@@ -33,7 +33,7 @@ El render lo hace solo el `RenderTemplateUseCase` de D1 al aceptar la notificaci
 - Q: Renderizador unico -> A: un solo `RenderTemplateUseCase` (con expansion de bloques de D7). Nada fuera de ese servicio llama a `TemplateEngine.render` ([FR-014](#requirements)). Orden de integracion: D2, D7, D3, D4, D5.
 - Q: WHATSAPP -> A: punto de extension. Con canal WHATSAPP y vinculo aprobado de D5, el contenido sale como `providerTemplate`; D5 asume esa integracion y la compuerta `TemplateProductionGate`. Sin vinculo, texto libre ([FR-015](#requirements)).
 - Q: Tope de SMS -> A: el texto renderizado se mide con el `SmsSegmenter` de D2 y debe caber en un segmento (GSM-7 160, UCS-2 70). Si no cabe, 400 con el codigo de tope de contenido vigente del canal, sin truncar ([FR-005](#requirements)). El cuerpo directo conserva su tope de 160 caracteres; la diferencia queda registrada en el plan.
-- Q: Contrato -> A: `x-status: planned` en lo que cambie hasta implementar.
+- Q: Contrato -> A: `x-status: planned` hasta implementar.
 
 ## User Scenarios & Testing
 

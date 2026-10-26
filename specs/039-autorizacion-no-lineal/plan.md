@@ -62,11 +62,34 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
    | `GET /channels`, `GET /providers` | los seis |
    | `POST /channels`, `/providers`, `/provider-connection-tests`, `/recipients/undeliverable-releases`, `/device-erasures` | AP |
    | `GET /configuration` | AP, AA |
-   | `/recipients/preferences` (GET, PUT), `/devices` (POST, GET), `/device-removals` | CL |
+   | `/devices` (POST, GET), `/device-removals` | CL |
+   | `/recipients/preferences` (GET, PUT) | CL; AA solo para `subject` ajeno |
    | `POST/PUT /templates`, `/template-archivals`, `/template-variable-detections` | ET, AP |
    | `GET /templates`, `/templates/detail`, `POST /template-renders` | CL, ET, AA, AP, y OP en lecturas |
+   | `POST /template-previews` | ET, AA, AP |
+   | `PUT /template-mappings` | ET, AP |
+   | `GET /template-mappings` | CL, OP, ET, AA, AP |
+   | `POST /template-mapping-resolutions` | CL, ET, AA, AP |
+   | `POST /template-provider-links`, `POST /template-approval-syncs` | ET, AP |
+   | `GET /template-provider-links` | CL, OP, ET, AA, AP |
+   | `POST /template-publications`, `POST /template-unpublications` | AA, AP |
+   | `PUT` y `POST /template-blocks`, `POST /template-block-archivals` | ET, AP |
+   | `GET /template-blocks`, `GET /template-blocks/detail` | CL, OP, ET, AA, AP |
+   | `/inbox-items`, `/inbox-unread-counts`, `/inbox-reads`, `/inbox-read-alls`, `/inbox-removals`, `/inbox-stream` | CL |
+   | `POST /inbox-erasures` | AA, AP |
+   | `POST /recipient-directory`, `POST /recipient-directory-removals` | AA |
+   | `GET /recipient-directory/lookups` | CL, AA, AP |
+   | `POST /recipient-directory-erasures` | AA, AP |
+   | `POST /user-notifications` | CL, AA |
+   | `GET /audit-entries`, `GET /audit-entries/detail` | AU, AP |
 
-   Las operaciones de AU llegan con la auditoría (B6) y las historias de resumen y consentimientos (FR-011).
+   Las operaciones de nivel 2 en estado `planned` solo llevan la lista; no se registran en el PDP (spec, Edge Cases). `H6`
+   (`/platform-status`) está cancelada y no figura. AU ya tiene sus rutas de auditoría; resumen por aplicación y consentimientos
+   entran con FR-011.
+
+   Desenmascarar datos: solo AP y AA; el resto los ve enmascarados (spec, Clarifications).
+
+   Impacto en nivel 1: E5 y E10 deben reescribir sus ramas de desenmascarar y de borrado a los roles de esta tabla (`/recipient-directory-erasures`, `/inbox-erasures`, `/device-erasures`), no a `ADMINISTRADOR`.
 
 ## Cambios de contrato requeridos (los aplica el agente del contrato; aquí no se edita el YAML)
 
@@ -74,7 +97,7 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
 2. Texto de cabecera del contrato (pasos 8 y descripción de `x-status`/`x-minimum-role`): describir `x-allowed-roles`.
 3. Schemas de error: ninguna ruta ni código nuevo; la respuesta 403 de cada operación protegida ya apunta a `INSUFFICIENT_ROLE`.
 4. `info.version` y el changelog (`ChangelogContractTest`): entrada por el cambio de extensión.
-5. Constitución: Principio II y resumen, a 2.1.0, con el texto `x-allowed-roles`.
+5. Constitución: Principio II y resumen, a 2.1.0, con el texto `x-allowed-roles` (enmienda aprobada por el usuario en el lote de nivel 2).
 
 ## Project Structure
 
@@ -103,8 +126,11 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
 - Rompe a todo quien emita tokens con `ADMINISTRADOR`: Seguridad debe usar los nombres nuevos en el realm (pregunta abierta).
 - B1 y otras historias del nivel 2 tocan `AuthenticatedPrincipal` y el contrato: integrar B2 sobre la rama que ya contenga B1.
 - Sin PDP real no se prueba que el PDP una los permisos de varios perfiles ni el 403 del PEP.
+- Precondición bloqueante (Seguridad, 2026-12-15): con sesión el principal es `CLIENTE`. Ver [spec.md](spec.md#precondición-bloqueante).
+  Las ramas internas por rol (desenmascarar, `subject` ajeno, borrado por titular, liberar marca) se documentan como no disponibles
+  en producción hasta cumplirla; los controles de ruta son del PEP.
 
 ## Excepciones (Principio VII)
 
-Ver [spec.md](spec.md#límites-documentados-principio-vii). La enmienda de la constitución requiere aprobación explícita del
-usuario antes de implementar.
+Ver [spec.md](spec.md#límites-documentados-principio-vii). La enmienda de la constitución a 2.1.0 y los seis roles quedan
+aprobados por el usuario en el lote de nivel 2.

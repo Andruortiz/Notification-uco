@@ -35,10 +35,12 @@ Principios: I, II, III, IV, VII.
 - Q: ¿Quién recibe el 403? A: Con PEP activo, el PEP; sin PEP (laboratorio y pruebas), la política interna con el mismo criterio.
 - Q: ¿Cuándo se retira un rol del PDP? A: Solo cuando ya no tiene recursos ni asignaciones; el script no borra (spec 028, FR-007).
 - Q: ¿Se oculta algo en la consola? A: No; depende de que el PDP entregue los permisos del usuario (límite abajo).
+- Q: ¿Quién ve datos sin enmascarar? A: `ADMINISTRADOR_PLATAFORMA` y `ADMINISTRADOR_APLICACION`; el resto de roles los ve enmascarados.
 
-Propuestas que el usuario aprueba con este spec (no estaban decididas): nombres de rol `ADMINISTRADOR_PLATAFORMA`,
-`ADMINISTRADOR_APLICACION`, `EDITOR_PLANTILLAS`, `OPERADOR`, `AUDITOR`, `CLIENTE` (el `ADMINISTRADOR` actual desaparece); un
-perfil del PDP por rol; reemplazo de `x-minimum-role` por `x-allowed-roles` con enmienda de la constitución.
+Aprobado por el usuario en el lote de nivel 2: los seis roles `ADMINISTRADOR_PLATAFORMA`, `ADMINISTRADOR_APLICACION`,
+`EDITOR_PLANTILLAS`, `OPERADOR`, `AUDITOR`, `CLIENTE` (el `ADMINISTRADOR` actual desaparece); un perfil del PDP por rol;
+reemplazo de `x-minimum-role` por `x-allowed-roles` con enmienda de la constitución a 2.1.0. B2 entra antes que cualquier otra
+historia del nivel 2.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -121,11 +123,20 @@ El AP ejecuta el script de la spec 028 con la sesión de administración de un t
 - **SC-003**: Dos ejecuciones consecutivas del script por tenant dejan el PDP idéntico; la segunda hace cero escrituras.
 - **SC-004**: `verify` completo en verde con cobertura mínima.
 
+## Precondición bloqueante
+
+Dueño: Seguridad. Fecha: 2026-12-15.
+
+Con sesión del PDP el principal es siempre `CLIENTE` (`PdpSessionIdentityAdapter` fija `Role.CLIENTE`). Antes de dar por
+operativas en producción las ramas internas por rol (desenmascarar, `subject` ajeno, borrado por titular, liberar marca),
+Seguridad debe lograr que la sesión traiga los roles o que el servicio consulte `/api/v1/authorize` por operación. Mientras tanto,
+los controles de ruta los hace el PEP y esas ramas se documentan como no disponibles en producción.
+
 ## Límites documentados (Principio VII)
 
 | Límite | Dueño | Fecha |
 | --- | --- | --- |
-| La sesión del PDP no trae roles; con sesión el principal sigue como `CLIENTE` y no se pueden aplicar reglas por rol dentro del servicio (enmascarado, causa técnica) hasta que Seguridad amplíe la sesión o abra `/api/v1/authorize` | Seguridad | 2026-12-15 |
+| La sesión del PDP no trae roles; con sesión el principal sigue como `CLIENTE` y no se pueden aplicar reglas por rol dentro del servicio (enmascarado, causa técnica) hasta que Seguridad amplíe la sesión o abra `/api/v1/authorize`. Precondición bloqueante: ver sección anterior | Seguridad | 2026-12-15 |
 | Política OPA que concede por rol y perfil: sin ella el PDP deniega todo; no se verifica el 403 del PEP real | Seguridad | 2026-12-15 |
 | Creación automática de perfiles al dar de alta un tenant: hoy se ejecuta el script con la sesión de cada tenant | Seguridad | 2026-12-15 |
 | Ocultar acciones en la consola (C1b, en «Veremos») | Front C1b | 2026-12-15 |

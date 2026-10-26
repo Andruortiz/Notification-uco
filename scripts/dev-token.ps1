@@ -3,8 +3,8 @@
 param(
     [string]$Tenant = 'tenant-dev',
     [string]$Subject = 'dev-user',
-    [ValidateSet('ADMINISTRADOR', 'OPERADOR', 'CLIENTE')]
-    [string]$Role = 'ADMINISTRADOR',
+    [ValidateSet('ADMINISTRADOR_PLATAFORMA', 'ADMINISTRADOR_APLICACION', 'EDITOR_PLANTILLAS', 'OPERADOR', 'AUDITOR', 'CLIENTE')]
+    [string]$Role = 'ADMINISTRADOR_PLATAFORMA',
     [string]$Client,
     [int]$TtlMinutes = 60,
     [string]$TenantClaim = 'tenantId',

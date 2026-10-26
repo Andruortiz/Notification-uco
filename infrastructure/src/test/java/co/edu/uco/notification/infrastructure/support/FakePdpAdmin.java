@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -36,7 +37,7 @@ public final class FakePdpAdmin implements AutoCloseable {
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   private final HttpServer server;
-  private final String sessionValue;
+  private final Map<String, String> tenantBySession = new ConcurrentHashMap<>();
   private final String csrfToken = UUID.randomUUID().toString();
   private final List<Map<String, Object>> applications = new CopyOnWriteArrayList<>();
   private final List<Map<String, Object>> resources = new CopyOnWriteArrayList<>();
@@ -46,7 +47,7 @@ public final class FakePdpAdmin implements AutoCloseable {
   private final List<String> credentialsSeen = new CopyOnWriteArrayList<>();
 
   public FakePdpAdmin(final String sessionValue) {
-    this.sessionValue = sessionValue;
+    this.tenantBySession.put(sessionValue, "tenant-a");
     applications.add(application(APPLICATION_ID, "notification-service"));
     applications.add(application(OTHER_APPLICATION_ID, "other-service"));
     try {
@@ -102,6 +103,46 @@ public final class FakePdpAdmin implements AutoCloseable {
     return resource;
   }
 
+  public void addSession(final String sessionValue, final String tenantId) {
+    tenantBySession.put(sessionValue, tenantId);
+  }
+
+  public Map<String, Object> seedProfile(
+      final String applicationId,
+      final String tenantId,
+      final String name,
+      final List<String> roleIds) {
+    final Map<String, Object> profile = new LinkedHashMap<>();
+    profile.put("id", UUID.randomUUID().toString());
+    profile.put("name", name);
+    profile.put("scope", "APPLICATION");
+    profile.put("applicationId", applicationId);
+    profile.put("tenantId", tenantId);
+    profile.put("roleIds", new ArrayList<>(roleIds));
+    profiles.add(profile);
+    return profile;
+  }
+
+  private String tenantOf(final String cookies) {
+    if (cookies == null) {
+      return null;
+    }
+    for (final Map.Entry<String, String> session : tenantBySession.entrySet()) {
+      if (cookies.contains(SESSION_COOKIE + "=" + session.getKey())) {
+        return session.getValue();
+      }
+    }
+    return null;
+  }
+
+  private static List<Map<String, Object>> visibleTo(
+      final List<Map<String, Object>> store, final boolean role, final String tenant) {
+    if (role) {
+      return store;
+    }
+    return store.stream().filter(profile -> tenant.equals(profile.get("tenantId"))).toList();
+  }
+
   public Map<String, Object> seedRole(final String applicationId, final String name) {
     final Map<String, Object> role = new LinkedHashMap<>();
     role.put("id", UUID.randomUUID().toString());
@@ -129,7 +170,8 @@ public final class FakePdpAdmin implements AutoCloseable {
     requests.add(method + " " + path);
     final String cookies = exchange.getRequestHeaders().getFirst("Cookie");
     credentialsSeen.add(String.valueOf(cookies));
-    if (cookies == null || !cookies.contains(SESSION_COOKIE + "=" + sessionValue)) {
+    final String tenant = tenantOf(cookies);
+    if (tenant == null) {
       send(exchange, 401, Map.of("detail", "sesion no valida"));
       return;
     }
@@ -143,7 +185,7 @@ public final class FakePdpAdmin implements AutoCloseable {
       }
     }
     final Map<String, Object> body = readBody(exchange);
-    route(exchange, method, path, uri.getQuery(), body);
+    route(exchange, method, path, uri.getQuery(), body, tenant);
   }
 
   private void route(
@@ -151,11 +193,12 @@ public final class FakePdpAdmin implements AutoCloseable {
       final String method,
       final String path,
       final String query,
-      final Map<String, Object> body)
+      final Map<String, Object> body,
+      final String tenant)
       throws IOException {
     if ("GET".equals(method) && "/api/v1/session".equals(path)) {
       exchange.getResponseHeaders().add("Set-Cookie", CSRF_COOKIE + "=" + csrfToken + "; Path=/");
-      send(exchange, 200, envelope(Map.of("subject", "admin")));
+      send(exchange, 200, envelope(Map.of("subject", "admin", "tenantId", tenant)));
       return;
     }
     if ("GET".equals(method) && "/api/v1/applications".equals(path)) {
@@ -168,11 +211,11 @@ public final class FakePdpAdmin implements AutoCloseable {
       return;
     }
     if ("/api/v1/roles".equals(path)) {
-      collection(exchange, method, query, roles, body, true);
+      collection(exchange, method, query, roles, body, true, tenant);
       return;
     }
     if ("/api/v1/profiles".equals(path)) {
-      collection(exchange, method, query, profiles, body, false);
+      collection(exchange, method, query, profiles, body, false, tenant);
       return;
     }
     final Matcher roleResources = ROLE_RESOURCES.matcher(path);
@@ -225,10 +268,12 @@ public final class FakePdpAdmin implements AutoCloseable {
       final String query,
       final List<Map<String, Object>> store,
       final Map<String, Object> body,
-      final boolean role)
+      final boolean role,
+      final String tenant)
       throws IOException {
+    final List<Map<String, Object>> visible = visibleTo(store, role, tenant);
     if ("GET".equals(method)) {
-      send(exchange, 200, envelope(page(store, query)));
+      send(exchange, 200, envelope(page(visible, query)));
       return;
     }
     final String name = String.valueOf(body.get("name"));
@@ -238,7 +283,7 @@ public final class FakePdpAdmin implements AutoCloseable {
       return;
     }
     final boolean duplicate =
-        store.stream()
+        visible.stream()
             .anyMatch(
                 r -> name.equals(r.get("name")) && applicationId.equals(r.get("applicationId")));
     if (duplicate) {
@@ -251,6 +296,9 @@ public final class FakePdpAdmin implements AutoCloseable {
     created.put("scope", "APPLICATION");
     created.put("applicationId", applicationId);
     created.put(role ? "resourceIds" : "roleIds", new ArrayList<String>());
+    if (!role) {
+      created.put("tenantId", tenant);
+    }
     store.add(created);
     send(exchange, 201, envelope(created));
   }

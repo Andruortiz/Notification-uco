@@ -29,6 +29,9 @@ import org.junit.jupiter.api.io.TempDir;
 class PdpProvisioningScriptTest {
 
   private static final String SESSION = "sesion-secreta-0123456789abcdef";
+  private static final String SESSION_B = "sesion-tenant-b-0123456789abcdef";
+  private static final String TENANT_A = "tenant-a";
+  private static final String TENANT_B = "tenant-b";
   private static final Path SCRIPT = Path.of("..", "scripts", "provision-pdp.ps1").normalize();
   private static final String SHELL = detectShell();
 
@@ -68,6 +71,7 @@ class PdpProvisioningScriptTest {
       assertTrue(SHELL != null, "CI debe proveer pwsh");
     }
     pdp = new FakePdpAdmin(SESSION);
+    pdp.addSession(SESSION_B, TENANT_B);
     catalog = temp.resolve("protected-resources.json");
     ProtectedResourcesCatalog.write(catalog, ProtectedResourcesCatalog.entries());
   }
@@ -80,6 +84,11 @@ class PdpProvisioningScriptTest {
   }
 
   private Result run(final boolean withSession, final String... extra)
+      throws IOException, InterruptedException {
+    return runWith(withSession ? SESSION : null, extra);
+  }
+
+  private Result runWith(final String session, final String... extra)
       throws IOException, InterruptedException {
     final List<String> command = new ArrayList<>();
     command.add(SHELL);
@@ -94,8 +103,8 @@ class PdpProvisioningScriptTest {
     final ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
     builder.environment().remove("PDP_ADMIN_SESSION");
     builder.environment().remove("PDP_BASE_URL");
-    if (withSession) {
-      builder.environment().put("PDP_ADMIN_SESSION", SESSION);
+    if (session != null) {
+      builder.environment().put("PDP_ADMIN_SESSION", session);
     }
     final Process process = builder.start();
     final String output =
@@ -140,6 +149,17 @@ class PdpProvisioningScriptTest {
         .orElseThrow(() -> new AssertionError("falta " + name));
   }
 
+  private List<Map<String, Object>> profilesOf(final String tenant) {
+    return pdp.profiles(FakePdpAdmin.APPLICATION_ID).stream()
+        .filter(profile -> tenant.equals(profile.get("tenantId")))
+        .toList();
+  }
+
+  private static Set<String> keysAllowing(final String role) {
+    return keysOf(
+        available().stream().filter(operation -> operation.allowedRoles().contains(role)).toList());
+  }
+
   @Test
   void firstRunRegistersExactlyTheAvailableOperationsOfTheContract()
       throws IOException, InterruptedException {
@@ -157,7 +177,8 @@ class PdpProvisioningScriptTest {
   }
 
   @Test
-  void rolesGrantOnlyTheirOwnMinimumRoleOperations() throws IOException, InterruptedException {
+  void firstRunCreatesTheSixRolesWithExactlyTheOperationsThatListThem()
+      throws IOException, InterruptedException {
     final Result result = run(true);
 
     assertEquals(0, result.exitCode(), result.output());
@@ -166,64 +187,49 @@ class PdpProvisioningScriptTest {
         Set.copyOf(ProtectedResourcesCatalog.ROLES),
         roles.stream().map(role -> (String) role.get("name")).collect(Collectors.toSet()));
     for (final String roleName : ProtectedResourcesCatalog.ROLES) {
-      final Set<String> expected =
-          keysOf(
-              available().stream()
-                  .filter(operation -> roleName.equals(operation.minimumRole()))
-                  .toList());
-      assertEquals(expected, grantedKeys(byName(roles, roleName)), roleName);
+      assertEquals(keysAllowing(roleName), grantedKeys(byName(roles, roleName)), roleName);
     }
   }
 
   @Test
-  @SuppressWarnings("unchecked")
-  void profilesAreCumulativeOverRoles() throws IOException, InterruptedException {
+  void eachRoleHasOneProfileWithOnlyThatRole() throws IOException, InterruptedException {
     final Result result = run(true);
 
     assertEquals(0, result.exitCode(), result.output());
     final List<Map<String, Object>> roles = pdp.roles(FakePdpAdmin.APPLICATION_ID);
-    final List<Map<String, Object>> profiles = pdp.profiles(FakePdpAdmin.APPLICATION_ID);
-    final Map<String, List<String>> expected =
-        Map.of(
-            "PERFIL_CLIENTE", List.of("CLIENTE"),
-            "PERFIL_OPERADOR", List.of("CLIENTE", "OPERADOR"),
-            "PERFIL_ADMINISTRADOR", List.of("CLIENTE", "OPERADOR", "ADMINISTRADOR"));
+    final List<Map<String, Object>> profiles = profilesOf(TENANT_A);
     assertEquals(
-        expected.keySet(),
+        ProtectedResourcesCatalog.ROLES.stream()
+            .map(role -> "PERFIL_" + role)
+            .collect(Collectors.toSet()),
         profiles.stream().map(p -> (String) p.get("name")).collect(Collectors.toSet()));
-    for (final Map.Entry<String, List<String>> entry : expected.entrySet()) {
-      final Map<String, Object> profile = byName(profiles, entry.getKey());
-      final Set<String> roleIds =
-          entry.getValue().stream()
-              .map(name -> (String) byName(roles, name).get("id"))
-              .collect(Collectors.toSet());
-      assertEquals(roleIds, Set.copyOf((List<String>) profile.get("roleIds")), entry.getKey());
+    for (final String role : ProtectedResourcesCatalog.ROLES) {
+      final Map<String, Object> profile = byName(profiles, "PERFIL_" + role);
+      assertEquals(
+          Set.of((String) byName(roles, role).get("id")),
+          Set.copyOf(profileRoleIds(profile)),
+          profile.get("name").toString());
     }
   }
 
   @Test
-  void effectiveAccessOfEachProfileMatchesTheCatalogProfiles()
+  void aUserWithTwoProfilesGetsTheUnionOfTheirOperations()
       throws IOException, InterruptedException {
     final Result result = run(true);
 
     assertEquals(0, result.exitCode(), result.output());
     final List<Map<String, Object>> roles = pdp.roles(FakePdpAdmin.APPLICATION_ID);
-    for (final String profile : ProtectedResourcesCatalog.ROLES) {
-      final Set<String> viaRoles = new LinkedHashSet<>();
-      for (final String member :
-          ProtectedResourcesCatalog.ROLES.subList(
-              0, ProtectedResourcesCatalog.ROLES.indexOf(profile) + 1)) {
-        viaRoles.addAll(grantedKeys(byName(roles, member)));
-      }
-      final Set<String> viaCatalog =
-          keysOf(
-              available().stream()
-                  .filter(
-                      op ->
-                          ProtectedResourcesCatalog.profilesFor(op.minimumRole()).contains(profile))
-                  .toList());
-      assertEquals(viaCatalog, viaRoles, profile);
-    }
+    final Set<String> union = new LinkedHashSet<>();
+    union.addAll(grantedKeys(byName(roles, "EDITOR_PLANTILLAS")));
+    union.addAll(grantedKeys(byName(roles, "OPERADOR")));
+    final Set<String> expected = new LinkedHashSet<>(keysAllowing("EDITOR_PLANTILLAS"));
+    expected.addAll(keysAllowing("OPERADOR"));
+    assertEquals(expected, union);
+  }
+
+  @SuppressWarnings("unchecked")
+  private static List<String> profileRoleIds(final Map<String, Object> profile) {
+    return (List<String>) profile.get("roleIds");
   }
 
   @Test
@@ -243,6 +249,28 @@ class PdpProvisioningScriptTest {
     assertEquals(profiles, pdp.profiles(FakePdpAdmin.APPLICATION_ID).size());
     assertFalse(second.output().contains("[CREADO]"), second.output());
     assertTrue(second.output().contains("[EXISTE]"), second.output());
+  }
+
+  @Test
+  void aSecondTenantGetsItsOwnProfilesWithoutTouchingTheFirst()
+      throws IOException, InterruptedException {
+    assertEquals(0, run(true).exitCode());
+    final List<Map<String, Object>> profilesA = profilesOf(TENANT_A);
+    final int roles = pdp.roles(FakePdpAdmin.APPLICATION_ID).size();
+    final int resources = pdp.resources(FakePdpAdmin.APPLICATION_ID).size();
+    pdp.clearRequests();
+
+    final Result second = runWith(SESSION_B);
+
+    assertEquals(0, second.exitCode(), second.output());
+    assertEquals(ProtectedResourcesCatalog.ROLES.size(), profilesOf(TENANT_B).size());
+    assertEquals(profilesA, profilesOf(TENANT_A));
+    assertEquals(roles, pdp.roles(FakePdpAdmin.APPLICATION_ID).size());
+    assertEquals(resources, pdp.resources(FakePdpAdmin.APPLICATION_ID).size());
+    assertTrue(
+        pdp.mutations().stream().allMatch(m -> m.startsWith("POST /api/v1/profiles")),
+        pdp.mutations().toString());
+    assertTrue(second.output().contains("Tenant de la sesion: " + TENANT_B), second.output());
   }
 
   @Test
@@ -271,6 +299,42 @@ class PdpProvisioningScriptTest {
   }
 
   @Test
+  void anAccumulativeSchemaFromBeforeIsReportedAndKept() throws IOException, InterruptedException {
+    final Map<String, Object> cliente = pdp.seedRole(FakePdpAdmin.APPLICATION_ID, "CLIENTE");
+    final Map<String, Object> operador = pdp.seedRole(FakePdpAdmin.APPLICATION_ID, "OPERADOR");
+    final Map<String, Object> administrador =
+        pdp.seedRole(FakePdpAdmin.APPLICATION_ID, "ADMINISTRADOR");
+    pdp.seedProfile(
+        FakePdpAdmin.APPLICATION_ID,
+        TENANT_A,
+        "PERFIL_OPERADOR",
+        List.of((String) cliente.get("id"), (String) operador.get("id")));
+    pdp.seedProfile(
+        FakePdpAdmin.APPLICATION_ID,
+        TENANT_A,
+        "PERFIL_ADMINISTRADOR",
+        List.of(
+            (String) cliente.get("id"),
+            (String) operador.get("id"),
+            (String) administrador.get("id")));
+
+    final Result result = run(true);
+
+    assertEquals(0, result.exitCode(), result.output());
+    assertTrue(result.output().contains("[DIVERGENCIA] rol ADMINISTRADOR"), result.output());
+    assertTrue(
+        result.output().contains("[DIVERGENCIA] perfil PERFIL_OPERADOR tiene el rol CLIENTE"),
+        result.output());
+    assertTrue(
+        result.output().contains("[DIVERGENCIA] perfil PERFIL_ADMINISTRADOR"), result.output());
+    assertTrue(
+        pdp.roles(FakePdpAdmin.APPLICATION_ID).stream()
+            .anyMatch(r -> "ADMINISTRADOR".equals(r.get("name"))));
+    assertTrue(
+        profilesOf(TENANT_A).stream().anyMatch(p -> "PERFIL_ADMINISTRADOR".equals(p.get("name"))));
+  }
+
+  @Test
   void rolesOfOtherApplicationsAreNeverTouchedEvenWithManyOfThem()
       throws IOException, InterruptedException {
     for (int i = 0; i < 130; i++) {
@@ -281,7 +345,8 @@ class PdpProvisioningScriptTest {
     final Result result = run(true);
 
     assertEquals(0, result.exitCode(), result.output());
-    assertEquals(3, pdp.roles(FakePdpAdmin.APPLICATION_ID).size());
+    assertEquals(
+        ProtectedResourcesCatalog.ROLES.size(), pdp.roles(FakePdpAdmin.APPLICATION_ID).size());
     assertEquals(131, pdp.roles(FakePdpAdmin.OTHER_APPLICATION_ID).size());
     assertTrue(pdp.resources(FakePdpAdmin.OTHER_APPLICATION_ID).isEmpty());
   }
@@ -313,8 +378,8 @@ class PdpProvisioningScriptTest {
         assertFalse(result.output().contains("recurso " + operation.key()), operation.key());
       }
     }
-    for (final String name : List.of("PERFIL_CLIENTE", "PERFIL_OPERADOR", "PERFIL_ADMINISTRADOR")) {
-      assertTrue(result.output().contains("perfil " + name), name);
+    for (final String role : ProtectedResourcesCatalog.ROLES) {
+      assertTrue(result.output().contains("perfil PERFIL_" + role), role);
     }
     assertTrue(result.output().contains("manual"), result.output());
   }
@@ -330,7 +395,8 @@ class PdpProvisioningScriptTest {
     assertTrue(pdp.resources(FakePdpAdmin.APPLICATION_ID).isEmpty());
     assertTrue(result.output().contains("[CREAR] recurso"), result.output());
     assertTrue(
-        result.output().contains("[VINCULAR] perfil PERFIL_ADMINISTRADOR -> rol ADMINISTRADOR"));
+        result.output().contains("[VINCULAR] perfil PERFIL_AUDITOR -> rol AUDITOR"),
+        result.output());
   }
 
   @Test
@@ -377,19 +443,23 @@ class PdpProvisioningScriptTest {
   }
 
   @Test
-  void aCatalogWhoseProfilesContradictTheMinimumRoleIsRejectedBeforeAnyCall()
+  void aCatalogWithAnInvalidAllowedRolesListIsRejectedBeforeAnyCall()
       throws IOException, InterruptedException {
-    final List<Map<String, Object>> entries = ProtectedResourcesCatalog.entries();
-    final Map<String, Object> tampered = new LinkedHashMap<>(entries.get(0));
-    tampered.put("profiles", List.of("ADMINISTRADOR"));
-    entries.set(0, tampered);
-    ProtectedResourcesCatalog.write(catalog, entries);
+    final List<List<String>> invalid =
+        List.of(List.of("ROL_INVENTADO"), List.of("OPERADOR", "OPERADOR"), List.of());
+    for (final List<String> roles : invalid) {
+      final List<Map<String, Object>> entries = ProtectedResourcesCatalog.entries();
+      final Map<String, Object> tampered = new LinkedHashMap<>(entries.get(0));
+      tampered.put("allowedRoles", roles);
+      entries.set(0, tampered);
+      ProtectedResourcesCatalog.write(catalog, entries);
 
-    final Result result = run(true);
+      final Result result = run(true);
 
-    assertNotEquals(0, result.exitCode());
-    assertTrue(result.output().contains("perfiles"), result.output());
-    assertTrue(pdp.requests().isEmpty());
+      assertNotEquals(0, result.exitCode(), roles.toString());
+      assertTrue(result.output().contains("allowedRoles"), result.output());
+      assertTrue(pdp.requests().isEmpty(), roles.toString());
+    }
   }
 
   @Test

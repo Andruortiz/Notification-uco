@@ -28,14 +28,15 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
 - **Q4 - Escritura**: `POST /recipient-directory` es upsert por reemplazo del par correo/teléfono; un campo ausente o nulo borra
   ese dato. Sin importación masiva. Afecta FR-002.
 - **Q5 - Envío por usuario**: `POST /user-notifications` (aprobado; `POST /notifications` no cambia). Por canal: EMAIL, una
-  notificación al correo; SMS y WHATSAPP, al teléfono; PUSH, una por dispositivo; IN_APP, por identidad. Cada comando lleva
-  `recipientIdentityId` y `recipientId` con ese valor, para que F1 evalúe preferencias. Afecta FR-007.
+  notificación al correo; SMS y WHATSAPP, al teléfono; PUSH, una por dispositivo; IN_APP, por identidad. Cada comando recibe
+  `recipientId` con la dirección resuelta (semántica existente, sin cambio) y `recipientIdentityId` con la identidad, para que F1
+  evalúe preferencias por identidad. Afecta FR-007.
 - **Q6 - Errores**: usuario ausente o de otro tenant: 404 `NTF-3042` uniforme; sin dato para el canal: 422 `NTF-3043` con el
   canal; nada se persiste ni se encola. Afecta FR-006.
 - **Q7 - Roles** (nombres de B2): escribir (upsert y baja) es de `ADMINISTRADOR_APLICACION`; consultar, de `CLIENTE` (enmascarado),
   `ADMINISTRADOR_APLICACION` y `ADMINISTRADOR_PLATAFORMA` (completo); el borrado por titular, de los dos administradores. Pregunta
   menor abierta: si `CLIENTE` es productor legítimo de la escritura. Afecta FR-005, FR-010.
-- **Q8 - Retención**: 270 días sin actividad, según la tabla única de retención del Nivel 2. Afecta FR-011.
+- **Q8 - Retención**: 270 días sin actividad, según la tabla de retención aprobada (Nivel 2, sección 6 del lote). Afecta FR-011.
 - **Q9 - IN_APP**: se resuelve por identidad; no hay dato de contacto, así que no da 422 `NTF-3043`, pero exige la entrada (404
   `NTF-3042`). Afecta FR-007.
 - **Q10 - Borrado por titular**: un único `EraseRecipientDataUseCase` en `core` con el puerto `RecipientDataEraser`; cada historia
@@ -92,8 +93,8 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
 - Canal sin regla de resolución (fuera de EMAIL, SMS, WHATSAPP, PUSH e IN_APP): 400 `NTF-1003`.
 - `externalId` mayor de 200 caracteres en el envío por usuario: 400 (el derivado por dispositivo debe caber en 255).
 - Dispositivo dado de baja entre resolución y despacho: el despacho ya lo tolera (E5, fallo permanente).
-- Identidad con dispositivos pero sin entrada: el borrado por titular responde 404; sus dispositivos se borran con
-  `POST /device-erasures`.
+- Identidad sin entrada (borrado por titular ya iniciado y fallido en la última etapa): el reintento responde 404 y la identidad
+  residual queda sin borrar. Límite declarado en Datos personales.
 
 ## Requirements
 
@@ -112,7 +113,8 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
 - **FR-007**: `POST /user-notifications` resuelve la dirección y delega en el envío existente (unitario o lote), de modo que
   validaciones, guardas de E10, preferencias (F1) y plantillas (D3) se aplican igual que en el envío por dirección. Canal -> dato:
   EMAIL -> correo; SMS y WHATSAPP -> teléfono; PUSH -> dispositivos de E5; IN_APP -> identidad. Cada comando generado lleva
-  `recipientId` y `recipientIdentityId` con el `recipientIdentityId` de la entrada.
+  `recipientId` con la dirección resuelta (IN_APP no tiene dirección) y `recipientIdentityId` con el de la entrada. F6 rellena
+  ambos campos con su valor correcto; no iguala uno al otro.
 - **FR-008**: PUSH deriva `externalId` como `<externalId>:<deviceId>`; los demás canales usan el `externalId` recibido.
 - **FR-009**: Aislamiento por tenant en todo acceso; el 404 es uniforme entre inexistente y ajeno.
 - **FR-010**: Cada operación nueva declara `x-status: planned` y `x-allowed-roles` según Q7 y la tabla de plan.md.
@@ -123,11 +125,12 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
   es de F6, porque B6 no audita datos de usuario. Métricas `directory.upserts`, `directory.resolutions{channel,outcome}`,
   `directory.removed{reason}` y `directory.entries`.
 - **FR-013**: Base legal, retención y borrado documentados en la sección siguiente.
-- **FR-014**: El borrado por titular usa `EraseRecipientDataUseCase`, que recibe `(tenantId, recipientIdentityId)` y llama a cada
-  `RecipientDataEraser` registrado, en este orden: E5 (dispositivos e identidad), E6 (bandeja), F1 (preferencias) y F6 (entrada,
-  la última). Los contribuyentes son idempotentes; la entrada va al final para que un reintento tras fallo encuentre la entrada y
-  repita todo. `POST /recipient-directory-erasures` y `POST /device-erasures` (E5) delegan en él. La marca de no entregable de E10
-  no se borra: es dato de la dirección, no del titular.
+- **FR-014**: `POST /recipient-directory-erasures` es la única vía de borrado completo del titular. Localiza la entrada por `userId`
+  (404 si no existe), obtiene su identidad y llama a `EraseRecipientDataUseCase(tenantId, recipientIdentityId)`, que invoca a cada
+  `RecipientDataEraser` registrado en este orden: E5 (dispositivos), E6 (bandeja), F1 (preferencias), F6 (entrada, localizada por
+  identidad con `findByIdentity`) y, la última, E5 (identidad). Así la entrada nunca queda apuntando a una identidad borrada. Los
+  contribuyentes son idempotentes. `/device-erasures` de E5 no cambia. La marca de no entregable de E10 no se borra: es dato de la
+  dirección, no del titular.
 
 ## Datos personales
 
@@ -138,7 +141,10 @@ el identificador de usuario de la aplicación, el correo y el teléfono.
   notificaciones que la aplicación solicita.
 - **Por qué se guardan**: sin ellos el envío por identificador exige a la aplicación conocer la dirección. Alternativa descartada:
   consultar el correo a un sistema externo en cada envío (acopla la disponibilidad del envío).
-- **Retención**: 270 días sin actividad; eliminación inmediata al borrar la entrada.
+- **Retención**: 270 días sin actividad (tabla de retención aprobada, Nivel 2, sección 6 del lote); eliminación inmediata al borrar
+  la entrada. Dueño de la base legal y de la retención: Responsable de datos; fecha: 2026-12-15.
+- **Límite declarado (borrado)**: si falla el último paso (borrado de la identidad) después de borrar la entrada, el reintento
+  responde 404 y la identidad residual, con `subject` si lo tiene, queda sin borrar. Dueño: Equipo de backend; fecha: 2026-12-15.
 - **Borrado**: físico por baja, retención o borrado por titular (FR-014), que arrastra identidad y dispositivos de E5. La auditoría
   conserva solo la huella de 8 caracteres.
 - **Acceso**: correo y teléfono completos solo para `ADMINISTRADOR_APLICACION` y `ADMINISTRADOR_PLATAFORMA`.

@@ -44,14 +44,14 @@ y construye el `NotificationContent` con el texto renderizado. El resto del fluj
   1. exclusividad (FR-002) -> `TemplateContentConflictException` (NTF-1011);
   2. `findByTenantAndExternalId`; si existe, duplicado sin renderizar (FR-007);
   3. valores y `resolve(...)`: canal (NTF-1012), render y bloques (409 `BLOCK_*` y 422 de bloque, como en D7);
-  4. si la categoria es SEGURIDAD y el rol no es ADMINISTRADOR_APLICACION ni ADMINISTRADOR_PLATAFORMA -> `TemplateCategoryForbiddenException` (403; codigo NTF por asignar) (FR-016);
+  4. si la categoria es SEGURIDAD y el rol no es ADMINISTRADOR_APLICACION ni ADMINISTRADOR_PLATAFORMA -> `TemplateCategoryForbiddenException` (403 `INSUFFICIENT_ROLE`, NTF-2002) (FR-016);
   5. si es SMS, `SmsSegmenter` (D2) debe dar un segmento; si no, `INVALID_CONTENT` (NTF-1001), sin truncar (FR-005);
   6. construir el contenido y seguir con `AttachmentPolicy`, `ContentSchemaValidator`, adjuntos y aceptacion.
   WHATSAPP no se consulta al aceptar (FR-015). Sin `templateId`, camino actual.
 - **Referencia guardada** (FR-009): `NotificationContent` gana `templateReference` opcional (`templateId`, `category`, `critical`). D3 es duena; F1 solo anade `recipientIdentityId`.
 - **Despacho WHATSAPP** (FR-015): el despacho, si el contenido vino de `templateId` y el canal es WHATSAPP, consulta `ProviderTemplateLinkPort` (D5). Con vinculo publicado usa `providerTemplate`; sin vinculo, fallo permanente con el mecanismo de despacho existente.
 - **Lote** (`SendNotificationBatchService`): cada elemento llama a `send` con el scope. Los errores de plantilla de un elemento se traducen a `REJECTED` con `rejectionReason` = `<NTF-codigo> <nombre>[: vars]`.
-- **Excepciones nuevas** en `exception/`: `TemplateContentConflictException` (NTF-1011), `TemplateChannelMismatchException` (NTF-1012), `TemplateCategoryForbiddenException` (403).
+- **Excepciones nuevas** en `exception/`: `TemplateContentConflictException` (NTF-1011), `TemplateChannelMismatchException` (NTF-1012), `TemplateCategoryForbiddenException` (403, NTF-2002).
 - **Metricas** (FR-012) por `MetricsPort`: `templateSendAccepted(channel)` y `templateSendRejected(channel, cause)`, sin valores (FR-010).
 
 ### infrastructure
@@ -93,16 +93,16 @@ y construye el `NotificationContent` con el texto renderizado. El resto del fluj
 
 1. `SendNotificationRequest`: `templateId` (uuid, nullable), `templateValues` (`additionalProperties: string`, `maxProperties: 50`, valor `maxLength: 2000`, nullable) y `event` (objeto libre, nullable, solo con `templateId`).
 2. Quitar `body` de `required`; `oneOf` para la exclusividad `body` | `providerTemplate` | `templateId`; documentar que `subject`, `templateValues` y `event` no van sin `templateId`.
-3. `POST /notifications` y lote: `404` (`TEMPLATE_NOT_FOUND`), `422` (`MISSING_VARIABLES` con `missingVariables`, y 422 de bloque), `409` (`TEMPLATE_ARCHIVED` y `BLOCK_*`), `403` (SEGURIDAD, codigo por asignar), `400` (conflicto de contenido, canal distinto, limites, `INVALID_CONTENT` NTF-1001).
-4. `ErrorResponse.code`: agregar `NTF-1011` `TEMPLATE_CONTENT_CONFLICT` y `NTF-1012` `TEMPLATE_CHANNEL_MISMATCH`; el 403 necesita codigo NTF.
+3. `POST /notifications` y lote: `404` (`TEMPLATE_NOT_FOUND`), `422` (`MISSING_VARIABLES` con `missingVariables`, y 422 de bloque), `409` (`TEMPLATE_ARCHIVED` y `BLOCK_*`), `403` (SEGURIDAD, `INSUFFICIENT_ROLE` NTF-2002), `400` (conflicto de contenido, canal distinto, limites, `INVALID_CONTENT` NTF-1001).
+4. `ErrorResponse.code`: agregar `NTF-1011` `TEMPLATE_CONTENT_CONFLICT` y `NTF-1012` `TEMPLATE_CHANNEL_MISMATCH`; el 403 reutiliza `INSUFFICIENT_ROLE` (NTF-2002).
 5. `BatchItemResult.rejectionReason`: un fallo de plantilla rechaza solo el elemento y el texto empieza por el codigo NTF y lleva las variables faltantes.
-6. `POST /notifications` documenta roles CLIENTE y ADMINISTRADOR_APLICACION.
+6. `POST /notifications` y lote documentan roles CLIENTE, ADMINISTRADOR_APLICACION y ADMINISTRADOR_PLATAFORMA.
 7. `GET /notifications/detail` no expone la referencia de plantilla.
 
 ## Riesgos y dependencias
 
 - **Dependencia previa**: D4 (parte `event`, `ResolveTemplateValuesUseCase`) se integra antes que D3 (decision del usuario). D3 no define ni stubs ese puerto.
 - Depende de D1 (HU2-119), D2, HU2-112, D5 y B2 (roles, spec 039). Ninguna esta en la base de la rama hoy.
-- **Roles (B2)**: sin roles reales, SEGURIDAD responde 403 en produccion. Por observar: `POST /notifications` no admite ADMINISTRADOR_PLATAFORMA, asi que ese rol no llega a la regla SEGURIDAD por esa ruta. Contrato y B2 lo deciden.
+- **Roles (B2)**: sin roles reales, SEGURIDAD responde 403 en produccion hasta que B2 entregue el principal.
 - Toca los mismos archivos que E10 (`SendNotificationService`), G2 (reenvio) y E5 (documento de notificacion): integrar en orden y resolver conflictos al rebasar.
 - Cambio compartido con D1: `resolve`, `ResolvedTemplate`, `RenderScope`. Quitar `body` de `required` es visible para generadores de cliente.

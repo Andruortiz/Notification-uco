@@ -16,7 +16,7 @@ El render lo hace solo el `RenderTemplateUseCase` de D1 al aceptar.
 
 ### Session 2026-10-25
 
-- Q: Cuerpo directo -> A: se conserva (decision del usuario, 2026-10-24).
+- Q: Cuerpo directo -> A: se conserva.
 - Q: Campos nuevos -> A: `templateId` (uuid) y `templateValues` (mapa texto -> texto) en `SendNotificationRequest` y en cada elemento del lote. Ids por cuerpo, nunca en ruta ([FR-001](#requirements)).
 - Q: Convivencia con `providerTemplate` -> A: `providerTemplate` es una plantilla aprobada por el proveedor y se envia tal cual; `templateId` es una plantilla propia que se renderiza a texto. Exactamente uno de `body`, `providerTemplate`, `templateId` por envio ([FR-002](#requirements)). Vincular ambas es D5.
 - Q: `subject` junto con `templateId` -> A: se rechaza; el asunto sale de la plantilla ([FR-002](#requirements)).
@@ -26,7 +26,7 @@ El render lo hace solo el `RenderTemplateUseCase` de D1 al aceptar.
 - Q: Errores -> A: los de D1: 404 `TEMPLATE_NOT_FOUND` (NTF-3050), 409 `TEMPLATE_ARCHIVED` (NTF-3053), 422 `MISSING_VARIABLES` (NTF-1010) con `missingVariables`, 400 `TEMPLATE_LIMIT_EXCEEDED` (NTF-1009). Nuevos: 400 `TEMPLATE_CONTENT_CONFLICT` (NTF-1011) y 400 `TEMPLATE_CHANNEL_MISMATCH` (NTF-1012). Bloques de D7 en `POST /notifications` y lote: 409 `BLOCK_*` y 422 de bloque, como en D7 ([FR-002](#requirements), [FR-003](#requirements)).
 - Q: Lote -> A: cada elemento se renderiza por separado; un fallo de plantilla rechaza solo ese elemento, con `rejectionReason` que empieza por el codigo NTF y lleva las variables faltantes ([FR-008](#requirements)).
 - Q: Categoria critica -> A: trazabilidad sin cambiar prioridad ni ruta ([FR-009](#requirements)). SEGURIDAD solo la envian ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA ([FR-016](#requirements)).
-- Q: Rol -> A: `POST /notifications` admite CLIENTE y ADMINISTRADOR_APLICACION, sin cambio en el PEP. Precondicion: los roles llegan por B2 (spec 039); hoy la sesion del PDP solo trae CLIENTE.
+- Q: Rol -> A: `POST /notifications` admite CLIENTE, ADMINISTRADOR_APLICACION y ADMINISTRADOR_PLATAFORMA (B2). Precondicion: los roles llegan por B2 (spec 039); hoy la sesion del PDP solo trae CLIENTE.
 - Q: Propiedad de campos (2026-10-25) -> A: D3 es duena de `templateId`, `templateValues`, `event` y de la referencia guardada (P1 aprobado). F1 solo anade `recipientIdentityId`.
 - Q: `event` (D4) -> A: objeto libre opcional, solo junto a `templateId`. D3 invoca `ResolveTemplateValuesUseCase` de D4 antes de renderizar; un valor explicito en `templateValues` gana sobre el mapeado ([FR-013](#requirements)). D4 (parte `event`) se integra antes que D3.
 - Q: Renderizador unico -> A: un solo `RenderTemplateUseCase` (con bloques de D7); nada fuera llama a `TemplateEngine.render` ([FR-014](#requirements)); `NoDirectTemplateRenderTest` la crea D2. Orden: D2, D7, D4 (event), D3, D5.
@@ -112,7 +112,7 @@ El DEV envia `channelType`, destinatario, `templateId` y `templateValues`; el se
 - **FR-013**: `SendNotificationRequest` MUST aceptar `event` (objeto libre, solo con `templateId`). Los valores mapeados por D4 se combinan con `templateValues` y el explicito gana. El mapeo se memoiza por lote.
 - **FR-014**: El render MUST hacerse solo con `RenderTemplateUseCase`; una prueba de arquitectura prohibe `TemplateEngine.render` fuera de ese servicio. Plantilla y bloques se cachean por lote.
 - **FR-015**: Con canal WHATSAPP, un envio por `templateId` MUST exigir vinculo publicado de D5 en el despacho (fallo permanente si falta); la aceptacion no lo rechaza. Punto de extension: `ProviderTemplateLinkPort`; la integracion es de D5.
-- **FR-016**: Una plantilla de categoria SEGURIDAD MUST enviarse solo con ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA; otro rol responde 403. `POST /notifications` admite CLIENTE y ADMINISTRADOR_APLICACION.
+- **FR-016**: Una plantilla de categoria SEGURIDAD MUST enviarse solo con ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA; otro rol responde 403 `INSUFFICIENT_ROLE` (NTF-2002).
 
 ### Key Entities
 

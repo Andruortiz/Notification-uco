@@ -34,14 +34,16 @@ impacto, II sin rutas nuevas, III sin comentarios, IV E2E, VII excepciones en la
 - `ErrorCodeE2ETest`: `GET /notifications` sin credencial da 401 con `code` NTF-2001 y `correlationId` en cuerpo y log.
 - `LogCorrelationE2ETest`: `GET /notifications/detail` sin credencial da 401 con cabecera `X-Correlation-Id`.
 - `AuthenticationSecurityE2ETest`: token sin `exp` da 401.
-- Brecha real: `code` y cabecera en el 401 del stream y en el 401 por sesion revocada; Bearer caducado sin prueba; `WWW-Authenticate`
-  sin prueba (no aparece en `infrastructure/src`, el servicio hoy no la emite).
+- Brecha real: `code` y cabecera en el 401 del stream. El 401 por sesion revocada en `GET /notifications` solo tiene aserción de
+  estado (`SessionCookieE2ETest`); no se añade prueba para él y queda como límite conocido. Bearer caducado sin prueba;
+  `WWW-Authenticate` sin prueba (no aparece en `infrastructure/src`, el servicio hoy no la emite).
 
 ## Trabajo previsto (para tasks, tras aprobacion)
 
 - `SessionExpiryContractE2ETest` (unico codigo de prueba nuevo; `@SpringBootTest` RANDOM_PORT, Mongo y RabbitMQ, `WebTestClient`),
-  dos metodos: (a) stream con cookie revocada: 401, `code` NTF-2001, `X-Correlation-Id`, sin `WWW-Authenticate`; (b)
-  `GET /notifications` con cookie revocada: las mismas tres comprobaciones.
+  un metodo: stream con cookie revocada: 401, `code` NTF-2001, `X-Correlation-Id`, sin `WWW-Authenticate`. Se descarta el
+  caso `GET /notifications` con cookie revocada: `SessionCookieE2ETest` ya cubre ese 401 (solo estado) y `ErrorCodeE2ETest` cubre
+  el `code` del 401 en esa misma ruta sin credencial; la unica brecha de `code` es el stream.
 - Entregar `contracts/host-mfe-session.md` al front.
 - Correccion de produccion solo si la prueba revela una brecha (p. ej. el stream no devuelve `code` en el cuerpo); se reportaria
   como bug.

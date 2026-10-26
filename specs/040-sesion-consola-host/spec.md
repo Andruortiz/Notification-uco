@@ -42,8 +42,8 @@ servicio debe garantizar.
 
 La consola necesita distinguir "sesion caducada" de otros errores para avisar al host.
 
-**Independent Test**: `SessionExpiryContractE2ETest`: el stream y `GET /notifications` con cookie revocada responden 401 con
-`code` estable (`NTF-2001`), `X-Correlation-Id` y sin `WWW-Authenticate`. Lo demas del 401 ya tiene pruebas (plan.md).
+**Independent Test**: `SessionExpiryContractE2ETest`: el stream con cookie revocada responde 401 con `code` estable
+(`NTF-2001`), `X-Correlation-Id` y sin `WWW-Authenticate`. Lo demas del 401 ya tiene pruebas (plan.md).
 
 ### User Story 2 - La consola del host llama con credenciales (P1)
 

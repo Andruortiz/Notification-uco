@@ -6,7 +6,7 @@
 
 **Status**: Pendiente de aprobacion
 
-**Depende de**: D1 (spec 035, plantillas con variables) y B2 (spec 039, roles por `x-allowed-roles`). Orden de la cadena: D2, D7, D4 (event), D3, D5. D3 (spec 043, envio por `templateId`) depende del puerto `ResolveTemplateValuesUseCase` de esta historia ya integrado; D3 declara `event` y `templateValues`.
+**Depende de**: D1 (spec 035, plantillas con variables) y B2 (spec 039, roles por `x-allowed-roles`). Orden de la cadena: D2, D7, D4 (event), D3, D5. D3 (spec 043) depende del puerto `ResolveTemplateValuesUseCase` ya integrado.
 
 ## Contexto
 
@@ -123,7 +123,7 @@ Un tenant no lee, escribe ni resuelve mapeos de plantillas de otro. El tenant sa
 - **FR-003**: El guardado MUST rechazar: variable no declarada en la plantilla (`UNKNOWN_MAPPING_VARIABLE`), ruta invalida
   (`INVALID_MAPPING_PATH`), duplicados o conteos excedidos (`MAPPING_LIMIT_EXCEEDED`), plantilla archivada (409 `TEMPLATE_ARCHIVED`).
 - **FR-004**: La resolucion MUST producir, por mapeo, el texto de la ruta si es un escalar presente; si no, el defecto; si tampoco hay, omitir la variable.
-- **FR-005**: La resolucion MUST ser pura y solo producir el mapa; el render y la validacion de faltantes siguen en D1. Ignora mapeos de variables que la plantilla ya no declara. D4 no consume `RenderTemplateUseCase` ni `ResolvedTemplate`, y no figura entre sus consumidores.
+- **FR-005**: La resolucion MUST ser pura y solo producir el mapa; el render y la validacion de faltantes siguen en D1. Ignora mapeos de variables que la plantilla ya no declara. D4 no consume `ResolvedTemplate` ni el render.
 - **FR-006**: El evento MUST respetar 32768 caracteres serializados y profundidad 10 (`EVENT_LIMIT_EXCEEDED`); el valor resuelto, 2000 caracteres.
 - **FR-007**: El guardado MUST usar control optimista por `version`; leer devuelve el mapeo y su `version` (vacio con `version=0` si no existe).
 - **FR-008**: El tenant MUST salir de la sesion; toda lectura y escritura MUST filtrar por el y por `templateId`.

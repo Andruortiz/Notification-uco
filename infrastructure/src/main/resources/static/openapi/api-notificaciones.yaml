@@ -6,21 +6,21 @@ info:
     toda ruta es literal, sin `:` ni `{}`, para que el PDP la registre como recurso protegido por
     igualdad exacta de método y ruta. Los identificadores de recurso viajan en la query string
     (consultas) o en el cuerpo (comandos). Cada operación declara `x-status` (`available` si el
-    servicio la sirve, `planned` si solo está documentada) y `x-minimum-role` (rol mínimo: `CLIENTE`,
-    `OPERADOR` o `ADMINISTRADOR`, jerárquico). CU-03 (despachar) no
+    servicio la sirve, `planned` si solo está documentada) y `x-allowed-roles` (lista de roles permitidos por operación;
+    sin orden entre ellos; el permiso efectivo es la unión de los roles del solicitante). CU-03 (despachar) no
     tiene endpoint propio -- es un proceso interno disparado por el consumidor de RabbitMQ, nunca
     invocado directamente por un cliente. Autenticación (HU2-096): toda operación exige
     `Authorization: Bearer <JWT>` -- un token firmado por la plataforma de Seguridad y validado con su
-    clave pública, con las claims `sub`, `tenantId`, `role` (`ADMINISTRADOR`, `OPERADOR` o `CLIENTE`,
-    jerárquico) y `exp`, y una claim de cliente opcional. El tenant y el rol del solicitante salen
+    clave pública, con las claims `sub`, `tenantId`, `role` (texto o lista de los roles `ADMINISTRADOR_PLATAFORMA`, `ADMINISTRADOR_APLICACION`,
+    `EDITOR_PLANTILLAS`, `OPERADOR`, `AUDITOR` y `CLIENTE`; los desconocidos se ignoran) y `exp`, y una claim de cliente opcional. El tenant y el rol del solicitante salen
     siempre del token, nunca de un encabezado (`X-Tenant-Id` no se acepta). Una claim obligatoria
     ausente responde 401 con NTF-2004; el resto de rechazos, 401 con NTF-2001. Con el PEP activo, la credencial puede ser también la
     cookie de sesión `SECURITY_BASELINE_SESSION` (HU2-101): el servicio resuelve tenant y usuario
     consultando la sesión a la plataforma de Seguridad, el rol efectivo es CLIENTE y el Bearer tiene
     precedencia sobre la cookie. El PEP puede responder 401, 403 o 503 con `PepErrorResponse` y la
     cabecera `X-Decision-Id`; si la plataforma de sesiones no responde, el servicio responde 503 con
-    `ErrorResponse` (NTF-2003). GET /configuration (HU2-073) exige como mínimo
-    el rol ADMINISTRADOR.
+    `ErrorResponse` (NTF-2003). GET /configuration (HU2-073) exige
+    el rol ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
 
     Registro de cambios 2.0.0 (incompatible con 1.0.0, corte directo sin alias ni prefijo /v2):
 
@@ -37,7 +37,7 @@ info:
     `NotificationHistoryItem` y `DeliveryAttempt` declaran `required`.
     7. Se añade el esquema de seguridad `SessionCookie` y las respuestas 401, 403 y 503 del PEP con
     `X-Decision-Id`.
-    8. Cada operación declara `x-status` y `x-minimum-role`.
+    8. Cada operación declara `x-status` y `x-allowed-roles`.
     9. HU2-111, incompatible: se retira `POST /notifications/stream/tickets` y el parámetro `ticket`
     de `GET /notifications/stream`. El stream se autentica con Bearer o con la cookie de sesión.
     10. HU2-103: se declaran en `x-public-routes` las rutas de documentación que no exigen credencial
@@ -67,6 +67,17 @@ info:
     4. `POST /template-renders` limita `values` a 50 variables de hasta 2000 caracteres.
     5. Límites conocidos documentados: un reenvío con adjuntos responde 400; `GET /provider-health`
     puede mostrar UNKNOWN o no listar un proveedor cuyo breaker de conmutación está abierto.
+
+    Registro de cambios 2.2.0 (autorización no lineal por roles, HU2-123; rutas sin cambios):
+
+    1. `x-minimum-role` (rol mínimo jerárquico) se sustituye por `x-allowed-roles` (lista de roles permitidos) en las 33
+    operaciones. El permiso efectivo de un solicitante es la unión de sus roles.
+    2. `role` (`ADMINISTRADOR`, `OPERADOR`, `CLIENTE`) se sustituye por seis roles sin orden: `ADMINISTRADOR_PLATAFORMA`,
+    `ADMINISTRADOR_APLICACION`, `EDITOR_PLANTILLAS`, `OPERADOR`, `AUDITOR` y `CLIENTE`. Un token cuyo `role` solo trae
+    valores desconocidos, como `ADMINISTRADOR`, responde 401 con NTF-2004.
+    3. El claim `role` acepta un texto o una lista; los valores desconocidos se ignoran.
+    4. Una operación que no admite ninguno de los roles del solicitante responde 403 con NTF-2002 (sin PEP) o con el
+    rechazo del PEP.
 
     Tabla de migración (método y ruta v1 a método y ruta v2):
 
@@ -99,7 +110,7 @@ info:
     | (nuevo, HU2-119) | POST /template-archivals, POST /template-variable-detections, POST /template-renders (available) |
     | (nuevo, HU2-120) | POST /devices, GET /devices, POST /device-removals, POST /device-erasures (available) |
     | (nuevo, HU2-121) | GET /provider-health (available) |
-  version: 2.1.0
+  version: 2.2.0
 servers:
   - url: /
     description: >
@@ -162,11 +173,11 @@ tags:
   - name: Configuración
     description: >
       CU-11 (lectura). GET /configuration expone los parámetros gestionables y la configuración en uso;
-      exige el rol ADMINISTRADOR.
+      exige el rol ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
   - name: Dispositivos
     description: >
       HU2-120. Registro de dispositivos push por identidad de destinatario. Los tokens se almacenan
-      cifrados y se devuelven enmascarados salvo para ADMINISTRADOR.
+      cifrados y se devuelven enmascarados salvo para ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
   - name: Plantillas
     description: >
       HU2-119. Plantillas con variables {{nombre}} por canal e idioma, propias de cada tenant.
@@ -185,7 +196,7 @@ paths:
         misma notificación en vez de crear una segunda (idempotencia).
       operationId: sendNotification
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -272,10 +283,10 @@ paths:
       description: >
         CU-05. Busca notificaciones por filtros combinables. Cada resultado incluye su recorrido
         completo de intentos, no solo el estado actual (a diferencia de GET /notifications/detail, que
-        solo exige rol CLIENTE). Requiere rol OPERADOR o ADMINISTRADOR.
+        solo exige rol CLIENTE). Requiere rol OPERADOR, ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
       operationId: searchNotifications
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - name: recipientId
           in: query
@@ -363,7 +374,7 @@ paths:
         sesión inválida, responde 401; si la plataforma de sesiones no responde, 503.
       operationId: subscribeToNotificationUpdates
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - name: recipientId
           in: query
@@ -444,7 +455,7 @@ paths:
         procesar los elementos (la deduplicación por externalId evita duplicar notificaciones).
       operationId: sendNotificationBatch
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -494,7 +505,7 @@ paths:
       description: CU-04. Devuelve el estado actual, canal, proveedor y marca de tiempo del último intento.
       operationId: getNotificationStatus
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - $ref: '#/components/parameters/NotificationId'
       responses:
@@ -544,11 +555,11 @@ paths:
       description: >
         CU-06. Solo válido si el estado actual es FAILED o RECOVERABLE. Reencola la notificación y
         registra el reintento como manual (distinto del automático) para efectos de auditoría.
-        Requiere rol OPERADOR o ADMINISTRADOR. No reinicia el contador de intentos. 400 con NTF-3022 si el estado actual no admite
+        Requiere rol OPERADOR o ADMINISTRADOR_PLATAFORMA. No reinicia el contador de intentos. 400 con NTF-3022 si el estado actual no admite
         reintento; 409 si otro proceso (manual o automático) ganó la carrera sobre la misma notificación.
       operationId: retryNotification
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -617,7 +628,7 @@ paths:
         respuesta.
       operationId: issueAttachmentUpload
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       requestBody:
         required: true
         content:
@@ -688,7 +699,7 @@ paths:
         estado vigente sin volver a analizar. Si la subida ya venció, responde 409 y pasa a FAILED.
       operationId: completeAttachmentUpload
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       requestBody:
         required: true
         content:
@@ -773,7 +784,7 @@ paths:
       summary: Consultar el estado de una subida
       operationId: getAttachmentUpload
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       parameters:
         - $ref: '#/components/parameters/UploadId'
       responses:
@@ -828,7 +839,7 @@ paths:
         credencial.
       operationId: listChannels
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, AUDITOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       responses:
         '200':
           headers:
@@ -849,13 +860,13 @@ paths:
       tags: [Catálogo]
       summary: Registrar o actualizar un canal
       description: >
-        CU-07. Requiere permiso de ADMINISTRADOR. Da de alta el canal en el catálogo, sin
+        CU-07. Requiere rol ADMINISTRADOR_PLATAFORMA. Da de alta el canal en el catálogo, sin
         desplegar código (RF-19). Si el canal ya existe, esta misma operación lo actualiza.
         Bloqueado: el catálogo dinámico ya existe, pero su escritura por API aún no está
         habilitada.
       operationId: registerChannel
       x-status: planned
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -900,7 +911,7 @@ paths:
         valor de una credencial.
       operationId: listProviders
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, AUDITOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       responses:
         '200':
           headers:
@@ -921,13 +932,13 @@ paths:
       tags: [Catálogo]
       summary: Registrar un proveedor para uno o más canales
       description: >
-        CU-08. Requiere permiso de ADMINISTRADOR y que el adaptador del proveedor ya exista en el
+        CU-08. Requiere rol ADMINISTRADOR_PLATAFORMA y que el adaptador del proveedor ya exista en el
         código (no puede registrarse un providerId sin adaptador). Si falta una credencial
         requerida, el proveedor queda registrado pero deshabilitado -- nunca a medias en silencio.
         Bloqueado hasta que exista el catálogo dinámico (Fase 6).
       operationId: registerProvider
       x-status: planned
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -968,13 +979,13 @@ paths:
       tags: [Configuración]
       summary: Consultar los parámetros gestionables y la configuración en uso
       description: >
-        CU-11 (lectura). Requiere permiso de ADMINISTRADOR. Devuelve el registro de parámetros que el
+        CU-11 (lectura). Requiere rol ADMINISTRADOR_PLATAFORMA. Devuelve el registro de parámetros que el
         servicio permite gestionar y, para la réplica que responde, la versión de la configuración en uso,
         su origen y las claves aceptadas que esperan un reinicio. Ningún campo contiene credenciales,
         topología de colas ni direcciones base.
       operationId: getConfiguration
       x-status: available
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       responses:
         '200':
           headers:
@@ -1004,11 +1015,11 @@ paths:
         Un destinatario que nunca declaró preferencias no es un error: se devuelve el valor por
         defecto (optedOutAll false, acceptedChannels vacía -- todos los canales aceptados -- y
         updatedAt nulo). Las preferencias de un tenant nunca son visibles desde otro, aunque usen el
-        mismo recipientId. Requiere rol CLIENTE o superior. Planificada: sin controlador REST todavía
+        mismo recipientId. Requiere rol CLIENTE o ADMINISTRADOR_APLICACION. Planificada: sin controlador REST todavía
         (el mapeo de rol queda documentado para cuando exista).
       operationId: getRecipientPreferences
       x-status: planned
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       responses:
         '200':
           headers:
@@ -1035,11 +1046,11 @@ paths:
         reintentos --, una notificación de ese destinatario termina en DISCARDED sin contactar a
         ningún proveedor si está dado de baja o si su canal no está entre los aceptados. La aceptación
         de notificaciones no cambia, y las notificaciones ya terminales no se modifican. Requiere rol
-        CLIENTE o superior. Planificada: sin controlador REST todavía (el mapeo de rol queda
+        CLIENTE o ADMINISTRADOR_APLICACION. Planificada: sin controlador REST todavía (el mapeo de rol queda
         documentado para cuando exista).
       operationId: updateRecipientPreferences
       x-status: planned
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       requestBody:
         required: true
         content:
@@ -1084,11 +1095,11 @@ paths:
       description: >
         HU2-118. Devuelve la cabecera de la notificación y sus intentos de entrega ordenados por fecha,
         con latencia, causa del fallo (conjunto cerrado, nunca texto del proveedor) y correlationId.
-        El destinatario sale enmascarado salvo para ADMINISTRADOR. El tenant sale de la sesión.
+        El destinatario sale enmascarado salvo para ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION. El tenant sale de la sesión.
         Un identificador inexistente o de otro tenant responde 404.
       operationId: getNotificationTimeline
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - $ref: '#/components/parameters/NotificationId'
       responses:
@@ -1125,14 +1136,14 @@ paths:
         HU2-117. Solo válido si la notificación original está en FAILED. Crea una notificación nueva
         por el canal indicado, con un externalId derivado de máximo 255 caracteres, y no modifica la
         original. La dirección recibida es dato personal: no se devuelve ni se registra. Requiere
-        rol OPERADOR o ADMINISTRADOR. Límite conocido: una notificación original con adjuntos no se
+        rol OPERADOR o ADMINISTRADOR_PLATAFORMA. Límite conocido: una notificación original con adjuntos no se
         reenvía y responde 400 con NTF-3070 (RESEND_CHANNEL_INVALID); lo mismo ocurre si el canal nuevo
         es el original o el externalId derivado supera el máximo. Un canal no disponible responde
         400 con NTF-1003 y una dirección con formato inválido para el canal, 400 con NTF-1006. Si
         el estado original no es FAILED, 400 con NTF-3022 (NOTIFICATION_STATE_NOT_ALLOWED).
       operationId: resendNotification
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1175,10 +1186,10 @@ paths:
         HU2-114. Ejecuta una sonda contra el proveedor del canal indicado sin crear notificaciones.
         Responde 200 también cuando la prueba falla (status FAILED con un errorCode cerrado); nunca
         devuelve credenciales ni texto crudo del proveedor. Solo una prueba en vuelo por par (canal,
-        proveedor) y por réplica; la segunda recibe 429. Requiere rol ADMINISTRADOR.
+        proveedor) y por réplica; la segunda recibe 429. Requiere rol ADMINISTRADOR_PLATAFORMA.
       operationId: testProviderConnection
       x-status: available
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1231,7 +1242,7 @@ paths:
         no responde, 503 con NTF-5000; el cuerpo nunca incluye su dirección.
       operationId: getProviderHealth
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       responses:
         '200':
           headers:
@@ -1274,10 +1285,10 @@ paths:
       summary: Consultar si una dirección está marcada como no entregable
       description: >
         HU2-116. Consulta sin efectos; es POST para que la dirección no viaje en la URL. La dirección
-        sale enmascarada. Requiere rol OPERADOR o ADMINISTRADOR.
+        sale enmascarada. Requiere rol OPERADOR o ADMINISTRADOR_PLATAFORMA.
       operationId: lookupUndeliverableRecipient
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1314,10 +1325,10 @@ paths:
       summary: Levantar la marca de no entregable de una dirección
       description: >
         HU2-116. Permite volver a enviar a la dirección. Idempotente: levantar una marca inexistente
-        responde 204. Requiere rol ADMINISTRADOR.
+        responde 204. Requiere rol ADMINISTRADOR_PLATAFORMA.
       operationId: releaseUndeliverableRecipient
       x-status: available
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1349,14 +1360,14 @@ paths:
       tags: [Dispositivos]
       summary: Registrar un dispositivo push
       description: >
-        HU2-120. Asocia un token de dispositivo a la identidad de la sesión. CLIENTE y OPERADOR operan
-        solo sobre su propia identidad (un subject ajeno responde 403); ADMINISTRADOR puede indicar
-        subject. Registrar un token ya existente en el tenant lo deja asociado a la sesión y la
+        HU2-120. Asocia un token de dispositivo a la identidad de la sesión. CLIENTE opera
+        solo sobre su propia identidad; la lista de roles de esta operación no incluye administradores, así que un subject ajeno
+        responde 403 hasta que Seguridad habilite roles por sesión. Registrar un token ya existente en el tenant lo deja asociado a la sesión y la
         respuesta no revela si era de otra identidad: 201 si se creó, 200 si ya existía para la sesión.
         Nunca responde 409. El token se almacena cifrado.
       operationId: registerDevice
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE]
       requestBody:
         required: true
         content:
@@ -1397,15 +1408,15 @@ paths:
       summary: Listar los dispositivos registrados
       description: >
         HU2-120. Lista los dispositivos de la identidad de la sesión con el token enmascarado
-        (**** y los últimos 4 caracteres). ADMINISTRADOR puede indicar subject y ve el token completo.
+        (**** y los últimos 4 caracteres). Un subject distinto del de la sesión responde 403 con la lista de roles actual.
       operationId: listDevices
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE]
       parameters:
         - name: subject
           in: query
           required: false
-          description: Sujeto cuyos dispositivos se listan. Solo ADMINISTRADOR; otros roles reciben 403.
+          description: Sujeto cuyos dispositivos se listan. Hoy solo el sujeto de la sesión; un valor distinto responde 403.
           schema:
             type: string
       responses:
@@ -1441,7 +1452,7 @@ paths:
         (NTF-3041), sin revelar su existencia.
       operationId: removeDevice
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE]
       requestBody:
         required: true
         content:
@@ -1476,10 +1487,10 @@ paths:
       summary: Borrar los dispositivos de un titular
       description: >
         HU2-120. Borra la identidad del subject y todos sus dispositivos en el tenant. Responde 204
-        también si no existían. Requiere rol ADMINISTRADOR.
+        también si no existían. Requiere rol ADMINISTRADOR_PLATAFORMA.
       operationId: eraseRecipientDevices
       x-status: available
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1513,10 +1524,10 @@ paths:
       description: >
         HU2-119. Crea una plantilla con variables {{nombre}} detectadas en asunto y cuerpo; lo no
         declarado es obligatorio. Única por (tenant, key, channel, language). El canal debe tener ruta
-        activa para el tenant. Requiere rol OPERADOR o ADMINISTRADOR.
+        activa para el tenant. Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
       operationId: createTemplate
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1550,11 +1561,11 @@ paths:
       summary: Actualizar una plantilla
       description: >
         HU2-119. Control optimista: version debe coincidir con la vigente; si no, 409 con
-        NTF-3052. Una plantilla archivada no se actualiza (NTF-3053). Requiere rol OPERADOR o
-        ADMINISTRADOR.
+        NTF-3052. Una plantilla archivada no se actualiza (NTF-3053). Requiere rol EDITOR_PLANTILLAS o
+        ADMINISTRADOR_PLATAFORMA.
       operationId: updateTemplate
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1591,7 +1602,7 @@ paths:
       description: HU2-119. Lista las plantillas del tenant con filtros combinables y paginación.
       operationId: listTemplates
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - name: category
           in: query
@@ -1657,7 +1668,7 @@ paths:
       description: HU2-119. Una plantilla ajena o inexistente responde 404.
       operationId: getTemplate
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - $ref: '#/components/parameters/TemplateId'
       responses:
@@ -1692,10 +1703,10 @@ paths:
       summary: Archivar una plantilla
       description: >
         HU2-119. La plantilla sigue visible en el listado con estado ARCHIVADA y deja de poder
-        renderizarse. Requiere rol OPERADOR o ADMINISTRADOR.
+        renderizarse. Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
       operationId: archiveTemplate
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1734,10 +1745,10 @@ paths:
       summary: Detectar las variables de un texto
       description: >
         HU2-119. Devuelve las variables {{nombre}} del asunto y del cuerpo, sin duplicados y en orden
-        de aparición, sin guardar nada. Requiere rol OPERADOR o ADMINISTRADOR.
+        de aparición, sin guardar nada. Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
       operationId: detectTemplateVariables
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1778,7 +1789,7 @@ paths:
         obligatoria responde 422 con la lista completa en missingVariables.
       operationId: renderTemplate
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1840,7 +1851,7 @@ components:
       bearerFormat: JWT
       description: >
         JWT firmado por la plataforma de Seguridad y validado con su clave pública. Claims esperadas:
-        sub (sujeto), tenantId, role (ADMINISTRADOR, OPERADOR o CLIENTE) y exp; la claim del cliente
+        sub (sujeto), tenantId, role (lista de roles de los seis conocidos) y exp; la claim del cliente
         de plataforma (azp por defecto) es opcional. El tenant y el rol salen siempre del token: no se
         acepta el encabezado X-Tenant-Id ni ningún otro mecanismo de identidad. Una claim obligatoria
         ausente responde 401 con NTF-2004; cualquier otro rechazo, 401 con NTF-2001.
@@ -1864,7 +1875,7 @@ components:
       description: >
         Sin credencial, credencial mal formada, firma inválida, emisor o audiencia incorrectos, o
         expirada: ErrorResponse con NTF-2001. Con alguna claim obligatoria (sub, tenantId, role, exp)
-        ausente o con role fuera de ADMINISTRADOR/OPERADOR/CLIENTE: ErrorResponse con NTF-2004.
+        ausente o con role fuera de uno de los seis roles conocidos: ErrorResponse con NTF-2004.
         También cuando la cookie de sesión es inválida, expirada o revocada (NTF-2001). Con el PEP
         activo puede responder PepErrorResponse con code TOKEN_INVALID. El cuerpo nunca detalla la
         causa criptográfica exacta del rechazo ni incluye valores del token.
@@ -1882,7 +1893,7 @@ components:
         X-Decision-Id:
           $ref: '#/components/headers/DecisionId'
       description: >
-        Credencial válida, pero el rol no alcanza el mínimo requerido por esta operación. Con el modo
+        Credencial válida, pero ninguno de sus roles está en la lista permitida de esta operación. Con el modo
         interino responde ErrorResponse (NTF-2002); con el PEP activo responde PepErrorResponse con
         code ACCESS_DENIED.
       content:
@@ -2786,7 +2797,7 @@ components:
           type: string
         recipient:
           type: string
-          description: Destinatario enmascarado, salvo para ADMINISTRADOR.
+          description: Destinatario enmascarado, salvo para ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
         correlationId:
           type: [string, 'null']
           maxLength: 64
@@ -2995,7 +3006,7 @@ components:
           description: Token del dispositivo emitido por el proveedor de push. Se almacena cifrado.
         subject:
           type: string
-          description: Solo ADMINISTRADOR. Con otros roles, un valor distinto del sujeto de la sesión responde 403.
+          description: Hoy solo el sujeto de la sesión; un valor distinto responde 403.
 
     DevicePlatform:
       type: string
@@ -3015,7 +3026,7 @@ components:
           $ref: '#/components/schemas/DevicePlatform'
         token:
           type: string
-          description: Enmascarado (**** y los últimos 4 caracteres), salvo para ADMINISTRADOR.
+          description: Enmascarado (**** y los últimos 4 caracteres), salvo para ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
         originComponent:
           type: string
           description: Sujeto de la sesión que registró el dispositivo.

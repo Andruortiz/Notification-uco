@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 
@@ -13,30 +15,40 @@ class RouteAuthorizationPolicyContractTest {
   private final RouteAuthorizationPolicy policy = new RouteAuthorizationPolicy();
 
   @Test
-  void theInterimPolicyReturnsTheMinimumRoleDeclaredInTheContractForEveryOperation() {
+  void theInterimPolicyReturnsTheAllowedRolesDeclaredInTheContractForEveryOperation() {
     assertTrue(ApiContract.operations().size() >= 33);
-    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.GET, "/provider-health"));
+    assertEquals(
+        Set.of(Role.OPERADOR, Role.ADMINISTRADOR_APLICACION, Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.GET, "/provider-health"));
     ApiContract.operations()
         .forEach(
             operation ->
                 assertEquals(
-                    Role.valueOf(operation.minimumRole()),
-                    policy.minimumRoleFor(HttpMethod.valueOf(operation.method()), operation.path()),
+                    operation.allowedRoles().stream()
+                        .map(Role::valueOf)
+                        .collect(Collectors.toSet()),
+                    policy.allowedRolesFor(
+                        HttpMethod.valueOf(operation.method()), operation.path()),
                     operation.key()));
   }
 
   @Test
-  void anUndeclaredRouteRequiresAdministrator() {
-    assertEquals(Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.GET, "/undeclared"));
-    assertEquals(Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.DELETE, "/notifications"));
+  void anUndeclaredRouteRequiresOnlyThePlatformAdministrator() {
+    assertEquals(
+        Set.of(Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.GET, "/undeclared"));
+    assertEquals(
+        Set.of(Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.DELETE, "/notifications"));
   }
 
   @Test
   void aVersionOneRouteIsNoLongerRecognised() {
     assertEquals(
-        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.GET, "/notifications/abc-123"));
+        Set.of(Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.GET, "/notifications/abc-123"));
     assertEquals(
-        Role.ADMINISTRADOR,
-        policy.minimumRoleFor(HttpMethod.POST, "/attachment-uploads/u1:complete"));
+        Set.of(Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.POST, "/attachment-uploads/u1:complete"));
   }
 }

@@ -68,15 +68,21 @@ class ApiContractMatchesControllersTest {
   }
 
   @Test
-  void everyOperationDeclaresAStatusAndAMinimumRole() {
+  void everyOperationDeclaresAStatusAndAllowedRoles() {
     ApiContract.operations()
         .forEach(
             operation -> {
               assertTrue(
                   Set.of("available", "planned").contains(operation.status()), operation.key());
-              assertTrue(
-                  Set.of("CLIENTE", "OPERADOR", "ADMINISTRADOR").contains(operation.minimumRole()),
+              assertFalse(operation.allowedRoles().isEmpty(), operation.key());
+              assertEquals(
+                  operation.allowedRoles().size(),
+                  Set.copyOf(operation.allowedRoles()).size(),
                   operation.key());
+              operation
+                  .allowedRoles()
+                  .forEach(role -> assertTrue(ApiContract.ROLES.contains(role), role));
+              assertFalse(operation.definition().containsKey("x-minimum-role"), operation.key());
             });
   }
 

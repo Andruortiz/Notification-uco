@@ -31,9 +31,9 @@ class ChangelogContractTest {
   }
 
   @Test
-  void theContractVersionIsTwoPointOne() {
-    assertEquals("2.1.0", ApiContract.info().get("version"));
-    assertTrue(description().contains("Registro de cambios 2.1.0"));
+  void theContractVersionIsTwoPointTwo() {
+    assertEquals("2.2.0", ApiContract.info().get("version"));
+    assertTrue(description().contains("Registro de cambios 2.2.0"));
   }
 
   @Test

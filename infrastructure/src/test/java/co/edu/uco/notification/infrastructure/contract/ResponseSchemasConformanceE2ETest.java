@@ -4,20 +4,128 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.Role;
+import co.edu.uco.notification.infrastructure.support.ControllableProvider;
+import co.edu.uco.notification.infrastructure.support.FailoverClient;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
+import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Bean;
 import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
 
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = {
+      "MONGO_USERNAME=test",
+      "MONGO_PASSWORD=test",
+      "notification.catalog.refresh-interval-ms=500",
+      "notification.catalog.channels.EMAIL.providers[0]=conf-email",
+      "notification.catalog.channels.SMS.providers[0]=conf-sms",
+      "notification.scheduler.requeue-interval-ms=600000"
+    })
 class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
+
+  private static final String PHONE = "+573001234567";
+  private static final HttpServer PROMETHEUS = startPrometheus();
+
+  @TestConfiguration
+  static class ConformanceProviders {
+
+    @Bean
+    ControllableProvider confEmail() {
+      final ControllableProvider provider = new ControllableProvider("conf-email");
+      provider.respondWith(AttemptResult.PERMANENT_FAILURE);
+      return provider;
+    }
+
+    @Bean
+    ControllableProvider confSms() {
+      final ControllableProvider provider = new ControllableProvider("conf-sms");
+      provider.respondWith(AttemptResult.ACCEPTED);
+      return provider;
+    }
+  }
+
+  @DynamicPropertySource
+  static void prometheusUrl(final DynamicPropertyRegistry registry) {
+    registry.add(
+        "provider-health.prometheus-url",
+        () -> "http://localhost:" + PROMETHEUS.getAddress().getPort());
+  }
+
+  @AfterAll
+  static void stopPrometheus() {
+    PROMETHEUS.stop(0);
+  }
+
+  private static HttpServer startPrometheus() {
+    try {
+      final long now = Instant.now().getEpochSecond();
+      final HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+      server.createContext(
+          "/api/v1/",
+          exchange -> {
+            final String path = exchange.getRequestURI().getPath();
+            final String query = exchange.getRequestURI().getQuery();
+            final String body;
+            if (path.endsWith("query_range")) {
+              body =
+                  "{\"status\":\"success\",\"data\":{\"resultType\":\"matrix\",\"result\":["
+                      + "{\"metric\":{\"provider\":\"brevo\",\"channel\":\"EMAIL\","
+                      + "\"result\":\"recoverable\"},\"values\":[["
+                      + (now - 120)
+                      + ",\"0\"],["
+                      + (now - 60)
+                      + ",\"1.5\"]]}]}}";
+            } else if (query.contains("histogram_quantile")) {
+              body =
+                  "{\"status\":\"success\",\"data\":{\"resultType\":\"vector\",\"result\":["
+                      + "{\"metric\":{\"provider\":\"brevo\"},\"value\":["
+                      + now
+                      + ",\"0.25\"]}]}}";
+            } else {
+              body =
+                  "{\"status\":\"success\",\"data\":{\"resultType\":\"vector\",\"result\":["
+                      + "{\"metric\":{\"provider\":\"brevo\",\"channel\":\"EMAIL\","
+                      + "\"result\":\"delivered\"},\"value\":["
+                      + now
+                      + ",\"90\"]},"
+                      + "{\"metric\":{\"provider\":\"brevo\",\"channel\":\"EMAIL\","
+                      + "\"result\":\"failed\"},\"value\":["
+                      + now
+                      + ",\"10\"]}]}}";
+            }
+            final byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.getResponseBody().write(bytes);
+            exchange.close();
+          });
+      server.start();
+      return server;
+    } catch (IOException e) {
+      throw new IllegalStateException(e);
+    }
+  }
 
   private final Set<String> covered = new TreeSet<>();
   private final List<String> violations = new ArrayList<>();
@@ -191,6 +299,8 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
     final Object notFound = body(detail(TENANT_B, id).expectStatus().isNotFound());
     assertEquals(List.of(), SchemaConformance.violations(notFound, "ErrorResponse"));
 
+    exerciseNivelUnoOperations();
+
     assertEquals(List.of(), violations);
     final Set<String> available = new TreeSet<>();
     ApiContract.operations().stream()
@@ -199,5 +309,204 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
     available.remove("GET /notifications/stream");
     assertFalse(available.isEmpty());
     assertEquals(available, covered);
+  }
+
+  private WebTestClient.ResponseSpec call(
+      final HttpMethod method, final String uri, final Role role, final Object payload) {
+    final WebTestClient.RequestBodySpec request =
+        client
+            .method(method)
+            .uri(uri)
+            .header("Authorization", TestTokens.bearer(TENANT_A, role))
+            .contentType(MediaType.APPLICATION_JSON);
+    return (payload == null ? request : request.bodyValue(payload)).exchange();
+  }
+
+  private Map<?, ?> conformingMap(
+      final String operation, final WebTestClient.ResponseSpec response, final String schema) {
+    final Object result = body(response);
+    conforms(operation, result, schema);
+    return (Map<?, ?>) result;
+  }
+
+  private void exerciseNivelUnoOperations() {
+    final FailoverClient notifications = new FailoverClient(port);
+    final String failedId =
+        notifications.accept(TENANT_A, "v2-conf-failed", "EMAIL", "recipient-failed");
+    notifications.awaitStatus(TENANT_A, failedId, "FAILED");
+
+    conformingMap(
+        "GET /notifications/timeline",
+        call(
+                HttpMethod.GET,
+                "/notifications/timeline?notificationId=" + failedId,
+                Role.OPERADOR,
+                null)
+            .expectStatus()
+            .isOk(),
+        "NotificationTimelineResponse");
+    conformingMap(
+        "POST /notification-resends",
+        call(
+                HttpMethod.POST,
+                "/notification-resends",
+                Role.OPERADOR,
+                Map.of("notificationId", failedId, "channelType", "SMS", "recipient", PHONE))
+            .expectStatus()
+            .isAccepted(),
+        "NotificationStatusResponse");
+    conformingMap(
+        "POST /notification-retries",
+        call(
+                HttpMethod.POST,
+                "/notification-retries",
+                Role.OPERADOR,
+                Map.of("notificationId", failedId))
+            .expectStatus()
+            .isAccepted(),
+        "NotificationStatusResponse");
+    conformingMap(
+        "POST /provider-connection-tests",
+        call(
+                HttpMethod.POST,
+                "/provider-connection-tests",
+                Role.ADMINISTRADOR,
+                Map.of("channel", "EMAIL", "providerId", "conf-email"))
+            .expectStatus()
+            .isOk(),
+        "ProviderConnectionTestResponse");
+    conformingMap(
+        "GET /provider-health",
+        call(HttpMethod.GET, "/provider-health", Role.OPERADOR, null).expectStatus().isOk(),
+        "ProviderHealthResponse");
+
+    final Map<String, String> address = Map.of("channel", "EMAIL", "address", "alice@example.com");
+    conformingMap(
+        "POST /recipients/undeliverable-lookups",
+        call(HttpMethod.POST, "/recipients/undeliverable-lookups", Role.OPERADOR, address)
+            .expectStatus()
+            .isOk(),
+        "UndeliverableRecipientResponse");
+    call(HttpMethod.POST, "/recipients/undeliverable-releases", Role.ADMINISTRADOR, address)
+        .expectStatus()
+        .isNoContent();
+    covered.add("POST /recipients/undeliverable-releases");
+
+    final Map<?, ?> device =
+        conformingMap(
+            "POST /devices",
+            call(
+                    HttpMethod.POST,
+                    "/devices",
+                    Role.CLIENTE,
+                    Map.of("platform", "ANDROID", "token", "conf-device-token-0123456789"))
+                .expectStatus()
+                .isCreated(),
+            "DeviceResponse");
+    conformingMap(
+        "GET /devices",
+        call(HttpMethod.GET, "/devices", Role.CLIENTE, null).expectStatus().isOk(),
+        "DeviceListResponse");
+    call(
+            HttpMethod.POST,
+            "/device-removals",
+            Role.CLIENTE,
+            Map.of("deviceId", device.get("deviceId")))
+        .expectStatus()
+        .isNoContent();
+    covered.add("POST /device-removals");
+    call(HttpMethod.POST, "/device-erasures", Role.ADMINISTRADOR, Map.of("subject", "test-client"))
+        .expectStatus()
+        .isNoContent();
+    covered.add("POST /device-erasures");
+
+    final Map<?, ?> template =
+        conformingMap(
+            "POST /templates",
+            call(
+                    HttpMethod.POST,
+                    "/templates",
+                    Role.OPERADOR,
+                    Map.of(
+                        "key",
+                        "conf-template",
+                        "category",
+                        "ACADEMICO",
+                        "channel",
+                        "EMAIL",
+                        "language",
+                        "es",
+                        "subject",
+                        "Hola {{nombre}}",
+                        "body",
+                        "Hola {{nombre}} {{curso}}",
+                        "variables",
+                        List.of(
+                            Map.of("name", "nombre", "required", true),
+                            Map.of("name", "curso", "required", false))))
+                .expectStatus()
+                .isCreated(),
+            "TemplateResponse");
+    final String templateId = (String) template.get("templateId");
+    conformingMap(
+        "PUT /templates",
+        call(
+                HttpMethod.PUT,
+                "/templates",
+                Role.OPERADOR,
+                Map.of(
+                    "templateId",
+                    templateId,
+                    "version",
+                    template.get("version"),
+                    "category",
+                    "ACADEMICO",
+                    "subject",
+                    "Hola {{nombre}}",
+                    "body",
+                    "Hola {{nombre}} {{curso}}"))
+            .expectStatus()
+            .isOk(),
+        "TemplateResponse");
+    conformingMap(
+        "GET /templates",
+        call(HttpMethod.GET, "/templates?language=es", Role.CLIENTE, null).expectStatus().isOk(),
+        "TemplateListResponse");
+    conformingMap(
+        "GET /templates/detail",
+        call(HttpMethod.GET, "/templates/detail?templateId=" + templateId, Role.CLIENTE, null)
+            .expectStatus()
+            .isOk(),
+        "TemplateResponse");
+    conformingMap(
+        "POST /template-variable-detections",
+        call(
+                HttpMethod.POST,
+                "/template-variable-detections",
+                Role.OPERADOR,
+                Map.of("subject", "{{a}}", "body", "{{b}} {{a}}"))
+            .expectStatus()
+            .isOk(),
+        "DetectedTemplateVariablesResponse");
+    conformingMap(
+        "POST /template-renders",
+        call(
+                HttpMethod.POST,
+                "/template-renders",
+                Role.CLIENTE,
+                Map.of("templateId", templateId, "values", Map.of("nombre", "Ana", "curso", "X")))
+            .expectStatus()
+            .isOk(),
+        "RenderedTemplateResponse");
+    conformingMap(
+        "POST /template-archivals",
+        call(
+                HttpMethod.POST,
+                "/template-archivals",
+                Role.OPERADOR,
+                Map.of("templateId", templateId))
+            .expectStatus()
+            .isOk(),
+        "TemplateResponse");
   }
 }

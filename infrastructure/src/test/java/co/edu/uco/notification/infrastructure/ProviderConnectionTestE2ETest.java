@@ -130,7 +130,7 @@ class ProviderConnectionTestE2ETest {
 
   private Map<String, Object> admin(final String channel, final String providerId) {
     final EntityExchangeResult<Map<String, Object>> result =
-        post("tenant-1", Role.ADMINISTRADOR, channel, providerId)
+        post("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, channel, providerId)
             .expectStatus()
             .isOk()
             .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
@@ -184,7 +184,7 @@ class ProviderConnectionTestE2ETest {
 
     BREVO.nextResponse(401, "{\"message\":\"invalid key " + SENTINEL + "\"}");
     final EntityExchangeResult<String> rejected =
-        post("tenant-1", Role.ADMINISTRADOR, "EMAIL", "brevo")
+        post("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, "EMAIL", "brevo")
             .expectStatus()
             .isOk()
             .expectBody(String.class)
@@ -206,8 +206,10 @@ class ProviderConnectionTestE2ETest {
 
   @Test
   void aProviderOutsideTheChannelAndAnUnknownChannelAreBadRequests() {
-    post("tenant-1", Role.ADMINISTRADOR, "SMS", "brevo").expectStatus().isBadRequest();
-    post("tenant-1", Role.ADMINISTRADOR, "FAX", "simulated").expectStatus().isBadRequest();
+    post("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, "SMS", "brevo").expectStatus().isBadRequest();
+    post("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, "FAX", "simulated")
+        .expectStatus()
+        .isBadRequest();
   }
 
   @Test
@@ -231,7 +233,7 @@ class ProviderConnectionTestE2ETest {
         CompletableFuture.supplyAsync(() -> admin("EMAIL", "gated-probe"));
     awaitInvocations(gatedProbe.invocations() + 1);
 
-    post("tenant-1", Role.ADMINISTRADOR, "EMAIL", "gated-probe")
+    post("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, "EMAIL", "gated-probe")
         .expectStatus()
         .isEqualTo(429)
         .expectBody()
@@ -250,14 +252,14 @@ class ProviderConnectionTestE2ETest {
   @Test
   void twoTenantsGetTheSameResultAndNoNotificationIsCreated() {
     final Map<String, Object> first =
-        post("tenant-1", Role.ADMINISTRADOR, "PUSH", "simulated")
+        post("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, "PUSH", "simulated")
             .expectStatus()
             .isOk()
             .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
             .returnResult()
             .getResponseBody();
     final Map<String, Object> second =
-        post("tenant-2", Role.ADMINISTRADOR, "PUSH", "simulated")
+        post("tenant-2", Role.ADMINISTRADOR_PLATAFORMA, "PUSH", "simulated")
             .expectStatus()
             .isOk()
             .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
@@ -314,7 +316,7 @@ class ProviderConnectionTestE2ETest {
 
   private void awaitCatalog() {
     final Instant deadline = Instant.now().plusSeconds(30);
-    while (post("tenant-1", Role.ADMINISTRADOR, "EMAIL", "simulated")
+    while (post("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, "EMAIL", "simulated")
             .returnResult(String.class)
             .getStatus()
             .value()

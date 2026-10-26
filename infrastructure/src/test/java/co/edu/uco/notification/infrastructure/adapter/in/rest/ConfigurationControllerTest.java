@@ -63,7 +63,7 @@ class ConfigurationControllerTest {
     webTestClient
         .get()
         .uri("/configuration")
-        .header("Authorization", TestTokens.bearer("tenant-1", Role.ADMINISTRADOR))
+        .header("Authorization", TestTokens.bearer("tenant-1", Role.ADMINISTRADOR_PLATAFORMA))
         .exchange()
         .expectStatus()
         .isOk()

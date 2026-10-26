@@ -190,7 +190,8 @@ class AuthenticationInterinaE2ETest {
     webTestClient
         .get()
         .uri("/notifications")
-        .header("Authorization", TestTokens.bearer("tenant-role-check", Role.ADMINISTRADOR))
+        .header(
+            "Authorization", TestTokens.bearer("tenant-role-check", Role.ADMINISTRADOR_PLATAFORMA))
         .exchange()
         .expectStatus()
         .isOk();

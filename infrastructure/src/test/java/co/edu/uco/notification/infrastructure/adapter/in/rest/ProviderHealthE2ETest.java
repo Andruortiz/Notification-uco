@@ -143,7 +143,7 @@ class ProviderHealthE2ETest {
   @Order(3)
   void twoTenantsGetTheSameGlobalAnswer() {
     final String a = bodyOf(get("tenant-a", Role.OPERADOR));
-    final String b = bodyOf(get("tenant-b", Role.ADMINISTRADOR));
+    final String b = bodyOf(get("tenant-b", Role.ADMINISTRADOR_PLATAFORMA));
 
     assertEquals(
         a.replaceAll("\"generatedAt\":\"[^\"]*\"", ""),

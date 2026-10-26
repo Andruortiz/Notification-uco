@@ -107,7 +107,7 @@ class AuthenticationSecurityE2ETest {
         Jwts.builder()
             .subject("client-1")
             .claim("tenantId", "tenant-a")
-            .claim("role", "ADMINISTRADOR")
+            .claim("role", "ADMINISTRADOR_PLATAFORMA")
             .issuedAt(new Date()));
   }
 

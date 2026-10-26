@@ -315,7 +315,12 @@ class DeviceRegistryE2ETest {
     assertFalse(stored.protectedToken().contains(token));
     assertEquals(1, list(tenant, Role.CLIENTE, "app-1", null).size());
     assertEquals(mask(token), list(tenant, Role.CLIENTE, "app-1", null).get(0).get("token"));
-    assertEquals(token, list(tenant, Role.ADMINISTRADOR, "admin", "app-1").get(0).get("token"));
+    web.get()
+        .uri("/devices?subject=app-1")
+        .header("Authorization", TestTokens.bearer(tenant, Role.ADMINISTRADOR_PLATAFORMA, "admin"))
+        .exchange()
+        .expectStatus()
+        .isForbidden();
 
     remove(tenant, Role.CLIENTE, "app-1", created.get("deviceId").toString())
         .expectStatus()
@@ -330,7 +335,7 @@ class DeviceRegistryE2ETest {
   }
 
   @Test
-  void aSessionCannotActOnAnotherSubjectButAnAdministratorCan() {
+  void aSessionCannotActOnAnotherSubjectAndNoAdministratorReachesTheDevicesRoute() {
     final String token = token("subject");
 
     register(tenant, Role.CLIENTE, "app-1", token, "app-2").expectStatus().isForbidden();
@@ -341,13 +346,9 @@ class DeviceRegistryE2ETest {
         .exchange()
         .expectStatus()
         .isForbidden();
-    register(tenant, Role.ADMINISTRADOR, "admin", token, "app-2")
+    register(tenant, Role.ADMINISTRADOR_PLATAFORMA, "admin", token, "app-2")
         .expectStatus()
-        .isCreated()
-        .expectBody()
-        .jsonPath("$.originComponent")
-        .isEqualTo("admin");
-    assertEquals(1, list(tenant, Role.ADMINISTRADOR, "admin", "app-2").size());
+        .isForbidden();
     assertTrue(list(tenant, Role.CLIENTE, "app-1", null).isEmpty());
   }
 
@@ -404,7 +405,7 @@ class DeviceRegistryE2ETest {
 
     web.post()
         .uri("/device-erasures")
-        .header("Authorization", TestTokens.bearer(tenant, Role.ADMINISTRADOR, "admin"))
+        .header("Authorization", TestTokens.bearer(tenant, Role.ADMINISTRADOR_PLATAFORMA, "admin"))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(Map.of("subject", "app-1"))
         .exchange()
@@ -525,7 +526,7 @@ class DeviceRegistryE2ETest {
     assertNotNull(stored.recipientIdFingerprint());
 
     final Map<String, Object> asOperator = search(Role.OPERADOR, recipient);
-    final Map<String, Object> asAdmin = search(Role.ADMINISTRADOR, recipient);
+    final Map<String, Object> asAdmin = search(Role.ADMINISTRADOR_PLATAFORMA, recipient);
     assertTrue(String.valueOf(asOperator).contains("recipientId=****"));
     assertFalse(String.valueOf(asOperator).contains(recipient));
     assertTrue(String.valueOf(asAdmin).contains("recipientId=" + recipient));

@@ -276,7 +276,7 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
                         "http://localhost:"
                             + port
                             + issuedResult.getResponseHeaders().getFirst("Location")))
-                .header("Authorization", auth)
+                .header("Authorization", TestTokens.bearer(TENANT_A, Role.CLIENTE))
                 .exchange()
                 .expectStatus()
                 .isOk()),
@@ -288,7 +288,7 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
             client
                 .post()
                 .uri("/attachment-upload-completions")
-                .header("Authorization", auth)
+                .header("Authorization", TestTokens.bearer(TENANT_A, Role.CLIENTE))
                 .contentType(MediaType.APPLICATION_JSON)
                 .bodyValue(Map.of("uploadId", uploadId))
                 .exchange()
@@ -370,7 +370,7 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
         call(
                 HttpMethod.POST,
                 "/provider-connection-tests",
-                Role.ADMINISTRADOR,
+                Role.ADMINISTRADOR_PLATAFORMA,
                 Map.of("channel", "EMAIL", "providerId", "conf-email"))
             .expectStatus()
             .isOk(),
@@ -387,7 +387,11 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
             .expectStatus()
             .isOk(),
         "UndeliverableRecipientResponse");
-    call(HttpMethod.POST, "/recipients/undeliverable-releases", Role.ADMINISTRADOR, address)
+    call(
+            HttpMethod.POST,
+            "/recipients/undeliverable-releases",
+            Role.ADMINISTRADOR_PLATAFORMA,
+            address)
         .expectStatus()
         .isNoContent();
     covered.add("POST /recipients/undeliverable-releases");
@@ -415,7 +419,11 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
         .expectStatus()
         .isNoContent();
     covered.add("POST /device-removals");
-    call(HttpMethod.POST, "/device-erasures", Role.ADMINISTRADOR, Map.of("subject", "test-client"))
+    call(
+            HttpMethod.POST,
+            "/device-erasures",
+            Role.ADMINISTRADOR_PLATAFORMA,
+            Map.of("subject", "test-client"))
         .expectStatus()
         .isNoContent();
     covered.add("POST /device-erasures");
@@ -426,7 +434,7 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
             call(
                     HttpMethod.POST,
                     "/templates",
-                    Role.OPERADOR,
+                    Role.EDITOR_PLANTILLAS,
                     Map.of(
                         "key",
                         "conf-template",
@@ -453,7 +461,7 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
         call(
                 HttpMethod.PUT,
                 "/templates",
-                Role.OPERADOR,
+                Role.EDITOR_PLANTILLAS,
                 Map.of(
                     "templateId",
                     templateId,
@@ -483,7 +491,7 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
         call(
                 HttpMethod.POST,
                 "/template-variable-detections",
-                Role.OPERADOR,
+                Role.EDITOR_PLANTILLAS,
                 Map.of("subject", "{{a}}", "body", "{{b}} {{a}}"))
             .expectStatus()
             .isOk(),
@@ -503,7 +511,7 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
         call(
                 HttpMethod.POST,
                 "/template-archivals",
-                Role.OPERADOR,
+                Role.EDITOR_PLANTILLAS,
                 Map.of("templateId", templateId))
             .expectStatus()
             .isOk(),

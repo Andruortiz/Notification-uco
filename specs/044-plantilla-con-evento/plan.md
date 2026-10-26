@@ -59,15 +59,17 @@ Mongo con un controller de tres rutas. No hay ingestion nueva: D3 llama `Resolve
 - `adapter/in/rest`: `TemplateMappingController` y DTOs (records). Errores 400 con `code` (`INVALID_MAPPING_PATH` 1013, `UNKNOWN_MAPPING_VARIABLE`
   1014, `MAPPING_LIMIT_EXCEEDED` 1015, `EVENT_LIMIT_EXCEEDED` 1016), 404, 409 (`TEMPLATE_MAPPING_VERSION_CONFLICT` 3054, `TEMPLATE_ARCHIVED`). Tenant del principal de sesion.
   El mensaje de error nunca incluye valores del evento; solo el indice del mapeo o el nombre de variable.
-- `RouteAuthorizationPolicy`: agregar con `x-allowed-roles` de [spec.md](spec.md#contrato-consumido-por-la-ui-sin-tocar-api-notificacionesyaml-ver-plan) (PUT, GET y POST de resoluciones), mas una prueba por ruta; registrar los 3 recursos en `protected-resources.json` para el script de HU2-099.
+- `RouteAuthorizationPolicy`: agregar con `x-allowed-roles` de [spec.md](spec.md#contrato-consumido-por-la-ui-sin-tocar-api-notificacionesyaml-ver-plan) (PUT, GET y POST de resoluciones), mas una prueba por ruta; registrar los 3 recursos en `protected-resources.json` para el script de aprovisionamiento del PDP ([spec 028](../028-aprovisionar-pdp/spec.md)).
 - Logs: ninguna linea de resolucion imprime el evento ni los valores; solo `tenantId`, `templateId`, conteo de variables resueltas y duracion.
 
 ### Interaccion con otras historias
 
 - **D3 (043)**: declara el campo `event` y `templateValues` del envio, y aplica la regla `templateValues` explicitos > `event` mapeado. Antes de
-  renderizar, D3 llama `ResolveTemplateValuesUseCase`; D4 no toca el envio. Orden de la cadena: D2, D7, D3, D4, D5. Punto compartido: nombre y firma del puerto, y que el 422 de faltantes lo emite D1.
+  renderizar, D3 llama `ResolveTemplateValuesUseCase`; D4 no toca el envio. Orden de la cadena: D2, D7, D4 (event), D3, D5: D3 depende del
+  puerto de D4 ya integrado. Punto compartido: nombre y firma del puerto, y que el 422 de faltantes lo emite D1.
 - **D1 (035)**: dependencia dura (`Template`, `TemplateId`, `TemplateRepository`, `TemplateEngine.render`). D4 no modifica `Template`;
-  D1 deja `TemplateVariable` libre de defectos (su P3) y el defecto de D4 vive en el mapeo, por eso no hay conflicto.
+  D1 deja `TemplateVariable` libre de defectos (su P3) y el defecto de D4 vive en el mapeo, por eso no hay conflicto. D4 es pura: no consume
+  `RenderTemplateUseCase` ni `ResolvedTemplate`, y no figura en la lista de consumidores del render.
 - **D2 (042)**: opcional; la vista previa puede llamar la resolucion con un evento de ejemplo.
 - **B6 (041)**: cuando exista, auditara los guardados de `/template-mappings` como cambio de configuracion, sin before/after del `defaultValue`
   (se registran `templateId`, `version` y conteo de mapeos). El defecto debe ser ficticio (FR-009).

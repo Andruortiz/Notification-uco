@@ -55,8 +55,9 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
 
    | Operaciones | Roles permitidos |
    | --- | --- |
-   | `POST /notifications`, `/notifications/batches`, adjuntos (3) | CL, AA |
-   | `POST /notifications` con plantilla de categoría SEGURIDAD (crítica) | AA, AP (rama interna: CL no) |
+   | `POST /notifications`, `/notifications/batches` | CL, AA, AP |
+   | adjuntos (3) | CL, AA |
+   | `POST /notifications` con plantilla de categoría SEGURIDAD (crítica) | AA, AP (rama interna: CL no; cubierta por la precondición bloqueante de roles por sesión, Seguridad, 2026-12-15) |
    | `GET /notifications/detail`, `/notifications/stream` | CL, OP, AA, AP |
    | `GET /notifications`, `/notifications/timeline`, `/provider-health` | OP, AA, AP |
    | `POST /notification-retries`, `/notification-resends`, `/recipients/undeliverable-lookups` | OP, AP |

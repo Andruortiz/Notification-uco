@@ -61,7 +61,8 @@ se ajusta el plan.
 - `RouteAuthorizationPolicy` y `protected-resources.json` (script de HU2-099): `GET` y `PUT` con roles CLIENTE y
   ADMINISTRADOR_APLICACION según la tabla de B2 (`x-allowed-roles`).
 - Borrado: `RecipientPreferencesEraser` implementa `RecipientDataEraser` y se registra como contribuyente en el
-  `EraseRecipientDataUseCase` único que introduce F6 (FR-012). No hay cambios sueltos en E5. Depende de F6 en `main`.
+  `EraseRecipientDataUseCase` único que introduce F6, invocado por `/recipient-directory-erasures` (FR-012). `/device-erasures` no
+  cambia. Depende de F6 en `main`.
 - Métrica `notification.preferences.suppressed{reason,category}` por `NotificationMetricsPort` (etiquetas de cardinalidad baja).
 
 ## Puertos estables para F2 a F5
@@ -86,15 +87,15 @@ añadiendo constantes; `RecipientPreferences` tolera atributos desconocidos. F1 
 
 1. `/recipients/preferences` (GET y PUT, hoy `planned`): reemplazar el parámetro `recipientId` por `subject` opcional (solo
    ADMINISTRADOR_APLICACION); sustituir `x-minimum-role` por `x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]` (decisión 1 del lote);
-   pasar `x-status` a `implemented` al publicarse.
+   se publica con `x-status: planned`; `implemented` lo marca la historia que lo implemente.
 2. `UpdatePreferencesRequest`: `{optedOutAll: boolean, categories: [{category: TemplateCategory, optedOut: boolean, acceptedChannels:
    string[]}]}`; se retira `acceptedChannels` global. `RecipientPreferencesResponse`: añade `recipientIdentityId` (nulo sin registro),
    `categories` (siempre las cuatro, con `locked: true` en la crítica) y conserva `optedOutAll` y `updatedAt`. Reutiliza `TemplateCategory`
    de D1.
 3. Respuestas 400 con `code` `INVALID_PREFERENCES` (NTF-1017) y `CRITICAL_CATEGORY_LOCKED` (NTF-1018); 403 por `subject` ajeno con rol
    CLIENTE.
-4. Solicitud de envío (`/notifications`, `/notifications/batches`): añadir solo `recipientIdentityId` (uuid, opcional). `templateId` y la
-   referencia de plantilla los define D3.
+4. Solicitud de envío (`/notifications`, `/notifications/batches`): añadir solo `recipientIdentityId` (uuid, opcional), que F6 rellena
+   además de `recipientId` (dirección, sin cambios). `templateId` y la referencia de plantilla los define D3.
 5. Descripciones de `/recipients/preferences` actualizadas: ya no se describe la 013 (preferencia solo por canal).
 
 ## Riesgos y excepciones (Principio VII)
@@ -104,10 +105,10 @@ añadiendo constantes; `RecipientPreferences` tolera atributos desconocidos. F1 
   cambio suelto en E5.
 - Precondición de roles por sesión (bloqueante, decisión 3 del lote): la rama de ADMINISTRADOR_APLICACION no se cumple en producción
   hasta que Seguridad traiga los roles en la sesión o se consulte `/api/v1/authorize`. Dueño: Seguridad, 2026-12-15.
-- Abuso de categoría `SEGURIDAD` (spec, Riesgos): F1 no restringe el envío de categoría crítica; el límite lo declaran D1 y D3. Dueño
-  andrualv, 2026-12-15.
+- Abuso de categoría `SEGURIDAD`: el envío por plantilla lo limita D3 a ADMINISTRADOR_APLICACION y ADMINISTRADOR_PLATAFORMA (lote, sección 6).
+  F1 no restringe el envío; límite declarado. Dueño Seguridad, 2026-12-15.
 - Lectura extra de la notificación y de preferencias por despacho: sin caché, aprobada. Dueño andrualv, 2026-12-15 (medir en la prueba
   de carga).
-- Retención en la tabla única del lote: mientras exista la identidad, sin caducidad por inactividad. Dueño: responsable de datos,
-  2026-12-31.
-- Sin historial de consentimiento ni base legal validada: ver spec. Dueño andrualv, 2026-12-31.
+- Retención: tabla única del lote (`lote-nivel-2.md`, sección 6): mientras exista la identidad. Dueño Responsable de datos,
+  2026-12-15.
+- Sin historial de consentimiento: ver spec; dueño andrualv, 2026-12-31. Base legal: Responsable de datos, 2026-12-15.

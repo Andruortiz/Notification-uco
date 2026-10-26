@@ -23,7 +23,7 @@ evento, encolado). Sin `templateId` el flujo no cambia.
 
 ## Constitution Check (2.0.1)
 
-- I Hexagonal: la logica va en `core` y depende de puertos de entrada (`RenderTemplateUseCase`, `ResolveTemplateValuesUseCase`), sin Spring. REST y Mongo solo en `infrastructure`. Cumple.
+- I Hexagonal: `core` depende de puertos de entrada (`RenderTemplateUseCase`, `ResolveTemplateValuesUseCase`), sin Spring. Cumple.
 - II Contrato primero: no hay ruta nueva, pero cambia `SendNotificationRequest`. El YAML lo edita Contrato y el DTO se escribe tras su merge (ver "Cambios de contrato"). Cumple con dependencia.
 - III Sin comentarios en codigo nuevo. Cumple.
 - IV E2E `TemplateSendE2ETest` (SC-001 a SC-004, SC-008), unitarias con `StepVerifier`, `Duration` en SC-005. Cobertura >=80 % lineas / >=70 % ramas.
@@ -49,7 +49,7 @@ evento, encolado). Sin `templateId` el flujo no cambia.
   4. si el canal es WHATSAPP, consultar el punto de extension de D5 (`ProviderTemplateLinkPort`, FR-015): con vinculo, el contenido es `providerTemplate`; sin vinculo, texto libre;
   5. si es SMS, `SmsSegmenter` (D2) debe dar un solo segmento; si no, 400 con el tope vigente del canal, sin truncar (FR-005);
   6. construir el contenido y seguir con `AttachmentPolicy`, `ContentSchemaValidator`, adjuntos y aceptacion.
-  Sin `templateId` se ejecuta el camino actual sin cambios.
+  Sin `templateId`, camino actual.
 - **Referencia guardada** (FR-009): `NotificationContent` gana `templateReference` opcional (`templateId`, `category`, `critical`). D3 es duena de esa referencia; F1 solo anade `recipientIdentityId` y lee la categoria.
 - **Lote** (`SendNotificationBatchService`): cada elemento llama a `send` con el scope. Los errores de plantilla de un elemento se traducen a `REJECTED` con
   `rejectionReason` = `<NTF-codigo> <nombre>[: vars]`; los demas errores siguen su tratamiento actual.

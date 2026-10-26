@@ -59,7 +59,8 @@ public class NotificationLiveUpdatesController {
         subscribeToNotificationUpdatesUseCase
             .subscribe(query)
             .doOnNext(update -> logUpdate(principal, update))
-            .map(update -> NotificationLiveUpdateResponse.from(update, principal.role()))
+            .map(
+                update -> NotificationLiveUpdateResponse.from(update, principal.seesUnmaskedData()))
             .map(payload -> ServerSentEvent.builder(payload).event("update").build());
 
     return Flux.merge(updates, heartbeat());

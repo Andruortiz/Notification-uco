@@ -35,7 +35,7 @@ class DeviceServiceTest {
   private static final AuthenticatedPrincipal CLIENT =
       new AuthenticatedPrincipal("app-1", TENANT, Role.CLIENTE);
   private static final AuthenticatedPrincipal ADMIN =
-      new AuthenticatedPrincipal("admin-1", TENANT, Role.ADMINISTRADOR);
+      new AuthenticatedPrincipal("admin-1", TENANT, Role.ADMINISTRADOR_PLATAFORMA);
 
   private static final RecipientIdentity APP_IDENTITY = identity("app-1");
   private static final RecipientIdentity BOB_IDENTITY = identity("bob");

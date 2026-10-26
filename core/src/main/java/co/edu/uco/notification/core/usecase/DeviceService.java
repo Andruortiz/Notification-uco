@@ -3,7 +3,6 @@ package co.edu.uco.notification.core.usecase;
 import co.edu.uco.notification.core.domain.Device;
 import co.edu.uco.notification.core.domain.valueobject.AuthenticatedPrincipal;
 import co.edu.uco.notification.core.domain.valueobject.DevicePlatform;
-import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.exception.DeviceNotFoundException;
 import co.edu.uco.notification.core.exception.DeviceSubjectForbiddenException;
 import co.edu.uco.notification.core.port.in.EraseRecipientDevicesUseCase;
@@ -93,6 +92,6 @@ public final class DeviceService
   }
 
   private static boolean isAdmin(final AuthenticatedPrincipal principal) {
-    return principal.role() == Role.ADMINISTRADOR;
+    return principal.seesUnmaskedData();
   }
 }

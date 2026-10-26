@@ -18,9 +18,11 @@ import java.security.PublicKey;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Base64;
 import java.util.Collection;
-import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
@@ -119,25 +121,29 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
     return new AuthenticatedPrincipal(
         subjectText,
         TenantId.of(tenantHint),
-        resolveRole(claims, tenantHint),
+        resolveRoles(claims, tenantHint),
         client instanceof String clientText && hasText(clientText) ? clientText : null);
   }
 
-  private Role resolveRole(final Claims claims, final String tenantHint) {
+  private Set<Role> resolveRoles(final Claims claims, final String tenantHint) {
     final Object claim = claims.get(properties.roleClaim());
     final Stream<?> values =
         claim instanceof Collection<?> collection ? collection.stream() : Stream.ofNullable(claim);
-    return values
-        .filter(String.class::isInstance)
-        .map(String.class::cast)
-        .map(this::translate)
-        .flatMap(Optional::stream)
-        .min(Comparator.comparingInt(Role::ordinal))
-        .or(() -> roleOptional ? Optional.of(Role.CLIENTE) : Optional.empty())
-        .orElseThrow(
-            () ->
-                new InvalidTokenException(
-                    "unknown role", InvalidTokenException.Reason.UNKNOWN_ROLE, tenantHint, null));
+    final Set<Role> roles =
+        values
+            .filter(String.class::isInstance)
+            .map(String.class::cast)
+            .map(this::translate)
+            .flatMap(Optional::stream)
+            .collect(Collectors.toCollection(() -> EnumSet.noneOf(Role.class)));
+    if (!roles.isEmpty()) {
+      return roles;
+    }
+    if (roleOptional) {
+      return Set.of(Role.CLIENTE);
+    }
+    throw new InvalidTokenException(
+        "unknown role", InvalidTokenException.Reason.UNKNOWN_ROLE, tenantHint, null);
   }
 
   private Optional<Role> translate(final String external) {

@@ -4,14 +4,16 @@
 
 ## Estado del plan
 
-**Estado**: Pendiente de aprobación | **Versión del plan**: 1
+**Estado**: Pendiente de aprobación | **Versión del plan**: 2 (correcciones del lote 2026-10-25)
 
 ## Summary
 
 Agregado `RecipientPreferences` en `core`, casos de uso de consulta y reemplazo, un `PreferenceGate` que el despacho invoca antes de
 reservar, repositorio Mongo y controller sobre `/recipients/preferences`. Se apoya en tipos de otras ramas (no están en esta base):
-`TemplateCategory` y el repositorio de plantillas (D1, spec 035), `RecipientIdentity` y su repositorio (E5, spec 036), sesión con
-`tenantId` y `subject` (B1, spec 029). Los nombres exactos se confirman al rebasar sobre ellas; si difieren, se ajusta el plan.
+`TemplateCategory` y el repositorio de plantillas (D1, spec 035), la referencia de plantilla que guarda `Notification` (D3, spec 043),
+`RecipientIdentity` y su puerto (E5, spec 036), sesión con `tenantId`, `subject` y roles (B1 y B2). F1 se integra **después de D3**:
+ambas editan `SendNotificationService`, el comando de envío y `Notification`. Los nombres exactos se confirman al rebasar; si difieren,
+se ajusta el plan.
 
 ## Constitution Check (2.0.1)
 
@@ -28,32 +30,38 @@ reservar, repositorio Mongo y controller sobre `/recipients/preferences`. Se apo
 - `domain/preference/`: `RecipientPreferences(tenantId, recipientIdentityId, optedOutAll, Map<TemplateCategory, CategoryPreference>,
   updatedAt)`; `CategoryPreference(optedOut, Set<ChannelType> acceptedChannels)`; `PreferenceDecision(ALLOW | SUPPRESSED_OPTED_OUT_ALL |
   SUPPRESSED_CATEGORY | SUPPRESSED_CHANNEL)`. `defaults(tenant, identity)` devuelve el estado sin restricción.
-- Método puro `decide(TemplateCategory nullable, ChannelType)`: si `category != null && category.critical()` -> `ALLOW`; luego aplica
-  FR-006. La validación de `PUT` (crítica bloqueada, categoría repetida, canal vacío) vive en `RecipientPreferences.replace(...)`.
-- Excepciones: `CriticalCategoryLockedException`, `InvalidPreferencesException` (reusa la jerarquía existente).
-- Puertos de entrada: `QueryRecipientPreferencesUseCase.find(tenant, subject)`, `ReplaceRecipientPreferencesUseCase.replace(tenant, subject, cmd)`.
+- Método puro `decide(TemplateCategory nullable, ChannelType)`: si `category != null && category.critical()` -> `ALLOW`; si `category`
+  es nula, solo aplica `optedOutAll` (FR-006, Q8); si no, aplica FR-006 completo. La validación de `PUT` (crítica bloqueada, categoría
+  repetida, canal vacío) vive en `RecipientPreferences.replace(...)`.
+- Excepciones: `CriticalCategoryLockedException` (NTF-1018), `InvalidPreferencesException` (NTF-1017); reusan la jerarquía existente.
+- Puertos de entrada: `QueryRecipientPreferencesUseCase.find(tenant, subject)`, `ReplaceRecipientPreferencesUseCase.replace(tenant,
+  subject, cmd)`.
 - Puerto de salida: `repository/RecipientPreferencesRepository` (`findByIdentity`, `replaceFields` upsert atómico, `deleteByIdentity`),
-  siempre con tenant. La identidad se resuelve con el repositorio de E5 (`findBySubject` en consulta, `findOrCreate` en `PUT`).
-- `PreferenceGate` (servicio de dominio): `evaluate(Notification)` -> `Mono<PreferenceDecision>`; `ALLOW` si no hay identidad; si no,
-  carga preferencias y llama `decide(notification.category(), notification.channelType())`.
-- `Notification` gana `category` (nullable) y `recipientIdentityId` (nullable), inmutables tras aceptar. `SendNotificationService`
-  acepta `templateId` y `recipientIdentityId` opcionales y resuelve la categoría con el repositorio de plantillas (D1) de ese tenant.
-- `DispatchNotificationService.dispatch`: `findById` -> `PreferenceGate.evaluate`; `ALLOW` -> `reserveForDispatch` (flujo actual);
-  suprimida -> `notification.discard()` (PENDING a DISCARDED), `save` con la versión leída, publicar evento, métrica y log. Si dos
-  réplicas compiten, la reserva condicionada o el `save` versionado deja un solo ganador; el perdedor sigue el camino de redelivery
-  ignorado. Error de lectura -> `Mono.error`, sin tocar la notificación (FR-009).
+  siempre con tenant. La identidad la resuelve el `RecipientIdentityPort` de E5 (`findBySubject` en consulta, `findOrCreateBySubject`
+  en `PUT`); F1 no lo define.
+- `PreferenceGate` (servicio de dominio): `evaluate(Notification)` -> `Mono<PreferenceDecision>`; `ALLOW` si la notificación no trae
+  `recipientIdentityId`; si no, carga preferencias y llama `decide(notification.category(), notification.channelType())`, donde la
+  categoría sale de la referencia de plantilla que guarda D3 (F1 no la escribe).
+- `Notification` gana solo `recipientIdentityId` (nullable), inmutable tras aceptar. `SendNotificationService` (de D3) acepta
+  `recipientIdentityId` opcional; `templateId`, `templateValues` y la referencia de plantilla son de D3.
+- `DispatchNotificationService.dispatch`, en este orden: `findById` -> `PreferenceGate.evaluate` (suprime: `notification.discard()`,
+  `save` con la versión leída, evento, métrica y log, sin proveedor) -> compuerta de D5 (fallo permanente) -> `reserveForDispatch`
+  (flujo actual). Una notificación descartada por preferencias no llega a evaluar D5. Si dos réplicas compiten, la reserva
+  condicionada o el `save` versionado deja un solo ganador; el perdedor sigue el camino de redelivery ignorado. Error de lectura ->
+  `Mono.error`, sin tocar la notificación (FR-009).
 
 ### infrastructure
 
 - `adapter/out/mongo`: colección `recipient_preferences`, índice único `(tenantId, recipientIdentityId)`. `replaceFields` hace
   `findAndModify` con `$set` solo de `optedOutAll`, `categories`, `updatedAt` y `upsert`, de modo que F3 y F5 puedan agregar campos
-  al mismo documento sin que el `PUT` los borre (FR-011). `NotificationDocument` guarda `category` y `recipientIdentityId`.
+  al mismo documento sin que el `PUT` los borre (FR-011). `NotificationDocument` añade solo `recipientIdentityId`.
 - `adapter/in/rest`: `RecipientPreferencesController` (`GET`/`PUT /recipients/preferences`), DTOs record, mapeo 400
-  (`INVALID_PREFERENCES`, `CRITICAL_CATEGORY_LOCKED`), 403 (`subject` ajeno), 404 de plantilla heredado de D1. Tenant y `subject` del
-  principal de sesión (B1); `subject` de la query solo para ADMINISTRADOR.
-- `RouteAuthorizationPolicy`: `GET` y `PUT` -> CLIENTE; registrar ambos recursos con el script de HU2-099 (`protected-resources.json`).
-- Adaptador de borrado: el caso de uso de borrado por titular de E5 invoca `RecipientPreferencesRepository.deleteByIdentity` (cambio
-  pequeño en código de E5; se coordina al integrar, ver Riesgos).
+  (`INVALID_PREFERENCES`, `CRITICAL_CATEGORY_LOCKED`), 403 (CLIENTE con `subject` ajeno), 404 de plantilla heredado de D3. Tenant y
+  `subject` del principal de sesión (B1); `subject` de la query solo para ADMINISTRADOR_APLICACION.
+- `RouteAuthorizationPolicy` y `protected-resources.json` (script de HU2-099): `GET` y `PUT` con roles CLIENTE y
+  ADMINISTRADOR_APLICACION según la tabla de B2 (`x-allowed-roles`).
+- Borrado: `RecipientPreferencesEraser` implementa `RecipientDataEraser` y se registra como contribuyente en el
+  `EraseRecipientDataUseCase` único que introduce F6 (FR-012). No hay cambios sueltos en E5. Depende de F6 en `main`.
 - Métrica `notification.preferences.suppressed{reason,category}` por `NotificationMetricsPort` (etiquetas de cardinalidad baja).
 
 ## Puertos estables para F2 a F5
@@ -68,28 +76,38 @@ añadiendo constantes; `RecipientPreferences` tolera atributos desconocidos. F1 
 
 | Nivel | Cobertura |
 |---|---|
-| Unitaria `core` (`StepVerifier`) | `decide` (tabla: crítica, `optedOutAll`, categoría, canal, sin categoría, mayúsculas), `replace` (400s, normalización), `PreferenceGate`, despacho con gate simulado (suprime, permite, error) |
+| Unitaria `core` (`StepVerifier`) | `decide` (tabla: crítica, `optedOutAll`, categoría, canal, sin categoría, mayúsculas), `replace` (400s, normalización), `PreferenceGate`, despacho con gate simulado (suprime antes de D5, permite, error) y baja tras la reserva (no interrumpe, SC-010) |
 | Integración adaptador | `RecipientPreferencesMongoRepositoryTest` (Testcontainers): índice único, `$set` parcial conserva campo ajeno, aislamiento por tenant, 10 `PUT` concurrentes |
-| E2E | `RecipientPreferencesE2ETest` (`RANDOM_PORT`, Mongo y RabbitMQ): flujos de US1 a US4 con el evento real publicado por `NotificationEventPublisherPort`, control positivo en cada prueba de "no llega", dos tenants, `Duration` ≤5 s, almacén caído, borrado por E5 |
-| Seguridad de ruta | una prueba por ruta en `RouteAuthorizationPolicy`; CLIENTE con `subject` ajeno da 403 |
+| E2E | `RecipientPreferencesE2ETest` (`RANDOM_PORT`, Mongo y RabbitMQ): flujos de US1 a US4. Las notificaciones de despacho se siembran por repositorio (con la referencia de plantilla de D3 y `recipientIdentityId`) y el disparo es el evento real publicado por `NotificationEventPublisherPort`. Control positivo en cada "no llega", dos tenants, `Duration` ≤5 s, almacén caído, baja antes de la reserva (`DISCARDED`), borrado por `EraseRecipientDataUseCase` |
+| Seguridad de ruta | una prueba por ruta en `RouteAuthorizationPolicy`; CLIENTE con `subject` ajeno da 403; ADMINISTRADOR_APLICACION con `subject` ajeno da 200 |
 | Arquitectura | `HexagonalArchitectureTest` y `ModularityTests` |
 
 ## Cambios de contrato requeridos (api-notificaciones.yaml; no editado aquí)
 
-1. `/recipients/preferences` (GET y PUT, hoy `planned`): reemplazar el parámetro `recipientId` por `subject` opcional (solo ADMINISTRADOR);
-   pasar `x-status` a `implemented` al publicarse; mantener `x-minimum-role: CLIENTE`.
-2. `UpdatePreferencesRequest`: `{optedOutAll: boolean, categories: [{category: TemplateCategory, optedOut: boolean, acceptedChannels: string[]}]}`;
-   se retira `acceptedChannels` global. `RecipientPreferencesResponse`: añade `recipientIdentityId` (nulo sin registro), `categories`
-   (siempre las cuatro, con `locked: true` en la crítica) y conserva `optedOutAll` y `updatedAt`. Reutiliza `TemplateCategory` de D1.
-3. Respuestas 400 con `code` `INVALID_PREFERENCES` y `CRITICAL_CATEGORY_LOCKED`; 403 por `subject` ajeno.
-4. Solicitud de envío (`/notifications`, `/notifications/batches`): añadir `templateId` (uuid, opcional) y `recipientIdentityId` (uuid,
-   opcional). Coordinar con D3 para que `templateId` tenga una sola definición.
+1. `/recipients/preferences` (GET y PUT, hoy `planned`): reemplazar el parámetro `recipientId` por `subject` opcional (solo
+   ADMINISTRADOR_APLICACION); sustituir `x-minimum-role` por `x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]` (decisión 1 del lote);
+   pasar `x-status` a `implemented` al publicarse.
+2. `UpdatePreferencesRequest`: `{optedOutAll: boolean, categories: [{category: TemplateCategory, optedOut: boolean, acceptedChannels:
+   string[]}]}`; se retira `acceptedChannels` global. `RecipientPreferencesResponse`: añade `recipientIdentityId` (nulo sin registro),
+   `categories` (siempre las cuatro, con `locked: true` en la crítica) y conserva `optedOutAll` y `updatedAt`. Reutiliza `TemplateCategory`
+   de D1.
+3. Respuestas 400 con `code` `INVALID_PREFERENCES` (NTF-1017) y `CRITICAL_CATEGORY_LOCKED` (NTF-1018); 403 por `subject` ajeno con rol
+   CLIENTE.
+4. Solicitud de envío (`/notifications`, `/notifications/batches`): añadir solo `recipientIdentityId` (uuid, opcional). `templateId` y la
+   referencia de plantilla los define D3.
 5. Descripciones de `/recipients/preferences` actualizadas: ya no se describe la 013 (preferencia solo por canal).
 
 ## Riesgos y excepciones (Principio VII)
 
-- Bloqueo por el YAML (Contrato) y por la integración de B1, D1 y E5 en `main`: sin ellas la rama no compila. Dueño: andrualv, 2026-12-15.
-- Cambio en el borrado de E5 para eliminar preferencias: dueño del cambio, quien integre E5; fecha 2026-12-15. Si E5 ya está en `main`,
-  es una tarea de esta historia.
-- Lectura extra de la notificación y de preferencias por despacho: sin caché. Dueño andrualv, 2026-12-15 (medir en la prueba de carga).
+- Bloqueo por el YAML (Contrato) y por la integración de B1, B2, D1, D3, E5 y F6 en `main`: sin ellas la rama no compila. Dueño:
+  andrualv, 2026-12-15. Si F6 no está en `main` al implementar, el borrado (SC-009) queda como excepción con esa fecha; no se hace un
+  cambio suelto en E5.
+- Precondición de roles por sesión (bloqueante, decisión 3 del lote): la rama de ADMINISTRADOR_APLICACION no se cumple en producción
+  hasta que Seguridad traiga los roles en la sesión o se consulte `/api/v1/authorize`. Dueño: Seguridad, 2026-12-15.
+- Abuso de categoría `SEGURIDAD` (spec, Riesgos): F1 no restringe el envío de categoría crítica; el límite lo declaran D1 y D3. Dueño
+  andrualv, 2026-12-15.
+- Lectura extra de la notificación y de preferencias por despacho: sin caché, aprobada. Dueño andrualv, 2026-12-15 (medir en la prueba
+  de carga).
+- Retención en la tabla única del lote: mientras exista la identidad, sin caducidad por inactividad. Dueño: responsable de datos,
+  2026-12-31.
 - Sin historial de consentimiento ni base legal validada: ver spec. Dueño andrualv, 2026-12-31.

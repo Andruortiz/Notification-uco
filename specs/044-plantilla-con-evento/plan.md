@@ -6,7 +6,7 @@
 
 **Estado**: Pendiente de aprobacion
 
-**Versión del plan**: 1
+**Versión del plan**: 2 (correcciones 2026-10-25: rutas y roles, códigos NTF, nombres alineados con D3, límites y auditoría)
 
 ## Summary
 
@@ -23,7 +23,7 @@ Mongo con un controller de tres rutas. No hay ingestion nueva: D3 llama `Resolve
 
 - I Hexagonal: `EventPath`, reglas, resolucion y casos de uso en `core` sin Spring ni Jackson (el evento llega como `Map<String,Object>`
   de tipos Java planos); Mongo y REST solo en `infrastructure`. Cumple.
-- II Contrato primero: 3 rutas literales sin `:` ni `{}`, ids en query o cuerpo, con `x-status` y `x-minimum-role`. El YAML lo edita Contrato;
+- II Contrato primero: 3 rutas literales sin `:` ni `{}`, ids en query o cuerpo, con `operationId`, `x-status: planned` y `x-allowed-roles` (B2 entra primero). El YAML lo edita Contrato;
   las tareas del controller quedan bloqueadas hasta su merge. Cumple con dependencia.
 - III Sin comentarios. IV E2E explicito (`TemplateEventMappingE2ETest`), dos tenants, `Duration` en SC-003; cobertura >=80 % / >=70 %.
 - V Commits de una linea. VI Plan aprobado antes de `tasks`.
@@ -56,32 +56,32 @@ Mongo con un controller de tres rutas. No hay ingestion nueva: D3 llama `Resolve
 ### infrastructure
 
 - `adapter/out/mongo`: coleccion `template_mappings`, indice unico `(tenantId, templateId)`; `version` con comparacion explicita para 409.
-- `adapter/in/rest`: `TemplateMappingController` y DTOs (records). Errores 400 con `code` (`INVALID_MAPPING_PATH`, `UNKNOWN_MAPPING_VARIABLE`,
-  `MAPPING_LIMIT_EXCEEDED`, `EVENT_LIMIT_EXCEEDED`), 404, 409 (`TEMPLATE_MAPPING_VERSION_CONFLICT`, `TEMPLATE_ARCHIVED`). Tenant del principal de sesion.
+- `adapter/in/rest`: `TemplateMappingController` y DTOs (records). Errores 400 con `code` (`INVALID_MAPPING_PATH` 1013, `UNKNOWN_MAPPING_VARIABLE`
+  1014, `MAPPING_LIMIT_EXCEEDED` 1015, `EVENT_LIMIT_EXCEEDED` 1016), 404, 409 (`TEMPLATE_MAPPING_VERSION_CONFLICT` 3054, `TEMPLATE_ARCHIVED`). Tenant del principal de sesion.
   El mensaje de error nunca incluye valores del evento; solo el indice del mapeo o el nombre de variable.
-- `RouteAuthorizationPolicy`: agregar (PUT `/template-mappings`) -> OPERADOR, (GET `/template-mappings`) y (POST `/template-mapping-resolutions`) -> CLIENTE,
-  mas una prueba por ruta; registrar los 3 recursos en `protected-resources.json` para el script de HU2-099.
+- `RouteAuthorizationPolicy`: agregar con `x-allowed-roles` de [spec.md](spec.md#contrato-consumido-por-la-ui-sin-tocar-api-notificacionesyaml-ver-plan) (PUT, GET y POST de resoluciones), mas una prueba por ruta; registrar los 3 recursos en `protected-resources.json` para el script de HU2-099.
 - Logs: ninguna linea de resolucion imprime el evento ni los valores; solo `tenantId`, `templateId`, conteo de variables resueltas y duracion.
 
 ### Interaccion con otras historias
 
-- **D3 (043)**: es dueno del campo `event` del envio y de la regla `variables` explicitas > `event` mapeado. D3 invoca el puerto
-  `ResolveTemplateValuesUseCase`; D4 no toca el envio. Punto compartido: nombre y firma del puerto, y que el 422 de faltantes lo emite D1.
+- **D3 (043)**: declara el campo `event` y `templateValues` del envio, y aplica la regla `templateValues` explicitos > `event` mapeado. Antes de
+  renderizar, D3 llama `ResolveTemplateValuesUseCase`; D4 no toca el envio. Orden de la cadena: D2, D7, D3, D4, D5. Punto compartido: nombre y firma del puerto, y que el 422 de faltantes lo emite D1.
 - **D1 (035)**: dependencia dura (`Template`, `TemplateId`, `TemplateRepository`, `TemplateEngine.render`). D4 no modifica `Template`;
   D1 deja `TemplateVariable` libre de defectos (su P3) y el defecto de D4 vive en el mapeo, por eso no hay conflicto.
 - **D2 (042)**: opcional; la vista previa puede llamar la resolucion con un evento de ejemplo.
-- **B6 (041)**: cuando exista, auditara los guardados de `/template-mappings` como cambio de configuracion.
+- **B6 (041)**: cuando exista, auditara los guardados de `/template-mappings` como cambio de configuracion, sin before/after del `defaultValue`
+  (se registran `templateId`, `version` y conteo de mapeos). El defecto debe ser ficticio (FR-009).
 
 ### Seguridad
 
 - Sin regex ni evaluacion en el mapeo (`EventPath` es parseo manual y cursor lineal): descarta ReDoS e inyeccion de expresiones.
-- Limites de evento antes de resolver; profundidad iterativa para evitar `StackOverflowError`. Jackson ya acota la profundidad de lectura por defecto.
+- Limites de evento antes de resolver; profundidad iterativa para evitar `StackOverflowError`. El limite de profundidad (10) y de tamano (32768) lo impone `EventLimits` en `core`.
 
 ## Estrategia de pruebas
 
 | Nivel | Cobertura |
 |---|---|
-| Unitaria `core` | `EventPath` (parse valido e invalido parametrizado: `$`, `[`, `*`, `..`, vacia, 9 segmentos; extract anidado, indice, tipos), `EventLimits`, reglas de `TemplateMapping`, casos de uso con repositorios simulados |
+| Unitaria `core` | `EventPath` (parse valido e invalido parametrizado: `$`, `[`, `*`, `..`, vacia, 9 segmentos; extract anidado, indice, tipos), `EventLimits` (profundidad 10 aceptada, 11 rechazada; 32768 caracteres), reglas de `TemplateMapping`, casos de uso con repositorios simulados |
 | Integracion adaptador | `TemplateMappingMongoRepositoryTest` (Testcontainers): indice unico, aislamiento por tenant, version |
 | E2E | `TemplateEventMappingE2ETest` (`RANDOM_PORT`, Mongo): crear plantilla (D1), guardar mapeo, resolver, renderizar con D1, 422 de faltantes, 409 de version, dos tenants con control positivo |
 | Rendimiento | SC-003 con aserciones de `Duration` (< 200 ms), incluido el caso adverso de rutas largas |
@@ -93,8 +93,8 @@ Cuando D3 se integre, su E2E de envio con `event` cubre el extremo `evento -> me
 
 ## Cambios de contrato requeridos (para Contrato; no se edita `api-notificaciones.yaml` aqui)
 
-- Nuevas rutas con `x-status: planned`: `PUT /template-mappings` (OPERADOR), `GET /template-mappings?templateId=` (CLIENTE),
-  `POST /template-mapping-resolutions` (CLIENTE), con la tabla de errores de [spec.md](spec.md); registrarlas en el cuadro de HUs de la cabecera.
+- Nuevas rutas con `x-status: planned` y `operationId` (`saveTemplateMapping`, `getTemplateMapping`, `resolveTemplateMapping`): `PUT /template-mappings`,
+  `GET /template-mappings?templateId=`, `POST /template-mapping-resolutions`, con `x-allowed-roles` y errores de [spec.md](spec.md); registrarlas en el cuadro de HUs de la cabecera.
 - Esquemas: `SaveTemplateMappingRequest {templateId, version, mappings[<=50]}`, `TemplateMappingEntry {variable, path (maxLength 200, patron de segmentos), defaultValue (maxLength 2000)}`,
   `TemplateMappingResponse {templateId, version, mappings[]}`, `ResolveTemplateValuesRequest {templateId, event (object, additionalProperties)}`,
   `ResolveTemplateValuesResponse {values: map string->string}`.

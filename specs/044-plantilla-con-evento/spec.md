@@ -6,7 +6,7 @@
 
 **Status**: Pendiente de aprobacion
 
-**Depende de**: D1 (spec 035, plantillas con variables). Convive con D3 (spec 043, envio por `templateId`), que consume lo definido aqui.
+**Depende de**: D1 (spec 035, plantillas con variables) y B2 (spec 039, roles por `x-allowed-roles`). Convive con D3 (spec 043, envio por `templateId`), que declara `event` y `templateValues` y consume lo definido aqui.
 
 ## Contexto
 
@@ -24,19 +24,19 @@ mapeo y su resolucion `evento -> valores`; D3 invoca la resolucion y D1 renderiz
 - Q: JSONPath o rutas simples -> A: rutas simples de segmentos separados por `.`. Un segmento es un nombre `[A-Za-z_][A-Za-z0-9_-]{0,39}`
   o un indice de arreglo `[0-9]{1,3}` (`usuario.nombre`, `items.0.sku`). Sin comodines, filtros, regex ni expresiones: la ruta se recorre
   segmento a segmento y nunca se evalua. Maximo 8 segmentos y 200 caracteres. ([FR-002](#functional-requirements))
-- Q: Quien configura y versiona -> A: el ET (OPERADOR) guarda un unico mapeo por plantilla (`templateId`), con `version` optimista; los
+- Q: Quien configura y versiona -> A: el ET (EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA) guarda un unico mapeo por plantilla (`templateId`), con `version` optimista; los
   cambios de configuracion quedan auditables cuando exista B6 (esta historia no los audita). Cada variante canal/idioma tiene su mapeo. ([FR-007](#functional-requirements))
 - Q: Valor por defecto -> A: texto fijo de configuracion (hasta 2000 caracteres), usado cuando la ruta no existe, vale `null` o no es un
-  escalar. No debe contener datos personales (es configuracion, se persiste). ([FR-004](#functional-requirements))
+  escalar. Debe ser ficticio (texto generico, nunca un dato real de una persona): se persiste como configuracion y se excluye del before/after de auditoria de B6. ([FR-004](#functional-requirements), [FR-009](#functional-requirements))
 - Q: Conversion a texto -> A: cadena tal cual; numero en notacion decimal sin exponente; booleano `true`/`false`. Objeto y arreglo no son
   escalares: cuentan como ausentes. La cadena vacia es un valor presente, igual que en D1 FR-007.
 - Q: Tamano y limites del evento -> A: hasta 32768 caracteres serializados, profundidad 10; hasta 50 mapeos por plantilla; valor resuelto
   hasta 2000 caracteres. Excederlos responde 400 `EVENT_LIMIT_EXCEEDED` / `MAPPING_LIMIT_EXCEEDED`.
-- Q: Precedencia con valores explicitos -> A: si D3 recibe `variables` y `event` a la vez, el valor explicito de una variable gana sobre
-  el mapeado. La regla se aplica en D3; aqui solo se publica la resolucion como puerto.
+- Q: Precedencia con valores explicitos -> A: si D3 recibe `templateValues` y `event` a la vez, el valor explicito de una variable gana
+  sobre el mapeado. La regla se aplica en D3; aqui solo se publica la resolucion como puerto (`ResolveTemplateValuesUseCase`).
 - Q: Variable sin valor tras el mapeo -> A: no se duplica el chequeo: D1 responde 422 `missingVariables` al renderizar. La resolucion
   devuelve solo las variables que pudo resolver.
-- Q: Roles -> A: guardar mapeo OPERADOR; leer mapeo y resolver CLIENTE (patron de D1 FR-013).
+- Q: Roles -> A: los `x-allowed-roles` de B2 (que entra primero), segun FR-010.
 
 ## User Scenarios & Testing
 
@@ -127,9 +127,11 @@ Un tenant no lee, escribe ni resuelve mapeos de plantillas de otro. El tenant sa
 - **FR-006**: El evento MUST respetar 32768 caracteres serializados y profundidad 10 (`EVENT_LIMIT_EXCEEDED`); el valor resuelto, 2000 caracteres.
 - **FR-007**: El guardado MUST usar control optimista por `version`; leer devuelve el mapeo y su `version` (vacio con `version=0` si no existe).
 - **FR-008**: El tenant MUST salir de la sesion; toda lectura y escritura MUST filtrar por el y por `templateId`.
-- **FR-009**: Los valores del evento y los valores resueltos MUST NOT persistirse ni aparecer en logs, metricas ni mensajes de error; el defecto
-  es configuracion y se persiste.
-- **FR-010**: Guardar MUST requerir OPERADOR; leer y resolver, CLIENTE. Un rol superior satisface el minimo.
+- **FR-009**: Los valores del evento y los valores resueltos MUST NOT persistirse ni aparecer en logs, metricas ni mensajes de error. El
+  defecto es configuracion: se persiste, MUST ser ficticio y MUST quedar fuera del before/after de auditoria de B6.
+- **FR-010**: Los roles MUST ser los `x-allowed-roles` de la tabla de contrato (B2): guardar, EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA;
+  leer, CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA; resolver, CLIENTE, EDITOR_PLANTILLAS,
+  ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
 - **FR-011**: El nucleo MUST exponer la resolucion como puerto de entrada (`ResolveTemplateValuesUseCase`) para que D3 la use sin pasar por HTTP.
 
 ### Key Entities
@@ -140,13 +142,16 @@ Un tenant no lee, escribe ni resuelve mapeos de plantillas de otro. El tenant sa
 
 ## Contrato consumido por la UI (sin tocar `api-notificaciones.yaml`; ver plan)
 
-Rutas literales; `templateId` en query o cuerpo. La UI vive en Front-Notification-mfe: aqui solo se garantiza este contrato.
+Rutas literales; `templateId` en query o cuerpo. La UI vive en Front-Notification-mfe: aqui solo se garantiza este contrato. `x-status: planned`.
 
-| Operacion | Ruta | Rol minimo | Notas |
+| operationId | Ruta | x-allowed-roles | Notas |
 |---|---|---|---|
-| PUT | `/template-mappings` | OPERADOR | `{templateId, version, mappings[]}` -> mapeo; 400, 404, 409 |
-| GET | `/template-mappings` | CLIENTE | `templateId` en query; 200 (vacio si no existe), 404 si la plantilla no existe |
-| POST | `/template-mapping-resolutions` | CLIENTE | `{templateId, event}` -> `{values}`; 400, 404 |
+| `saveTemplateMapping` (PUT) | `/template-mappings` | EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA | `{templateId, version, mappings[]}` -> mapeo; 400, 404, 409 |
+| `getTemplateMapping` (GET) | `/template-mappings` | CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA | `templateId` en query; 200 (vacio si no existe), 404 si la plantilla no existe |
+| `resolveTemplateMapping` (POST) | `/template-mapping-resolutions` | CLIENTE, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA | `{templateId, event}` -> `{values}`; 400, 404 |
+
+Codigos nuevos (catalogo de errores NTF): `INVALID_MAPPING_PATH` 1013, `UNKNOWN_MAPPING_VARIABLE` 1014, `MAPPING_LIMIT_EXCEEDED` 1015,
+`EVENT_LIMIT_EXCEEDED` 1016, `TEMPLATE_MAPPING_VERSION_CONFLICT` 3054.
 
 ## Success Criteria
 
@@ -160,5 +165,5 @@ Rutas literales; `templateId` en query o cuerpo. La UI vive en Front-Notificatio
 ## Preguntas abiertas
 
 - **Q1**: Mapeo como recurso aparte (`/template-mappings`, recomendado: no toca el contrato ni el agregado de D1) o embebido en la plantilla
-  de D1 (un solo `PUT /templates`). Se implementa lo recomendado salvo indicacion.
-- **Q2**: Precedencia `variables` explicitas sobre `event` (Clarifications) debe confirmarse con la spec de D3.
+  de D1 (un solo `PUT /templates`). **Cerrada 2026-10-25**: recurso aparte `/template-mappings`.
+- **Q2**: Precedencia `templateValues` explicitos sobre `event` mapeado. **Cerrada 2026-10-25**: el valor explicito gana; la regla la aplica D3.

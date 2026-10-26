@@ -19,12 +19,14 @@ Alcance: solo backend. La UI vive en Front-Notification-mfe y consume la tabla d
 
 ### Session 2026-10-25
 
-- Q: Proveedor de las plantillas aprobadas -> A: Twilio ahora (decision del usuario, 2026-10-24); si E1 elige Meta se cambia solo el
+- Q: Proveedor de las plantillas aprobadas -> A: Twilio ahora (supuesto: decision del usuario de 2026-10-24, no respaldada en el lote nivel 2; confirmar); si E1 elige Meta se cambia solo el
   adaptador de salida de [FR-009](#functional-requirements). Todo lo que dependa de E1 queda como limite en "Limites".
 - Q: Que significa "publicar para produccion" (D1 solo tiene `ACTIVA`/`ARCHIVADA`, sin publicacion) -> A: la publicacion es un estado
   del vinculo, no un estado nuevo de la plantilla D1: `BORRADOR`, `PUBLICADA`, `SUSPENDIDA`. Solo una plantilla WHATSAPP necesita
   publicarse; las de otros canales no se ven afectadas. D1 no cambia.
-- Q: Donde se aplica el bloqueo -> A: en la publicacion y en la compuerta que consume el envio por plantilla (D3, HU2-127). El render
+- Q: Donde se aplica el bloqueo -> A: en la publicacion y en el despacho del envio por plantilla (D3, HU2-127), nunca al aceptar.
+  Solo un envio por `templateId` exige vinculo `PUBLICADA`; sin vinculo falla como permanente en el despacho. El cuerpo directo (HU2-112)
+  no cambia. El render
   y la vista previa (D1, D2) siguen funcionando con plantillas sin aprobar: son borradores.
 - Q: Como se sincroniza el estado -> A: bajo demanda (`POST /template-approval-syncs`), al publicar (siempre con lectura fresca) y por
   un barrido periodico (`notification.whatsapp-templates.sync.interval`, defecto 15 min) sobre vinculos `PENDIENTE`, o `APROBADA`
@@ -48,8 +50,8 @@ Alcance: solo backend. La UI vive en Front-Notification-mfe y consume la tabla d
 - Q: Roles (B2 entra primero) -> A: ver FR-012 y la tabla de rutas; roles de B2: ADMINISTRADOR_PLATAFORMA, ADMINISTRADOR_APLICACION,
   EDITOR_PLANTILLAS, OPERADOR, AUDITOR, CLIENTE.
 - Q: Integracion con D3 y despacho -> A: D5 es duena de `TemplateProductionGate`, del uso de `variableMap` para
-  `providerTemplate.variables` y del desvio a `providerTemplate` en WHATSAPP; se integra despues de D3 y edita `SendNotificationService`;
-  D3 deja el punto de extensión. Orden de guardas previas al despacho: primero las preferencias de F1 (`DISCARDED`) y despues la
+  `providerTemplate.variables` y del desvio a `providerTemplate` en WHATSAPP; se integra despues de D3 y edita solo el despacho de
+  `SendNotificationService`; D3 deja el punto de extensión. Orden de guardas previas al despacho: primero las preferencias de F1 (`DISCARDED`) y despues la
   compuerta de D5 (fallo permanente).
 - Q: Prueba E2E -> A: proveedor doble. Un servidor HTTP simulado imita la consulta de aprobacion; ninguna prueba toca Twilio real.
 
@@ -87,7 +89,7 @@ El ET vincula una plantilla WHATSAPP de D1 con el identificador de la plantilla 
    al proveedor, ve `RECHAZADA` y responde 409 (nunca se publica con dato rancio).
 3. **Given** estado `APROBADA` en lectura fresca, **When** se publica, **Then** 200 con `PUBLICADA`.
 4. **Given** el proveedor inalcanzable o deshabilitado, **When** se publica, **Then** 503 `PROVIDER_TEMPLATE_UNAVAILABLE`; no se publica.
-5. **Given** una plantilla WHATSAPP sin vinculo o en `BORRADOR`, **When** D3 consulta la compuerta, **Then** cerrada; para canales distintos
+5. **Given** una plantilla WHATSAPP sin vinculo o en `BORRADOR`, **When** el despacho consulta la compuerta, **Then** cerrada; para canales distintos
    de WHATSAPP, abierta.
 
 ---
@@ -146,7 +148,7 @@ Un tenant no lee, sincroniza, publica ni ve vinculos de otro. El tenant sale de 
   `rejectionReason`, `providerLanguage`, `publicationStatus`, `lastSyncedAt`, `lastSyncError`, `version`.
 - **FR-003**: Una plantilla WHATSAPP no aprobada MUST NOT publicarse: la publicacion exige `APROBADA` en lectura fresca al proveedor.
 - **FR-004**: El sistema MUST ofrecer a `core` una compuerta `(tenant, templateId) -> abierta|cerrada` que solo abre cuando la plantilla D1
-  esta `ACTIVA`, es WHATSAPP, el vinculo esta `PUBLICADA` y `APROBADA`; para otros canales abre siempre.
+  esta `ACTIVA`, es WHATSAPP, el vinculo esta `PUBLICADA` y `APROBADA`; para otros canales abre siempre. Se consulta solo en el despacho, nunca al aceptar.
 - **FR-005**: El sistema MUST sincronizar el estado bajo demanda, al publicar y periodicamente; los fallos del proveedor conservan el
   ultimo estado y registran `lastSyncError`.
 - **FR-006**: Un vinculo `PUBLICADA` cuya sincronizacion devuelve `RECHAZADA` o `PAUSADA` MUST pasar a `SUSPENDIDA` y solo volver a
@@ -162,8 +164,9 @@ Un tenant no lee, sincroniza, publica ni ve vinculos de otro. El tenant sale de 
   ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA; consultar el vinculo, CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION
   o ADMINISTRADOR_PLATAFORMA; gestionar la lista, ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
 - **FR-013**: La mutacion de usuario MUST usar control optimista por `version`.
-- **FR-014**: D5 MUST integrar la compuerta en `SendNotificationService` (WHATSAPP): si esta cerrada, rechaza antes del despacho como
-  fallo permanente, despues de las preferencias de F1; y MUST armar `providerTemplate` con `variableMap` en lugar del cuerpo.
+- **FR-014**: D5 MUST integrar la compuerta solo en el despacho de `SendNotificationService` (WHATSAPP, envio por `templateId`): si esta
+  cerrada, falla como permanente trazable, despues de las preferencias de F1; y MUST armar `providerTemplate` con `variableMap` en lugar
+  del cuerpo. La aceptacion no consulta la compuerta.
 
 ### Key Entities
 
@@ -171,7 +174,7 @@ Un tenant no lee, sincroniza, publica ni ve vinculos de otro. El tenant sale de 
   Coleccion propia; D1 no cambia.
 - **Estado de aprobacion**: valor cerrado traducido desde el proveedor; los estados desconocidos del proveedor se tratan como `PAUSADA`
   (no utilizable) y se registran.
-- **Compuerta**: consulta de solo lectura que D3 invoca antes de armar el envio.
+- **Compuerta**: consulta de solo lectura que el despacho invoca antes de armar el envio.
 
 ## Contrato consumido por la UI (sin tocar `api-notificaciones.yaml`; lo define Contrato)
 
@@ -209,9 +212,11 @@ Todas con `x-status: planned`.
   backend, fecha 2026-12-15 para decidir con E1 si se agregan callbacks.
 - Alta y envio de la plantilla a revision del proveedor (crear el contenido en Twilio) quedan fuera: se vincula una ya creada en su consola.
 - Wiring (`UseCaseConfig`) y `pom.xml` los edita quien posee el wiring. Dueno: Equipo de backend. Fecha: 2026-12-15.
+- Base legal y retencion: esta historia no guarda datos personales (solo identificadores de plantilla y estado). Si cambia, decide
+  el Responsable de datos. Dueno: Responsable de datos. Fecha: 2026-12-15.
 
 ## Preguntas abiertas
 
-- Resueltas por el usuario (lote nivel 2): P1 (cuerpo D1 o bloque D7 editado tras publicar) se deja a D6, con dueno y fecha en Edge Cases;
-  P2 (idioma) no bloquea, solo informativo.
+- Resueltas en la revision del lote nivel 2 (decision del usuario, 2026-10-25): P1 (cuerpo D1 o bloque D7 editado tras publicar) se deja a
+  D6, con dueno y fecha en Edge Cases; P2 (idioma) no bloquea, solo informativo.
 - **P3**: Nombre `BORRADOR/PUBLICADA/SUSPENDIDA` frente a un estado en D1 cuando llegue D6. Recomendacion: reutilizar el de D6 si lo define.

@@ -10,7 +10,7 @@
 
 Un agregado `TemplateProviderLink` en `core` (aprobacion + publicacion), una lista de plantillas permitidas por tenant
 (`ProviderTemplateAllowEntry`), un puerto de salida que lee la aprobacion al proveedor, casos de uso de vincular, sincronizar, publicar,
-despublicar, consultar y gestionar la lista, la compuerta `TemplateProductionGate` que consume el envio por plantilla de D3, un adaptador
+despublicar, consultar y gestionar la lista, la compuerta `TemplateProductionGate` que consume el despacho del envio por plantilla, un adaptador
 Twilio, un adaptador Mongo y un barrido periodico. D1 no se modifica; se usa su repositorio de plantillas en lectura.
 
 ## Technical Context
@@ -65,10 +65,11 @@ B2 (roles), F1 (preferencias) como vecinos de la integracion con despacho.
 
 - D3 (127) expone el punto de extension `ProviderTemplateLinkPort` para WHATSAPP. D5 lo implementa y es dueña de `TemplateProductionGate`,
   del uso de `variableMap` para `providerTemplate.variables` y del desvio a `providerTemplate` en WHATSAPP.
-- D5 se integra despues de D3 y edita `SendNotificationService`. D3 no se modifica para esto salvo el punto de extension.
-- Orden de guardas previas al despacho: 1) preferencias de F1 (`DISCARDED`); 2) compuerta de D5 (cerrada = fallo permanente trazable,
+- D5 se integra despues de D3 y edita solo el despacho de `SendNotificationService`. D3 no se modifica para esto salvo el punto de extension.
+- Solo un envio por `templateId` (WHATSAPP) exige vinculo `PUBLICADA`; el cuerpo directo (HU2-112) no cambia.
+- Orden de guardas en el despacho: 1) preferencias de F1 (`DISCARDED`); 2) compuerta de D5 (cerrada = fallo permanente trazable,
   sin failover de E3). Solo despues se arma `providerTemplate`.
-- Al aceptar, D3 responde 400 si la compuerta esta cerrada (como en D3); en despacho, la compuerta se reevalua y el fallo es permanente.
+- La aceptacion no consulta la compuerta: no hay rechazo al aceptar.
 
 ### infrastructure
 
@@ -97,6 +98,7 @@ B2 (roles), F1 (preferencias) como vecinos de la integracion con despacho.
 - **B2 (039)**: roles nuevos y `x-allowed-roles` en el contrato; las rutas de esta historia usan la tabla de la spec.
 - **D1 (035)**: lee `Template` y `TemplateRepository`; reutiliza codigos 3050-3053. Si D1 cambia el nombre de esos tipos, ajustar aqui.
 - **D3 (127)**: punto de extension `ProviderTemplateLinkPort`; D5 integra la compuerta y `variableMap` despues de D3.
+- **Cadena de plantillas**: D2, D7, D4 (evento), D3, D5.
 - **F1 (048)**: `DISCARDED` se evalua antes que la compuerta (ver Integracion con despacho).
 - **D6 (versionado)**: P1 (cuerpo D1 o bloque D7 editado tras publicar) se deja a D6 (nivel 3). Dueno: Equipo de backend. Fecha: 2026-12-15.
   P3 pendiente. D5 define el estado de publicacion del vinculo, no de la plantilla.
@@ -125,7 +127,7 @@ B2 (roles), F1 (preferencias) como vecinos de la integracion con despacho.
   `providerTemplateId` con `pattern: '^HX[0-9a-fA-F]{32}$'` (cambia si E1 elige Meta); `variableMap` objeto con `maxProperties: 20`.
 - Codigos de error nuevos: 3071 PROVIDER_TEMPLATE_NOT_FOUND, 3072 PROVIDER_TEMPLATE_NOT_APPROVED, 3073 TEMPLATE_PUBLISHED,
   3074 TEMPLATE_NOT_WHATSAPP, 4070 PROVIDER_TEMPLATE_UNAVAILABLE. El 3070 lo usa el nivel 1 (RESEND_CHANNEL_INVALID) y no se toca.
-  Los numeros definitivos los asigna Contrato. Los codigos y enums deben registrarse tambien en `ErrorCode`.
+  Los codigos y enums deben registrarse tambien en `ErrorCode`.
 
 ## Riesgos y dependencias
 

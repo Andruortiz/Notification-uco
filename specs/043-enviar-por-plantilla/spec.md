@@ -27,7 +27,7 @@ El render lo hace solo el `RenderTemplateUseCase` de D1 al aceptar la notificaci
 - Q: Errores -> A: los de D1: 404 `TEMPLATE_NOT_FOUND` (NTF-3050, tambien si es de otro tenant), 409 `TEMPLATE_ARCHIVED` (NTF-3053), 422 `MISSING_VARIABLES` (NTF-1010) con `missingVariables` completa, 400 `TEMPLATE_LIMIT_EXCEEDED` (NTF-1009). Nuevos: 400 `TEMPLATE_CONTENT_CONFLICT` (NTF-1011) y 400 `TEMPLATE_CHANNEL_MISMATCH` (NTF-1012) ([FR-002](#requirements), [FR-003](#requirements)).
 - Q: Lote -> A: cada elemento se renderiza por separado; un fallo de plantilla rechaza solo ese elemento, con `rejectionReason` que empieza por el codigo NTF y lleva los nombres faltantes (por ejemplo `NTF-1010 MISSING_VARIABLES: nombre, curso`); los demas siguen ([FR-008](#requirements)).
 - Q: Categoria critica -> A: solo trazabilidad; se guarda la referencia sin cambiar prioridad ni ruta; F1 y F3 la consumen ([FR-009](#requirements)).
-- Q: Rol -> A: el de `POST /notifications` (CLIENTE); no cambia el recurso del PEP.
+- Q: Rol -> A: el de `POST /notifications` (CLIENTE), sin cambio en el PEP.
 - Q: Propiedad de campos (2026-10-25) -> A: D3 es duena de `templateId`, `templateValues`, `event` y de la referencia de plantilla guardada en la notificacion (P1 aprobado). F1 solo anade `recipientIdentityId` y lee la categoria de esa referencia.
 - Q: `event` (D4) -> A: objeto libre opcional, solo junto a `templateId`. D3 invoca `ResolveTemplateValuesUseCase` de D4 antes de renderizar; un valor explicito en `templateValues` gana sobre el mapeado ([FR-013](#requirements)).
 - Q: Renderizador unico -> A: un solo `RenderTemplateUseCase` (con expansion de bloques de D7). Nada fuera de ese servicio llama a `TemplateEngine.render` ([FR-014](#requirements)). Orden de integracion: D2, D7, D3, D4, D5.
@@ -91,7 +91,6 @@ El DEV envia `channelType`, destinatario, `templateId` y `templateValues`; el se
 ### Edge Cases
 
 - Guarda de formato de E10 (spec 032): valida `recipientAddress`, no el contenido. Una direccion invalida responde 400 `INVALID_RECIPIENT` aunque la plantilla sea correcta.
-- Cifrado PUSH de E5 (spec 036): ocurre al persistir y no toca el contenido; la plantilla no ve el token.
 - Mas de 50 entradas en `templateValues` o un valor de mas de 2000 caracteres: 400 `TEMPLATE_LIMIT_EXCEEDED` (limites de D1).
 - WHATSAPP con `templateId` sin vinculo D5: se envia el texto renderizado como mensaje libre; la ventana de 24 h sigue siendo regla del proveedor.
 

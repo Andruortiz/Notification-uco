@@ -10,7 +10,7 @@
 
 Como equipo tecnico (ET) quiero ver la plantilla renderizada con datos de ejemplo, con la apariencia de cada canal, el conteo de
 caracteres y un aviso si el SMS excede un segmento. Depende de HU2-119 ([spec 035](../035-plantillas-variables/spec.md)) y de la cadena
-de plantillas D2, D7, D3, D4, D5: reutiliza el renderizador unico de `core` y el agregado `Template`. La pantalla vive en
+de plantillas D2, D7, D4 (parte event), D3, D5: reutiliza el renderizador unico de `core` y el agregado `Template`. La pantalla vive en
 `Front-Notification-mfe`; aqui se especifica el backend y el contrato que la UI consumira. Decision (2026-10-24): los datos de ejemplo
 se guardan en la plantilla.
 
@@ -20,11 +20,13 @@ se guardan en la plantilla.
 
 - Q: Que se previsualiza -> A: el borrador que el ET esta editando, no solo lo guardado. El endpoint recibe canal, asunto, cuerpo,
   variables y valores, y no exige que la plantilla exista. Para ver una guardada, la UI lee `GET /templates/detail` y reenvia sus campos.
-- Q: Mismo motor -> A: la vista previa usa el renderizador unico de `core` (`RenderTemplateUseCase` de D1 con bloques de D7,
-  `ResolvedTemplate` de D3). D2 no toca `TemplateEngine` ni hay segunda implementacion en servidor o UI. Necesita una entrada por
-  contenido y un modo que devuelva faltantes en vez de 422 (decision pendiente, ver plan). La UI no calcula nada.
-- Q: Cadena de plantillas -> A: D2, D7, D3, D4, D5. Una prueba de arquitectura (`NoDirectTemplateRenderTest`) prohibe
-  `TemplateEngine.render` fuera del renderizador unico.
+- Q: Mismo motor (opcion A, aprobada) -> A: la vista previa usa `RenderTemplateService` de D1, el renderizador unico de `core`. D2 le
+  añade una entrada por contenido (sin `templateId`) y un modo tolerante que devuelve los faltantes sin 422; D7 y D3 la reutilizan. D2 no
+  toca `TemplateEngine` ni hay segunda implementacion en servidor o UI. La UI no calcula nada.
+- Q: Tipo de resultado -> A: `ResolvedTemplate(subject, body, channelType, category, critical, variables, blockRefs)`, unico, dueño
+  `RenderTemplateService`. D2 lo usa sin redefinirlo; en la vista previa `category` y `critical` van nulos.
+- Q: Cadena de plantillas -> A: D2, D7, D4 (parte event), D3, D5. `NoDirectTemplateRenderTest` la crea D2 y prohibe `TemplateEngine.render`
+  fuera del renderizador unico; D3 y D7 solo añaden casos.
 - Q: Variable obligatoria sin valor -> A: 200, cadena vacia en su lugar y nombre en `missingVariables`. Sintaxis invalida: 400
   `INVALID_TEMPLATE_SYNTAX`.
 - Q: Donde se guardan los datos de ejemplo -> A: campo `sampleValues` (mapa nombre -> texto) en `Template`, opcional, reemplazo completo
@@ -34,12 +36,15 @@ se guardan en la plantilla.
   vista previa no se persisten ni registran (D1 FR-011).
 - Q: Calculo de segmentos SMS -> A: se aplica al canal de tipo `SMS`. Alfabeto GSM 03.38 basico: 160 unidades en un segmento, 153 por
   segmento si hay mas. Los caracteres de extension (`^ { } \ [ ] ~ | €` y salto de pagina) cuentan 2. Del español entran en el basico
-  `é è ù ì ò à É ñ Ñ ü Ü ä ö ¡ ¿`; NO entran `á í ó ú`, sus mayusculas ni la `ç` minuscula. Un texto con una de esas letras, o con un
+  `é è ù ì ò à É Ç ñ Ñ ü Ü ä ö ¡ ¿`; NO entran `á í ó ú`, sus mayusculas ni la `ç` minuscula. Un texto con una de esas letras, o con un
   emoji, cae en UCS-2: 70 unidades en un segmento y 67 por segmento si hay mas, en unidades UTF-16. Excede un segmento si segmentos > 1.
 - Q: Tope de SMS frente a D3 -> A: D2 y D3 usan el mismo `SmsSegmenter` de `core`. D2 solo informa: una vista previa nunca responde 400
   por tamaño. La regla de rechazo es de D3 (su FR-005): un envio con plantilla SMS cuyo texto renderizado excede un segmento responde 400
   con el codigo de tope de contenido vigente del canal, sin truncar. Sustituye el tope fijo de 160 caracteres de la ruta por plantilla
   (en UCS-2 equivaldria a 70). El cuerpo directo de HU2-112 conserva sus 160 caracteres: asimetria declarada en D3.
+- Q: Errores de bloques (D7) en la vista previa -> A: se propagan los del render: 409 `BLOCK_NOT_FOUND` (3080), `BLOCK_ARCHIVED` (3088),
+  `BLOCK_CYCLE_DETECTED` (3085), `BLOCK_DEPTH_EXCEEDED` (3086) y `BLOCK_EXPANSION_TOO_LARGE` (3087). Un bloque ausente aqui es 409; en el
+  guardado de D7 es 400. No se guarda nada.
 - Q: Que se cuenta -> A: `characterCount` son puntos de codigo Unicode del cuerpo renderizado; `subjectCharacterCount` los del asunto.
   Para SMS se devuelve ademas el desglose de segmentos sobre el cuerpo.
 - Q: Apariencia por canal -> A: el servidor devuelve texto plano y tipo de canal; la UI dibuja la apariencia y muestra el texto como
@@ -118,12 +123,14 @@ El ET escribe un cuerpo con `{{nombre}}`, indica un valor de ejemplo y obtiene e
 - Cuerpo renderizado de SMS vacio: `segments=0`, `exceedsSingleSegment=false`.
 - Pareja de sustitucion UTF-16 (emoji) en UCS-2: cuenta 2 unidades y 1 punto de codigo; nunca se parte entre segmentos.
 - Vista previa de canal sin ruta activa para el tenant: permitida (no es un envio); el canal solo selecciona el calculo.
+- Bloque ausente, archivado o en ciclo dentro de la vista previa: 409 con su codigo de bloque; no se guarda nada.
 
 ## Requirements
 
 - **FR-001**: El sistema MUST exponer una vista previa que reciba canal, asunto opcional, cuerpo, variables declaradas y valores, sin
-  requerir plantilla guardada, y devuelva asunto y cuerpo renderizados por el renderizador unico de `core` (Clarifications).
+  requerir plantilla guardada, y devuelva asunto y cuerpo renderizados por `RenderTemplateService` (Clarifications).
 - **FR-002**: La vista previa MUST NOT devolver 422 por variables faltantes; MUST listarlas en `missingVariables`. Sintaxis invalida: 400.
+  Errores de bloque: 409 (Clarifications).
 - **FR-003**: La respuesta MUST incluir `characterCount` (cuerpo) y `subjectCharacterCount` en puntos de codigo.
 - **FR-004**: Para canal `SMS` la respuesta MUST incluir `sms {encoding, units, unitsPerSegment, segments, exceedsSingleSegment}` segun
   Clarifications; para otros canales `sms=null`. La vista previa solo informa; no rechaza por tamaño.
@@ -134,12 +141,14 @@ El ET escribe un cuerpo con `{{nombre}}`, indica un valor de ejemplo y obtiene e
   `ADMINISTRADOR_PLATAFORMA` (B2), nunca CLIENTE. Guardar `sampleValues` hereda los roles de `PUT /templates`. Tenant tomado de la sesion.
 - **FR-008**: El calculo de segmentos MUST vivir en `core` (`SmsSegmenter`), sin frameworks, y ser la unica implementacion; D3 lo reutiliza
   y la UI no lo repite.
-- **FR-009**: El renderizado MUST hacerse solo por el renderizador unico de `core`. `NoDirectTemplateRenderTest` MUST prohibir
-  `TemplateEngine.render` fuera de ese servicio. D2 no modifica `TemplateEngine`.
+- **FR-009**: El renderizado MUST hacerse solo por `RenderTemplateService`. `NoDirectTemplateRenderTest` (creada por D2; D3 y D7 solo
+  añaden casos) MUST prohibir `TemplateEngine.render` fuera de ese servicio. D2 no modifica `TemplateEngine`.
 
 ### Key Entities
 
 - **Template** (D1): agrega `sampleValues` (mapa nombre -> texto).
+- **ResolvedTemplate** (unico, dueño `RenderTemplateService`): subject, body, channelType, category, critical, variables, blockRefs.
+  D2, D3 y D7 lo usan con esa forma.
 - **TemplatePreview** (no se persiste): asunto, cuerpo, `missingVariables`, conteos, `SmsSegmentation`.
 - **SmsSegmentation**: encoding (`GSM7`/`UCS2`), unidades, unidades por segmento, segmentos, `exceedsSingleSegment`.
 
@@ -149,7 +158,7 @@ Roles segun la tabla de B2 (`x-allowed-roles`).
 
 | Operacion | Ruta | Roles permitidos | Notas |
 |---|---|---|---|
-| POST | `/template-previews` | EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA | `{channel, subject?, body, variables?, values}`; 400; sin escritura |
+| POST | `/template-previews` | EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA | `{channel, subject?, body, variables?, values}`; 400 y 409 (bloques); sin escritura |
 | POST/PUT | `/templates` | EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA | D1 + `sampleValues` |
 | GET | `/templates`, `/templates/detail` | lecturas de B2 | D1 + `sampleValues` en el detalle |
 
@@ -164,8 +173,3 @@ Pantalla (repo `Front-Notification-mfe`, fuera de alcance): editor, valores de e
 - **SC-003**: Con dos tenants, `sampleValues` no cruza (prueba E2E).
 - **SC-004**: Una vista previa de 20000 caracteres y 50 variables responde en menos de 200 ms de calculo, con aserciones de `Duration`.
 - **SC-005**: Con un valor centinela en la vista previa, ni los logs capturados ni Mongo lo contienen (prueba automatizada).
-
-## Preguntas abiertas
-
-Ninguna. P1 (rol de la vista previa) y P2 (ejemplos automaticos) quedan resueltas en Clarifications. La entrada por contenido del
-renderizador unico y el orden de integracion con D3 quedan como decision pendiente en el plan.

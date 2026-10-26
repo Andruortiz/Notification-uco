@@ -39,9 +39,18 @@ Alcance: solo backend. La UI vive en Front-Notification-mfe y consume la tabla d
   (`providerLanguage`) cuando el proveedor lo informa. No bloquea (las etiquetas difieren: `es_MX` frente a `es-CO`); ver P2.
 - Q: Variables -> A: el proveedor usa variables posicionales (`1`, `2`). El vinculo declara `variableMap` (posicion -> nombre de variable
   de la plantilla D1) para que D3 construya `providerTemplate.variables`. Cada nombre debe ser variable declarada de la plantilla.
-- Q: Aislamiento -> A: la cuenta del proveedor es de plataforma, no de tenant. Un `providerTemplateId` solo puede estar vinculado por un
-  tenant a la vez (unico en `(providerId, providerTemplateId)`); el segundo recibe 409 sin revelar quien lo tiene.
-- Q: Roles -> A: igual que D1: OPERADOR escribe (vincula, sincroniza, publica, despublica); CLIENTE lee. Un rol superior satisface el minimo.
+- Q: Que plantillas del proveedor se pueden vincular -> A: solo las de una lista (`ProviderTemplateAllowEntry`) que gestiona el
+  ADMINISTRADOR_PLATAFORMA o el ADMINISTRADOR_APLICACION del tenant; no se acepta un `HX...` libre. Al agregar a la lista se verifica que
+  exista en el proveedor.
+- Q: Aislamiento -> A: la cuenta del proveedor es de plataforma, no de tenant. Un `providerTemplateId` solo puede estar en la lista de un
+  tenant a la vez (unico en `(providerId, providerTemplateId)`). «No existe en el proveedor», «no esta en la lista de este tenant» y
+  «listada por otro tenant» responden el mismo 404 uniforme `PROVIDER_TEMPLATE_NOT_FOUND` (NTF-3071), sin revelar si esta en uso.
+- Q: Roles (B2 entra primero) -> A: ver FR-012 y la tabla de rutas; roles de B2: ADMINISTRADOR_PLATAFORMA, ADMINISTRADOR_APLICACION,
+  EDITOR_PLANTILLAS, OPERADOR, AUDITOR, CLIENTE.
+- Q: Integracion con D3 y despacho -> A: D5 es duena de `TemplateProductionGate`, del uso de `variableMap` para
+  `providerTemplate.variables` y del desvio a `providerTemplate` en WHATSAPP; se integra despues de D3 y edita `SendNotificationService`;
+  D3 deja el punto de extensión. Orden de guardas previas al despacho: primero las preferencias de F1 (`DISCARDED`) y despues la
+  compuerta de D5 (fallo permanente).
 - Q: Prueba E2E -> A: proveedor doble. Un servidor HTTP simulado imita la consulta de aprobacion; ninguna prueba toca Twilio real.
 
 ## User Scenarios & Testing
@@ -57,8 +66,9 @@ El ET vincula una plantilla WHATSAPP de D1 con el identificador de la plantilla 
 1. **Given** una plantilla WHATSAPP `ACTIVA` y un `providerTemplateId` con forma `HX` + 32 hexadecimales, **When** se vincula, **Then**
    responde 201 con el estado leido del proveedor en ese momento y publicacion `BORRADOR`.
 2. **Given** una plantilla de canal distinto de WHATSAPP o `ARCHIVADA`, **When** se vincula, **Then** 400/409 con codigo propio.
-3. **Given** un identificador que el proveedor no conoce, **When** se vincula, **Then** 404 `PROVIDER_TEMPLATE_NOT_FOUND` y no se guarda nada.
-4. **Given** un identificador ya vinculado por otro tenant, **When** se vincula, **Then** 409 `PROVIDER_TEMPLATE_ALREADY_LINKED`.
+3. **Given** un identificador que el proveedor no conoce, que no esta en la lista del tenant o que lista otro tenant, **When** se vincula
+   o se agrega a la lista, **Then** el mismo 404 `PROVIDER_TEMPLATE_NOT_FOUND` (NTF-3071) y no se guarda nada.
+4. **Given** una plantilla del proveedor en la lista del tenant, **When** se vincula, **Then** 201; sin estar en la lista, 404 como arriba.
 5. **Given** un vinculo en `BORRADOR`, **When** se vincula otro identificador, **Then** reemplaza al anterior; en `PUBLICADA` o
    `SUSPENDIDA`, 409 `TEMPLATE_PUBLISHED` (despublicar primero).
 6. **Given** `variableMap` con un nombre que la plantilla no declara, **When** se vincula, **Then** 400 `UNDECLARED_TEMPLATE_VARIABLE`.
@@ -118,7 +128,8 @@ Un tenant no lee, sincroniza, publica ni ve vinculos de otro. El tenant sale de 
 
 - Edicion concurrente: el vinculo lleva `version`; la mutacion de usuario con version distinta responde 409 `TEMPLATE_VERSION_CONFLICT`
   (codigo de D1) y el barrido reintenta una vez sobre la lectura nueva.
-- Editar el cuerpo de la plantilla D1 de un vinculo `PUBLICADA` no la despublica en esta historia: ver P1.
+- Editar el cuerpo de la plantilla D1 de un vinculo `PUBLICADA`, o cambiar un bloque de D7 que ella use, no la despublica: limite
+  documentado, lo resuelve D6 (nivel 3). Dueno: Equipo de backend. Fecha: 2026-12-15.
 - Credenciales de Twilio ausentes: el adaptador de aprobacion queda deshabilitado con motivo (como el de envio); vincular y publicar
   responden 503; la compuerta de un vinculo ya `PUBLICADA` no se cierra por eso.
 - Ningun log, metrica ni respuesta lleva credenciales ni el cuerpo crudo del proveedor; `rejectionReason` se trunca a 200 caracteres.
@@ -127,8 +138,10 @@ Un tenant no lee, sincroniza, publica ni ve vinculos de otro. El tenant sale de 
 
 ### Functional Requirements
 
-- **FR-001**: El sistema MUST vincular una plantilla WHATSAPP `ACTIVA` del tenant con un `providerTemplateId` (`HX` + 32 hexadecimales,
-  como valida el adaptador de envio, spec 028) y un `variableMap` opcional, leyendo antes el estado al proveedor.
+- **FR-001**: El sistema MUST vincular una plantilla WHATSAPP `ACTIVA` del tenant solo con un `providerTemplateId` de la lista del tenant
+  (`HX` + 32 hexadecimales, como valida el adaptador de envio, spec 028) y un `variableMap` opcional, leyendo antes el estado al proveedor.
+- **FR-001b**: El sistema MUST permitir al ADMINISTRADOR_PLATAFORMA y al ADMINISTRADOR_APLICACION agregar, quitar y listar las entradas de
+  esa lista; quitar una entrada en uso por un vinculo `PUBLICADA` responde 409 `TEMPLATE_PUBLISHED`.
 - **FR-002**: El sistema MUST guardar por vinculo: `approvalStatus` (`NO_ENVIADA`, `PENDIENTE`, `APROBADA`, `RECHAZADA`, `PAUSADA`),
   `rejectionReason`, `providerLanguage`, `publicationStatus`, `lastSyncedAt`, `lastSyncError`, `version`.
 - **FR-003**: Una plantilla WHATSAPP no aprobada MUST NOT publicarse: la publicacion exige `APROBADA` en lectura fresca al proveedor.
@@ -138,14 +151,19 @@ Un tenant no lee, sincroniza, publica ni ve vinculos de otro. El tenant sale de 
   ultimo estado y registran `lastSyncError`.
 - **FR-006**: Un vinculo `PUBLICADA` cuya sincronizacion devuelve `RECHAZADA` o `PAUSADA` MUST pasar a `SUSPENDIDA` y solo volver a
   `PUBLICADA` por una publicacion explicita con `APROBADA`.
-- **FR-007**: El sistema MUST garantizar un `providerTemplateId` por un solo tenant, con indice unico `(providerId, providerTemplateId)`.
+- **FR-007**: El sistema MUST garantizar un `providerTemplateId` por un solo tenant, con indice unico `(providerId, providerTemplateId)` en
+  la lista, y responder 404 uniforme (NTF-3071) en los tres casos de la Clarificacion de aislamiento.
 - **FR-008**: Toda consulta y escritura MUST filtrar por el tenant de la sesion; el barrido opera por tenant del vinculo.
 - **FR-009**: La lectura de aprobacion MUST pasar por un puerto de salida de `core` con un adaptador Twilio; Meta sustituiria solo el adaptador.
 - **FR-010**: El barrido MUST ser seguro con varias replicas (arrendamiento atomico) y no solaparse consigo mismo.
 - **FR-011**: Las transiciones a `PUBLICADA`, `SUSPENDIDA` y `BORRADOR` MUST registrarse con log estructurado (`tenantId`, `templateId`,
   `correlationId`, estado) y metrica `notification.whatsapp.template.approval` (tags `status`); sin secretos.
-- **FR-012**: Vincular, sincronizar, publicar y despublicar MUST requerir OPERADOR; consultar, CLIENTE.
+- **FR-012**: Roles permitidos (B2): vincular y sincronizar, EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA; publicar y despublicar,
+  ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA; consultar el vinculo, CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION
+  o ADMINISTRADOR_PLATAFORMA; gestionar la lista, ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
 - **FR-013**: La mutacion de usuario MUST usar control optimista por `version`.
+- **FR-014**: D5 MUST integrar la compuerta en `SendNotificationService` (WHATSAPP): si esta cerrada, rechaza antes del despacho como
+  fallo permanente, despues de las preferencias de F1; y MUST armar `providerTemplate` con `variableMap` en lugar del cuerpo.
 
 ### Key Entities
 
@@ -157,13 +175,18 @@ Un tenant no lee, sincroniza, publica ni ve vinculos de otro. El tenant sale de 
 
 ## Contrato consumido por la UI (sin tocar `api-notificaciones.yaml`; lo define Contrato)
 
-| Operacion | Ruta | Rol minimo | Notas |
-|---|---|---|---|
-| POST | `/template-provider-links` | OPERADOR | `{templateId, providerTemplateId, variableMap}`; 201; 400, 404, 409, 503 |
-| GET | `/template-provider-links` | CLIENTE | `templateId` en query; 404 |
-| POST | `/template-approval-syncs` | OPERADOR | `{templateId}`; 200 con el vinculo; 404, 503 |
-| POST | `/template-publications` | OPERADOR | `{templateId, version}`; 200; 404, 409 `PROVIDER_TEMPLATE_NOT_APPROVED`, 503 |
-| POST | `/template-unpublications` | OPERADOR | `{templateId, version}`; 200; 404, 409 |
+Todas con `x-status: planned`.
+
+| Operacion | Ruta | operationId | Roles permitidos | Notas |
+|---|---|---|---|---|
+| POST | `/template-provider-links` | `linkProviderTemplate` | EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA | `{templateId, providerTemplateId, variableMap}`; 201; 400, 404 (3071), 409, 503 |
+| GET | `/template-provider-links` | `getTemplateProviderLink` | CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA | `templateId` en query; 404 |
+| POST | `/template-approval-syncs` | `syncTemplateApproval` | EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA | `{templateId}`; 200 con el vinculo; 404, 503 |
+| POST | `/template-publications` | `publishTemplate` | ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA | `{templateId, version}`; 200; 404, 409 `PROVIDER_TEMPLATE_NOT_APPROVED`, 503 |
+| POST | `/template-unpublications` | `unpublishTemplate` | ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA | `{templateId, version}`; 200; 404, 409 |
+| POST | `/provider-template-allowlist-entries` | `addProviderTemplateAllowEntry` | ADMINISTRADOR_PLATAFORMA, ADMINISTRADOR_APLICACION | `{providerTemplateId}`; 201; 404 (3071), 503 |
+| GET | `/provider-template-allowlist-entries` | `listProviderTemplateAllowEntries` | ADMINISTRADOR_PLATAFORMA, ADMINISTRADOR_APLICACION | paginado; 200 |
+| POST | `/provider-template-allowlist-removals` | `removeProviderTemplateAllowEntry` | ADMINISTRADOR_PLATAFORMA, ADMINISTRADOR_APLICACION | `{providerTemplateId}`; 204; 404, 409 `TEMPLATE_PUBLISHED` |
 
 ## Success Criteria
 
@@ -189,7 +212,6 @@ Un tenant no lee, sincroniza, publica ni ve vinculos de otro. El tenant sale de 
 
 ## Preguntas abiertas
 
-- **P1**: Editar el cuerpo de la plantilla D1 vinculada y `PUBLICADA` desincroniza el texto aprobado. Recomendacion: dejarlo para D6
-  (versionado); hoy el cuerpo D1 de WHATSAPP no se envia (se envia el del proveedor).
-- **P2**: Bloquear si `providerLanguage` no coincide con el idioma D1. Recomendacion: no ahora; informativo.
+- Resueltas por el usuario (lote nivel 2): P1 (cuerpo D1 o bloque D7 editado tras publicar) se deja a D6, con dueno y fecha en Edge Cases;
+  P2 (idioma) no bloquea, solo informativo.
 - **P3**: Nombre `BORRADOR/PUBLICADA/SUSPENDIDA` frente a un estado en D1 cuando llegue D6. Recomendacion: reutilizar el de D6 si lo define.

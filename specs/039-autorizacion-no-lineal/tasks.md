@@ -49,7 +49,7 @@ FR/SC remiten a [spec.md](spec.md).
 - T009: `/recipients/preferences` (planned) lleva `[CLIENTE, ADMINISTRADOR_APLICACION]` con el criterio "AA solo para subject ajeno" pendiente de la rama por sujeto (sin implementar; la operación no se sirve).
 - T006: `/devices` solo admite CLIENTE según la tabla; la rama de subject ajeno de `DeviceService` (antes admin) queda inalcanzable por ruta hasta la precondicion de Seguridad. `DeviceRegistryE2ETest` ahora afirma 403 para AP en `/devices`.
 - T014 y T015: pruebas de adjuntos (`ApiV2E2ESupport`, `ApiV2RoutesE2ETest`, `ResponseSchemasConformanceE2ETest`) usan CLIENTE, porque CL y AA son los unicos roles de la lista de adjuntos y AP no. `ApiV2RoutesE2ETest.thePlannedOperationsAreNotServed` deja de probar `/notification-retries` (available desde 2.1.0; la lista estaba desfasada) y las pruebas de preferencias usan CLIENTE.
-- Regla de categoria SEGURIDAD (critica) para AA y AP: no existe codigo que la aplique en nivel 1 (solo el flag `critical` de `TemplateCategory`); queda cubierta por la precondicion de Seguridad (2026-12-15), como dice el plan. `POST /notifications` admite CL, por lo que la rama queda abierta hasta esa fecha.
+- Regla de categoria SEGURIDAD (critica) para AA y AP: no existe codigo que la aplique en nivel 1 (solo el flag `critical` de `TemplateCategory`); queda cubierta por la precondicion de Seguridad (2026-12-15), como dice el plan. `POST /notifications` admite CLIENTE, ADMINISTRADOR_APLICACION y ADMINISTRADOR_PLATAFORMA (contrato y `RouteAuthorizationPolicy`); la rama de categoria SEGURIDAD queda abierta hasta esa fecha.
 - T018: `verify` completo no se ejecuto en esta sesion (instruccion del lote); se corrieron pruebas dirigidas y `-pl utils,core -am test` completo.
 - Constitucion: enmienda 2.1.0 en commit aparte (T016).
 - Sin `protected-resources.json` versionado: el catalogo se genera en `target/contract` por `ProtectedResourcesCatalogTest`, como antes.
@@ -57,3 +57,4 @@ FR/SC remiten a [spec.md](spec.md).
 ## Límites fuera de esta historia
 
 Ver [spec.md](spec.md#límites-documentados-principio-vii): precondición de sesión con roles (Seguridad, 2026-12-15), política OPA, creación automática de perfiles, consola C1b y migración manual de PDPs ya aprovisionados (AP, 2026-11-12). `verify` completo queda para el cierre de CI.
+- `/recipients/preferences` (GET y PUT, planned, sin controlador) queda `[CLIENTE, ADMINISTRADOR_APLICACION]`, mas abierto que «AA solo para subject ajeno» del plan: la ruta no se sirve y el criterio por sujeto no existe aun. Al implementarla, F1 debe restringir AA a subject ajeno y comprobarlo en el caso de uso.

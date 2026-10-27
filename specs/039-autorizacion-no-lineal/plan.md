@@ -65,7 +65,7 @@ RSA de prueba y su `AuthenticatedPrincipal` con `clientId`.
    | `POST /channels`, `/providers`, `/provider-connection-tests`, `/recipients/undeliverable-releases`, `/device-erasures` | AP |
    | `GET /configuration` | AP, AA |
    | `/devices` (POST, GET), `/device-removals` | CL |
-   | `/recipients/preferences` (GET, PUT) | CL; AA solo para `subject` ajeno |
+   | `/recipients/preferences` (GET, PUT) | CL, AA (desviacion: mas abierta que "AA solo para subject ajeno" porque la ruta es planned sin controlador; F1 la restringe al implementarse) |
    | `POST/PUT /templates`, `/template-archivals`, `/template-variable-detections` | ET, AP |
    | `GET /templates`, `/templates/detail` | CL, OP, ET, AA, AP |
    | `POST /template-renders` | CL, ET, AA, AP (OP no) |

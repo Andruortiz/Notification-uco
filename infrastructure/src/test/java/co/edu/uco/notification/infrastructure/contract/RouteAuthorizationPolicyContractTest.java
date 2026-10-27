@@ -1,7 +1,6 @@
 package co.edu.uco.notification.infrastructure.contract;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
@@ -16,7 +15,7 @@ class RouteAuthorizationPolicyContractTest {
 
   @Test
   void theInterimPolicyReturnsTheAllowedRolesDeclaredInTheContractForEveryOperation() {
-    assertTrue(ApiContract.operations().size() >= 33);
+    assertEquals(52, ApiContract.operations().size());
     assertEquals(ApiContract.operations().size(), policy.declaredRouteCount());
     assertEquals(
         Set.of(Role.OPERADOR, Role.ADMINISTRADOR_APLICACION, Role.ADMINISTRADOR_PLATAFORMA),

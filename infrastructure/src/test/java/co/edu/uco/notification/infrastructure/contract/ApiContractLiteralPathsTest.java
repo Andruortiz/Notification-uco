@@ -47,8 +47,8 @@ class ApiContractLiteralPathsTest {
   }
 
   @Test
-  void contractDeclaresThirtyThreeOperationsOnTwentySixPaths() {
-    assertEquals(33, ApiContract.operations().size());
-    assertEquals(26, ApiContract.paths().size());
+  void contractDeclaresFiftyTwoOperationsOnFortyPaths() {
+    assertEquals(52, ApiContract.operations().size());
+    assertEquals(40, ApiContract.paths().size());
   }
 }

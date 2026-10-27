@@ -27,18 +27,22 @@ public record Template(
     TemplateStatus status,
     long version,
     Instant createdAt,
-    Instant updatedAt) {
+    Instant updatedAt,
+    Map<String, String> sampleValues) {
 
   public static final int MAX_KEY = 60;
   public static final int MAX_SUBJECT = 200;
   public static final int MAX_BODY = 20000;
   public static final int MAX_VARIABLES = 50;
+  public static final int MAX_SAMPLE_VALUES = 50;
+  public static final int MAX_SAMPLE_VALUE_LENGTH = 2000;
   private static final Pattern KEY = Pattern.compile("[A-Za-z0-9._-]+");
   private static final Pattern LANGUAGE_PRIMARY = Pattern.compile("[A-Za-z]{2,3}");
   private static final Pattern LANGUAGE_SUBTAG = Pattern.compile("[A-Za-z0-9]{1,8}");
 
   public Template {
     variables = List.copyOf(variables);
+    sampleValues = sampleValues == null ? Map.of() : Map.copyOf(sampleValues);
   }
 
   public static Template create(
@@ -50,6 +54,7 @@ public record Template(
       final String subject,
       final String body,
       final List<TemplateVariable> declared,
+      final Map<String, String> sampleValues,
       final Instant now) {
     Preconditions.requireNonBlank(key, "key must not be blank");
     Preconditions.requireNonBlank(language, "language must not be blank");
@@ -73,7 +78,8 @@ public record Template(
         TemplateStatus.ACTIVA,
         0L,
         now,
-        now);
+        now,
+        samplesOf(sampleValues, subject, body));
   }
 
   public Template update(
@@ -81,6 +87,7 @@ public record Template(
       final String newSubject,
       final String newBody,
       final List<TemplateVariable> declared,
+      final Map<String, String> newSampleValues,
       final Instant now) {
     return new Template(
         id,
@@ -95,7 +102,8 @@ public record Template(
         status,
         version + 1,
         createdAt,
-        now);
+        now,
+        samplesOf(newSampleValues, newSubject, newBody));
   }
 
   public Template archive(final Instant now) {
@@ -112,7 +120,8 @@ public record Template(
         TemplateStatus.ARCHIVADA,
         version + 1,
         createdAt,
-        now);
+        now,
+        sampleValues);
   }
 
   public boolean archived() {
@@ -123,6 +132,13 @@ public record Template(
     return category.critical();
   }
 
+  public static void requireTextLimits(final String subject, final String body) {
+    requireLimit(
+        subject == null || subject.length() <= MAX_SUBJECT,
+        "subject exceeds " + MAX_SUBJECT + " characters");
+    requireLimit(body.length() <= MAX_BODY, "body exceeds " + MAX_BODY + " characters");
+  }
+
   private static List<TemplateVariable> resolve(
       final TemplateCategory category,
       final String subject,
@@ -130,10 +146,7 @@ public record Template(
       final List<TemplateVariable> declared) {
     Preconditions.requireNonNull(category, "category must not be null");
     Preconditions.requireNonBlank(body, "body must not be blank");
-    requireLimit(
-        subject == null || subject.length() <= MAX_SUBJECT,
-        "subject exceeds " + MAX_SUBJECT + " characters");
-    requireLimit(body.length() <= MAX_BODY, "body exceeds " + MAX_BODY + " characters");
+    requireTextLimits(subject, body);
     requireLimit(declared.size() <= MAX_VARIABLES, "more than " + MAX_VARIABLES + " variables");
     final Set<String> detected = TemplateEngine.detect(subject, body);
     requireLimit(detected.size() <= MAX_VARIABLES, "more than " + MAX_VARIABLES + " variables");
@@ -156,6 +169,27 @@ public record Template(
     return LANGUAGE_PRIMARY.matcher(parts[0]).matches()
         && Arrays.stream(parts, 1, parts.length)
             .allMatch(part -> LANGUAGE_SUBTAG.matcher(part).matches());
+  }
+
+  private static Map<String, String> samplesOf(
+      final Map<String, String> values, final String subject, final String body) {
+    if (values == null || values.isEmpty()) {
+      return Map.of();
+    }
+    requireLimit(
+        values.size() <= MAX_SAMPLE_VALUES,
+        "sampleValues exceeds " + MAX_SAMPLE_VALUES + " entries");
+    requireLimit(
+        values.values().stream()
+            .allMatch(value -> value != null && value.length() <= MAX_SAMPLE_VALUE_LENGTH),
+        "sample value exceeds " + MAX_SAMPLE_VALUE_LENGTH + " characters");
+    final Set<String> detected = TemplateEngine.detect(subject, body);
+    final List<String> undeclared =
+        values.keySet().stream().filter(name -> !detected.contains(name)).sorted().toList();
+    if (!undeclared.isEmpty()) {
+      throw new UndeclaredTemplateVariableException(undeclared);
+    }
+    return Map.copyOf(values);
   }
 
   private static void requireLimit(final boolean condition, final String message) {

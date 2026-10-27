@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.in.web;
 
 import static co.edu.uco.notification.core.domain.valueobject.Role.ADMINISTRADOR_APLICACION;
 import static co.edu.uco.notification.core.domain.valueobject.Role.ADMINISTRADOR_PLATAFORMA;
+import static co.edu.uco.notification.core.domain.valueobject.Role.AUDITOR;
 import static co.edu.uco.notification.core.domain.valueobject.Role.CLIENTE;
 import static co.edu.uco.notification.core.domain.valueobject.Role.EDITOR_PLANTILLAS;
 import static co.edu.uco.notification.core.domain.valueobject.Role.OPERADOR;
@@ -124,6 +125,96 @@ public class RouteAuthorizationPolicy {
               CLIENTE,
               EDITOR_PLANTILLAS,
               ADMINISTRADOR_APLICACION,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(HttpMethod.GET, "/audit-entries", AUDITOR, ADMINISTRADOR_PLATAFORMA),
+          rule(HttpMethod.GET, "/audit-entries/detail", AUDITOR, ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.POST,
+              "/template-previews",
+              EDITOR_PLANTILLAS,
+              ADMINISTRADOR_APLICACION,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(HttpMethod.PUT, "/template-mappings", EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.GET,
+              "/template-mappings",
+              CLIENTE,
+              OPERADOR,
+              EDITOR_PLANTILLAS,
+              ADMINISTRADOR_APLICACION,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.POST,
+              "/template-mapping-resolutions",
+              CLIENTE,
+              EDITOR_PLANTILLAS,
+              ADMINISTRADOR_APLICACION,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.POST,
+              "/template-provider-links",
+              EDITOR_PLANTILLAS,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.GET,
+              "/template-provider-links",
+              CLIENTE,
+              OPERADOR,
+              EDITOR_PLANTILLAS,
+              ADMINISTRADOR_APLICACION,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.POST,
+              "/template-approval-syncs",
+              EDITOR_PLANTILLAS,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.POST,
+              "/template-publications",
+              ADMINISTRADOR_APLICACION,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.POST,
+              "/template-unpublications",
+              ADMINISTRADOR_APLICACION,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.POST,
+              "/provider-template-allowlist-entries",
+              ADMINISTRADOR_PLATAFORMA,
+              ADMINISTRADOR_APLICACION),
+          rule(
+              HttpMethod.GET,
+              "/provider-template-allowlist-entries",
+              ADMINISTRADOR_PLATAFORMA,
+              ADMINISTRADOR_APLICACION),
+          rule(
+              HttpMethod.POST,
+              "/provider-template-allowlist-removals",
+              ADMINISTRADOR_PLATAFORMA,
+              ADMINISTRADOR_APLICACION),
+          rule(HttpMethod.POST, "/template-blocks", EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA),
+          rule(HttpMethod.PUT, "/template-blocks", EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.GET,
+              "/template-blocks",
+              CLIENTE,
+              OPERADOR,
+              EDITOR_PLANTILLAS,
+              ADMINISTRADOR_APLICACION,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.GET,
+              "/template-blocks/detail",
+              CLIENTE,
+              OPERADOR,
+              EDITOR_PLANTILLAS,
+              ADMINISTRADOR_APLICACION,
+              ADMINISTRADOR_PLATAFORMA),
+          rule(
+              HttpMethod.POST,
+              "/template-block-archivals",
+              EDITOR_PLANTILLAS,
               ADMINISTRADOR_PLATAFORMA));
 
   private static Map.Entry<Route, Set<Role>> rule(

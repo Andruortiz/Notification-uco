@@ -1,19 +1,25 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.Role;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
+import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.infrastructure.contract.ApiContract;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
@@ -26,10 +32,15 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mongodb.MongoDBContainer;
 import org.testcontainers.rabbitmq.RabbitMQContainer;
+import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = {"MONGO_USERNAME=test", "MONGO_PASSWORD=test"})
+    properties = {
+      "MONGO_USERNAME=test",
+      "MONGO_PASSWORD=test",
+      "notification.catalog.refresh-interval-ms=500"
+    })
 @Testcontainers
 class RoleAuthorizationE2ETest {
 
@@ -45,6 +56,8 @@ class RoleAuthorizationE2ETest {
 
   @LocalServerPort private int port;
 
+  @Autowired private ChannelCatalogPort channelCatalogPort;
+
   private WebTestClient web;
 
   @BeforeEach
@@ -54,6 +67,7 @@ class RoleAuthorizationE2ETest {
             .baseUrl("http://localhost:" + port)
             .responseTimeout(Duration.ofSeconds(20))
             .build();
+    awaitRoute("EMAIL");
   }
 
   private static List<ApiContract.Operation> availableOperations() {
@@ -129,12 +143,26 @@ class RoleAuthorizationE2ETest {
         TestTokens.bearerWithRoleClaim(
             TENANT_A, List.of(Role.EDITOR_PLANTILLAS.name(), Role.OPERADOR.name()));
 
-    assertNotDenied(
-        send(HttpMethod.POST, "/templates", authorization, template("union-key")),
-        "POST /templates");
-    assertNotDenied(
-        send(HttpMethod.GET, "/notifications", authorization, null), "GET /notifications");
+    createTemplate(authorization, "unionkey");
+    send(HttpMethod.GET, "/notifications", authorization, null).expectStatus().isOk();
     assertDenied(send(HttpMethod.POST, "/channels", authorization, Map.of()));
+  }
+
+  @Test
+  void allowedOperationsReachTheServiceAsAPositiveControl() {
+    send(HttpMethod.GET, "/channels", TestTokens.bearer(TENANT_A, Role.CLIENTE), null)
+        .expectStatus()
+        .isOk();
+    send(
+            HttpMethod.GET,
+            "/configuration",
+            TestTokens.bearer(TENANT_A, Role.ADMINISTRADOR_APLICACION),
+            null)
+        .expectStatus()
+        .isOk();
+    send(HttpMethod.GET, "/templates", TestTokens.bearer(TENANT_A, Role.EDITOR_PLANTILLAS), null)
+        .expectStatus()
+        .isOk();
   }
 
   @Test
@@ -170,17 +198,7 @@ class RoleAuthorizationE2ETest {
   @Test
   void aRoleOfOneTenantDoesNotReachTheTemplatesOfAnother() {
     final Map<?, ?> created =
-        web.post()
-            .uri("/templates")
-            .header(HttpHeaders.AUTHORIZATION, TestTokens.bearer(TENANT_A, Role.EDITOR_PLANTILLAS))
-            .contentType(MediaType.APPLICATION_JSON)
-            .bodyValue(template("isolationkey"))
-            .exchange()
-            .expectStatus()
-            .isCreated()
-            .expectBody(Map.class)
-            .returnResult()
-            .getResponseBody();
+        createTemplate(TestTokens.bearer(TENANT_A, Role.EDITOR_PLANTILLAS), "isolationkey");
     assertNotNull(created);
     final String templateId = String.valueOf(created.get("templateId"));
 
@@ -209,6 +227,20 @@ class RoleAuthorizationE2ETest {
             .contains(templateId));
   }
 
+  private Map<?, ?> createTemplate(final String authorization, final String key) {
+    final EntityExchangeResult<String> result =
+        web.post()
+            .uri("/templates")
+            .header(HttpHeaders.AUTHORIZATION, authorization)
+            .contentType(MediaType.APPLICATION_JSON)
+            .bodyValue(template(key))
+            .exchange()
+            .expectBody(String.class)
+            .returnResult();
+    assertEquals(201, result.getStatus().value(), result.getResponseBody());
+    return JsonMapper.builder().build().readValue(result.getResponseBody(), Map.class);
+  }
+
   private static Map<String, Object> template(final String key) {
     return Map.of(
         "key", key,
@@ -217,6 +249,22 @@ class RoleAuthorizationE2ETest {
         "language", "es",
         "subject", "Bienvenida {{nombre}}",
         "body", "Hola {{nombre}}, tu curso {{curso}}",
-        "variables", List.of(Map.of("name", "curso", "required", false)));
+        "variables",
+            List.of(
+                Map.of("name", "nombre", "required", true),
+                Map.of("name", "curso", "required", false)));
+  }
+
+  private void awaitRoute(final String channelType) {
+    final Instant deadline = Instant.now().plus(Duration.ofSeconds(20));
+    while (Instant.now().isBefore(deadline)) {
+      if (channelCatalogPort
+          .findActiveRoute(ChannelType.of(channelType), TenantId.of("readiness-check"))
+          .blockOptional()
+          .isPresent()) {
+        return;
+      }
+    }
+    throw new IllegalStateException("channel " + channelType + " never became active");
   }
 }

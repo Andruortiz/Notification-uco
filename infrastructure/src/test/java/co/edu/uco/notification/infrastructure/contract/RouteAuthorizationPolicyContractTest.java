@@ -17,6 +17,7 @@ class RouteAuthorizationPolicyContractTest {
   @Test
   void theInterimPolicyReturnsTheAllowedRolesDeclaredInTheContractForEveryOperation() {
     assertTrue(ApiContract.operations().size() >= 33);
+    assertEquals(ApiContract.operations().size(), policy.declaredRouteCount());
     assertEquals(
         Set.of(Role.OPERADOR, Role.ADMINISTRADOR_APLICACION, Role.ADMINISTRADOR_PLATAFORMA),
         policy.allowedRolesFor(HttpMethod.GET, "/provider-health"));

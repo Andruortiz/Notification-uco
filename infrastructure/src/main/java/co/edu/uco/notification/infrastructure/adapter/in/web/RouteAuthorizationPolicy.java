@@ -146,6 +146,10 @@ public class RouteAuthorizationPolicy {
     this.delegatedToPep = delegatedToPep;
   }
 
+  public int declaredRouteCount() {
+    return rules.size();
+  }
+
   public Set<Role> allowedRolesFor(final HttpMethod method, final String path) {
     if (delegatedToPep) {
       return EnumSet.allOf(Role.class);

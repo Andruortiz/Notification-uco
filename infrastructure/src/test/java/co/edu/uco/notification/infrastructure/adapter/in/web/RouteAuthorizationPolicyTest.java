@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import co.edu.uco.notification.core.domain.valueobject.Role;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
@@ -90,5 +91,15 @@ class RouteAuthorizationPolicyTest {
   void aVersionOneRouteAndAnUndeclaredMethodFallBackToThePlatformAdministrator() {
     assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.GET, "/notifications/abc-123"));
     assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.DELETE, "/notifications"));
+  }
+
+  @Test
+  void variantsOfADeclaredRouteAreUndeclaredAndOnlyThePlatformAdministratorReachesThem() {
+    for (final String path :
+        List.of("/notifications;x=1", "/notifications/", "/NOTIFICATIONS", "/Notifications")) {
+      assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.GET, path), path);
+    }
+    assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.HEAD, "/notifications"));
+    assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.DELETE, "/channels"));
   }
 }

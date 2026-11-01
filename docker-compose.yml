@@ -1,6 +1,6 @@
 services:
   mongodb:
-    image: mongo:7
+    image: mongo:9
     container_name: notification-mongodb
     restart: unless-stopped
     ports:

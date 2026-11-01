@@ -42,7 +42,7 @@ services:
       - minio-data:/data
 
   clamav:
-    image: clamav/clamav:1.4
+    image: clamav/clamav:1.5
     container_name: notification-clamav
     restart: unless-stopped
     ports:

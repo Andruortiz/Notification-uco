@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "ask": [
+      "Read(./specs/00*/**)",
+      "Read(./specs/01*/**)",
+      "Read(./specs/02[0-7]*/**)",
+      "Read(./specs/028-aprovisionar-pdp/**)"
+    ]
+  }
+}

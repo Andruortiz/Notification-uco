@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Recomendaciones API y Frontend</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1c2330; --muted: #5b6577; --line: #dfe3ea;
+    --accent: #2457d6; --high: #c0392b; --mid: #b9770e; --low: #2e7d4f; --code: #eef1f6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11151c; --card: #181e28; --ink: #e6e9ef; --muted: #98a2b3; --line: #2b3342;
+      --accent: #7fa4ff; --high: #ff7b6b; --mid: #e8b04a; --low: #5fd08c; --code: #212938;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11151c; --card: #181e28; --ink: #e6e9ef; --muted: #98a2b3; --line: #2b3342;
+    --accent: #7fa4ff; --high: #ff7b6b; --mid: #e8b04a; --low: #5fd08c; --code: #212938;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header, main { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 32px; padding-bottom: 8px; display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; }
+  h1 { font-size: 1.7rem; margin: 0 0 4px; }
+  h2 { font-size: 1.25rem; margin: 40px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.02rem; margin: 20px 0 8px; }
+  p { margin: 8px 0; }
+  .sub { color: var(--muted); margin: 0; }
+  button.theme { background: var(--card); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer; font: inherit; }
+  nav { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 0; }
+  nav a { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px;
+    color: var(--accent); text-decoration: none; font-size: .9rem; background: var(--card); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin: 12px 0; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line);
+    border-radius: 12px; overflow: hidden; font-size: .93rem; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--code); font-weight: 600; }
+  tr:last-child td { border-bottom: 0; }
+  code { background: var(--code); padding: 1px 6px; border-radius: 5px; font-size: .88em; }
+  .tag { display: inline-block; padding: 1px 9px; border-radius: 999px; font-size: .78rem; font-weight: 600;
+    border: 1px solid currentColor; white-space: nowrap; }
+  .alta { color: var(--high); } .media { color: var(--mid); } .baja { color: var(--low); }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .note { border-left: 4px solid var(--accent); padding: 8px 14px; background: var(--card);
+    border-radius: 0 8px 8px 0; margin: 14px 0; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+  footer { max-width: 980px; margin: 40px auto; padding: 0 16px; color: var(--muted); font-size: .88rem; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Recomendaciones para API y Frontend</h1>
+    <p class="sub">Notification-uco · análisis del 14 de octubre de 2026 · basado en el código de <code>main</code> y en el repositorio Front-Notification</p>
+  </div>
+  <button class="theme" id="theme" type="button">Tema</button>
+</header>
+<main>
+  <nav>
+    <a href="#api">1. Qué le falta a la API</a>
+    <a href="#ws">2. Migrar a WebSocket</a>
+    <a href="#carga">3. Saturación con muchas instancias</a>
+    <a href="#bidi">4. Para qué serviría bidireccional</a>
+    <a href="#front">5. Frontend: detalle de notificación</a>
+    <a href="#orden">6. Orden sugerido</a>
+  </nav>
+
+  <h2 id="api">1. Qué le falta a la API</h2>
+
+  <h3>Endpoints que existen hoy</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Método</th><th>Ruta</th><th>Caso de uso</th></tr>
+    <tr><td>POST</td><td><code>/notifications</code></td><td>CU-01 enviar (responde 202)</td></tr>
+    <tr><td>POST</td><td><code>/notifications/batches</code></td><td>CU-02 lote</td></tr>
+    <tr><td>GET</td><td><code>/notifications/detail?notificationId={id}</code></td><td>CU-04 estado</td></tr>
+    <tr><td>GET</td><td><code>/notifications</code></td><td>CU-05 búsqueda (recipientId, channelType, status, from, to, limit, offset)</td></tr>
+    <tr><td>GET / POST</td><td><code>/notifications/stream</code> y <code>/notifications/stream/tickets</code></td><td>Panel en vivo por SSE</td></tr>
+    <tr><td>POST / GET</td><td><code>/attachment-uploads</code>, <code>/attachment-upload-completions</code>, <code>/attachment-uploads/status?uploadId={id}</code></td><td>Adjuntos</td></tr>
+    <tr><td>GET</td><td><code>/channels</code>, <code>/providers</code>, <code>/configuration</code></td><td>Catálogo y configuración</td></tr>
+  </table></div>
+
+  <h3>Especificado en <code>docs/casos-de-uso.md</code> y sin construir</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Pendiente</th><th>Endpoint propuesto</th><th>Nota</th></tr>
+    <tr><td>Reintento manual (CU-06, spec 018)</td><td><code>POST /notification-retries</code></td><td>Hueco más visible: una <code>FAILED</code> solo se recupera por el reencolado automático. Decidir antes si el reintento reinicia el contador de intentos.</td></tr>
+    <tr><td>Preferencias del destinatario (CU-09, spec 013)</td><td><code>GET/PUT /recipients/preferences?recipientId={id}</code></td><td>Incluye baja total y exclusión de envíos no esenciales. Quedan por responder las clarificaciones Q1–Q4 de la spec.</td></tr>
+    <tr><td>Administración del catálogo (CU-07/08)</td><td>Registrar y deshabilitar canal y proveedor</td><td>Hoy <code>/channels</code> y <code>/providers</code> son solo lectura.</td></tr>
+    <tr><td>Plantillas (CU-12) y programación (CU-13)</td><td>—</td><td>Fuera de alcance del periodo según el roadmap.</td></tr>
+  </table></div>
+
+  <h3>Huecos que no están en ningún caso de uso</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Propuesta</th><th>Por qué</th></tr>
+    <tr><td>Cancelar: <code>POST /notification-cancellations</code></td><td>Contraparte natural del reintento; comparte <code>StatusTransitionPolicy</code>.</td></tr>
+    <tr><td>Historial de intentos: <code>GET /notifications/attempts?notificationId={id}</code></td><td>La spec 017 ya modela el ciclo de intentos pero la API no lo expone. Depura fallos sin ir a logs.</td></tr>
+    <tr><td>Estado del lote: <code>GET /batches/{batchId}</code></td><td><code>sendBatch</code> devuelve un <code>batchId</code> sin forma de ver el progreso ni los resultados por ítem.</td></tr>
+    <tr><td>Paginación real en la búsqueda</td><td><code>limit/offset</code> sin total ni cursor se degrada con volumen. Falta ordenamiento y filtros por <code>externalId</code>, <code>priority</code> y <code>batchId</code>.</td></tr>
+    <tr><td>Búsqueda por <code>externalId</code></td><td>El cliente manda su propio ID para idempotencia y no puede consultarlo por ese ID.</td></tr>
+    <tr><td>Estadísticas: <code>GET /notifications/stats</code></td><td>Conteos por estado, canal y proveedor en una ventana de tiempo; alimenta el panel.</td></tr>
+    <tr><td>Webhooks de proveedor (Brevo, Twilio, FCM)</td><td>Cerrar <code>SENT → DELIVERED / BOUNCED</code>. Hoy el ciclo parece terminar en el envío.</td></tr>
+    <tr><td>Callback saliente al cliente</td><td>Alternativa al SSE cuando cambia el estado.</td></tr>
+    <tr><td>Listar, descargar y eliminar adjuntos</td><td>No hay listado por notificación.</td></tr>
+  </table></div>
+
+  <h3>Calidad del contrato</h3>
+  <ul>
+    <li><code>springdoc</code> ya está en el <code>pom.xml</code>: verificar que los DTO tengan <code>@Schema</code>, ejemplos y los códigos de error documentados.</li>
+    <li>Cabeceras estándar: <code>Retry-After</code> en 429, <code>Location</code> en el 202 y <code>Idempotency-Key</code> como alternativa a <code>externalId</code>.</li>
+  </ul>
+
+  <div class="note"><strong>Recomendación:</strong> primero el reintento manual (spec 018, 22 tareas ya planeadas); luego cancelación, historial de intentos y estado de lote, que son baratos y reutilizan el modelo existente. El rate limit y el failover del roadmap no son endpoints, pero afectan más la robustez real.</div>
+
+  <h2 id="ws">2. Migrar a WebSocket: qué falta</h2>
+  <p>El stream actual es SSE sobre WebFlux y la lógica ya está desacoplada del transporte. No hay clases ni dependencias de WebSocket en el repo, pero <code>spring-webflux</code> ya trae el soporte.</p>
+
+  <h3>Qué se reutiliza</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Capa</th><th>Pieza</th><th>¿Reutilizable?</th></tr>
+    <tr><td>Core</td><td><code>SubscribeToNotificationUpdatesService</code> (snapshot de hasta 200, replay de 256, filtro por tenant)</td><td>Sí, tal cual: devuelve <code>Flux&lt;NotificationLiveUpdate&gt;</code></td></tr>
+    <tr><td>Core</td><td><code>IssueSubscriptionTicketService</code> y <code>SubscriptionTicketPort</code></td><td>Sí, el ticket de un solo uso sirve igual</td></tr>
+    <tr><td>Infra</td><td><code>NotificationUpdatesRabbitAdapter</code></td><td>Sí</td></tr>
+    <tr><td>Infra</td><td><code>NotificationLiveUpdatesController</code> (SSE + heartbeat de 15 s)</td><td>No: es lo que se reemplaza</td></tr>
+    <tr><td>Infra</td><td><code>AuthenticationWebFilter</code> (<code>isSubscribe</code> fijo a <code>/notifications/stream</code>)</td><td>Hay que ajustarlo</td></tr>
+    <tr><td>Front</td><td><code>liveUpdates.ts</code> con <code>fetchEventSource</code></td><td>Se reemplaza</td></tr>
+  </table></div>
+
+  <h3>Backend: lo que hay que construir</h3>
+  <ol>
+    <li><strong>WebSocketHandler</strong> que resuelva el <code>AuthenticatedPrincipal</code>, llame al mismo caso de uso y serialice a JSON.</li>
+    <li><strong>HandlerMapping + WebSocketHandlerAdapter</strong> en una ruta como <code>/ws/notifications</code>, con orden por encima de los controladores.</li>
+    <li><strong>Autenticación en el handshake.</strong> El navegador no envía <code>Authorization</code> en un WS. Opción A: reusar el ticket por query (<code>?ticket=</code>), cambio mínimo. Opción B: ticket en el primer mensaje, que evita que quede en logs de proxys pero exige estado "no autenticado" y timeout.</li>
+    <li><strong>Filtros de suscripción</strong>: en la URL (sin cambio de contrato) o por mensaje <code>subscribe</code> (la ventaja real de migrar).</li>
+    <li><strong>Heartbeat</strong>: ping/pong del protocolo o <code>{"type":"ping"}</code> cada 15 s.</li>
+    <li><strong>Códigos de cierre</strong>: 1008 policy violation, 1011 error interno, 4401/4403 propios; tras el upgrade ya no existen 401/403.</li>
+    <li><strong>Validar <code>Origin</code> a mano</strong>: <code>CorsWebFilter</code> no aplica al handshake WS.</li>
+    <li><strong>Rutas y roles</strong>: <code>RouteAuthorizationPolicy</code> debe conocer la ruta WS con el mismo rol mínimo que <code>/notifications/stream</code>.</li>
+    <li><strong>Observabilidad</strong>: gauge de conexiones activas, contador de aperturas/cierres por código y <code>LogContext</code> con correlación para sesiones largas.</li>
+    <li><strong>Contrato</strong>: OpenAPI no describe WebSocket; documentar con AsyncAPI o una sección en <code>docs/</code> y actualizar <code>schema.d.ts</code>.</li>
+  </ol>
+
+  <h3>Frontend</h3>
+  <ul>
+    <li>Nuevo cliente en <code>liveUpdates.ts</code> con la misma interfaz (<code>onStateChange</code>) para no tocar <code>useNotificationsLiveFeed</code>.</li>
+    <li>Reconexión con backoff propia y estado <code>reconnecting</code> para <code>LiveConnectionBadge</code>.</li>
+    <li>Pedir ticket antes de cada reconexión (es de un solo uso).</li>
+    <li>Proxy de Vite e ingress con <code>ws: true</code>.</li>
+  </ul>
+
+  <h3>Riesgos y decisiones previas</h3>
+  <ul>
+    <li><strong>¿Para qué migrar?</strong> SSE ya cubre servidor → cliente con reconexión automática. WS solo gana si hay tráfico bidireccional real.</li>
+    <li><strong>Reconexión y snapshot</strong>: hoy cada reconexión repite el snapshot de 200 sin <code>Last-Event-ID</code>; decidir si se añade un cursor.</li>
+    <li><strong><code>directBestEffort</code></strong> descarta eventos con suscriptores lentos; decidir <code>onBackpressureDrop</code> o cierre del socket.</li>
+    <li><strong>Escalado</strong>: las conexiones WS son pegajosas; el autoscaling debería mirar conexiones y no solo CPU.</li>
+    <li><strong>Convivencia</strong>: mantener SSE y WS en paralelo. El congelamiento del roadmap empieza el 6 de nov, así que compite con 018, 013 y failover.</li>
+    <li><strong>Proceso</strong>: ADR y spec con speckit antes de escribir código.</li>
+  </ul>
+
+  <h2 id="carga">3. ¿Se satura la conexión con muchas instancias?</h2>
+  <div class="card">
+    <p><strong>No por el transporte.</strong> SSE y WS son una conexión TCP larga cada uno; en Netty/WebFlux un socket abierto cuesta memoria y un descriptor, no un hilo. El límite de 6 conexiones por origen existe solo con HTTP/1.1 y desaparece con HTTP/2.</p>
+  </div>
+
+  <h3>Dónde sí se satura</h3>
+  <ol>
+    <li><strong>Una lectura a Mongo por evento y por suscriptor.</strong> Cada suscriptor hace <code>updates().flatMapSequential(findById)</code>. Con N paneles, un cambio dispara N lecturas idénticas. Es el cuello principal.</li>
+    <li><strong>Snapshot de 200 en cada conexión.</strong> Una reconexión masiva (despliegue, caída del ingress) genera un efecto manada contra Mongo.</li>
+    <li><strong>Buffer de replay de 256 por suscriptor</strong> y <code>directBestEffort</code>: un cliente lento acumula memoria o pierde eventos en silencio.</li>
+    <li><strong>Sin límite de conexiones</strong> por tenant ni por instancia.</li>
+    <li><strong>Escalado</strong>: cada instancia recibe todos los eventos de su cola y repite decodificación y filtro. Pendiente de verificar cómo se declara <code>notificationUpdatesQueue</code> (exclusiva o compartida), porque cambia el cálculo.</li>
+  </ol>
+
+  <h3>Qué hacer sin migrar</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Prioridad</th><th>Cambio</th><th>Efecto</th></tr>
+    <tr><td><span class="tag alta">Alta</span></td><td>Una sola lectura por evento por instancia, repartida a todos los suscriptores (<code>findById</code> compartido o caché corto)</td><td>Quita el cuello principal</td></tr>
+    <tr><td><span class="tag alta">Alta</span></td><td>Medir: gauge de conexiones SSE y contador de <code>findById</code> por evento</td><td>Sin esto no se sabe cuál es el cuello</td></tr>
+    <tr><td><span class="tag media">Media</span></td><td>Límite de conexiones por tenant e instancia, respondiendo 429</td><td>Defensa básica</td></tr>
+    <tr><td><span class="tag media">Media</span></td><td>Jitter y backoff en la reconexión del front; reducir el snapshot con filtros amplios</td><td>Evita la manada</td></tr>
+    <tr><td><span class="tag media">Media</span></td><td>Política de cliente lento: cerrar en vez de acumular</td><td>Memoria acotada</td></tr>
+    <tr><td><span class="tag baja">Baja</span></td><td>Confirmar HTTP/2 en el ingress</td><td>Quita el límite de 6 por origen</td></tr>
+    <tr><td><span class="tag baja">Baja</span></td><td>Ajustar <code>idleTimeout</code> del balanceador por encima de 15 s</td><td>Evita cortes falsos</td></tr>
+  </table></div>
+  <div class="note">RNF-03 (≥ 500/min por réplica) nunca se midió. Conviene correr una prueba con unos 200 clientes SSE antes de decidir nada.</div>
+
+  <h2 id="bidi">4. Para qué serviría un canal bidireccional</h2>
+  <p>Para este servicio, poco: casi todo se resuelve con una petición REST mientras el SSE sigue abierto.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Caso</th><th>Hoy</th><th>Con WS</th><th>Alternativa sin WS</th></tr>
+    <tr><td>Cambiar filtros sin reconectar</td><td>Cerrar y reabrir, con snapshot nuevo</td><td>Mensaje <code>subscribe</code></td><td><code>PUT /notifications/stream/subscriptions?subscriptionId={id}</code> sobre el stream existente</td></tr>
+    <tr><td>Ack y reanudación</td><td>Cada reconexión repite el snapshot</td><td>El cliente confirma el último evento</td><td><code>id:</code> en cada evento SSE y soporte de <code>Last-Event-ID</code></td></tr>
+    <tr><td>Backpressure real</td><td>No hay forma</td><td>El cliente pide menos tráfico</td><td>Política de cierre por cliente lento</td></tr>
+    <tr><td>Acciones del operador</td><td><code>POST</code> aparte</td><td>Comando por el socket</td><td>Mantener <code>POST</code>: más simple de auditar y proteger por roles</td></tr>
+    <tr><td>Presencia de paneles</td><td>No hay</td><td>Sí</td><td>Gauge de conexiones</td></tr>
+  </table></div>
+  <h3>Lo que se perdería al migrar</h3>
+  <ul>
+    <li>Reconexión automática y <code>Last-Event-ID</code> de SSE.</li>
+    <li>Códigos HTTP (401/403/429) y autenticación por cabecera.</li>
+    <li>Documentación OpenAPI y la generación de <code>schema.d.ts</code>.</li>
+    <li>Pruebas de contrato y E2E más sencillas con <code>WebTestClient</code>.</li>
+  </ul>
+  <div class="note"><strong>Conclusión:</strong> los dos únicos casos que justifican algo bidireccional (filtros dinámicos y reanudación) se cubren sin WebSocket. WS tendría sentido si el panel pasa a ser una consola de operación con muchos comandos en vivo o colaboración entre operadores.</div>
+
+  <h2 id="front">5. Frontend: más valor en el detalle de una notificación</h2>
+  <p>Hoy <code>Detalle.tsx</code> muestra una tarjeta con canal, proveedor, fechas y la lista de intentos.</p>
+
+  <h3>Datos que ya llegan y no se aprovechan</h3>
+  <ul>
+    <li><code>correlationId</code> viene en <code>NotificationStatusResponse</code> y no se muestra; es lo que se necesita para buscar en logs o trazas.</li>
+    <li><code>externalId</code> y <code>recipientId</code> vienen en el historial y no aparecen en el detalle.</li>
+    <li>Los intentos (fecha, resultado, origen, proveedor) se muestran como texto, cuando piden una línea de tiempo.</li>
+  </ul>
+
+  <h3>Mejoras solo de frontend</h3>
+  <div class="grid">
+    <div class="card"><strong>Línea de tiempo</strong><p>Aceptada → intento 1 (recuperable) → intento 2 (aceptado) → entregada, con iconos, colores y tiempos entre pasos ("+12 s").</p></div>
+    <div class="card"><strong>Cabecera resumen</strong><p>Estado grande, canal con icono, proveedor y duración total desde la aceptación.</p></div>
+    <div class="card"><strong>Campos copiables</strong><p><code>notificationId</code>, <code>externalId</code> y <code>correlationId</code> con un clic.</p></div>
+    <div class="card"><strong>Proveedor que falló y el que entregó</strong><p>Útil cuando exista failover entre proveedores.</p></div>
+    <div class="card"><strong>Acciones con contexto</strong><p>Confirmación en Reintentar y mostrar el intento nuevo en la línea de tiempo cuando llegue por SSE.</p></div>
+    <div class="card"><strong>Mensaje legible por estado</strong><p>"En cola, esperando proveedor", "Fallo permanente: no se reintentará", con el porqué de cada transición.</p></div>
+    <div class="card"><strong>Enlaces cruzados</strong><p>Ir al listado filtrado por mismo destinatario o mismo <code>batchId</code>.</p></div>
+    <div class="card"><strong>Estados de carga y vacíos</strong><p>Esqueletos e indicador "actualizado hace Xs" ligado al SSE.</p></div>
+  </div>
+
+  <h3>Problema de fondo a corregir</h3>
+  <div class="note">El detalle obtiene los intentos con <code>GET /notifications?limit=200</code> y busca el id en memoria. Si la notificación no está entre las últimas 200, los intentos y la fecha de aceptación desaparecen sin aviso. Solución: que <code>GET /notifications/detail?notificationId={id}</code> devuelva <code>acceptedAt</code>, <code>externalId</code>, <code>recipientId</code> y <code>deliveryAttempts</code>.</div>
+
+  <h3>Lo que requiere cambios en el backend</h3>
+  <div class="table-wrap"><table>
+    <tr><th>Mejora</th><th>Qué falta en la API</th></tr>
+    <tr><td>Motivo del fallo por intento (timeout, número inválido, cuota)</td><td><code>DeliveryAttempt</code> solo trae el resultado, no la causa. <strong>Mayor valor, bajo costo.</strong></td></tr>
+    <tr><td>Asunto y cuerpo, con enmascarado de datos sensibles</td><td>El estado no devuelve el contenido</td></tr>
+    <tr><td>Adjuntos con nombre, tipo y tamaño</td><td>No hay listado por notificación</td></tr>
+    <tr><td>Eventos reales de entrega (entregada, rebotada, abierta)</td><td>No hay webhooks de proveedor</td></tr>
+    <tr><td>Cancelar una notificación pendiente</td><td>No existe</td></tr>
+    <tr><td>Lote al que pertenece y su progreso</td><td>No hay <code>GET /batches/{id}</code></td></tr>
+  </table></div>
+
+  <div class="note"><strong>A confirmar:</strong> el <code>schema.d.ts</code> del front ya incluye <code>retryNotification</code> y <code>DeliveryAttempt.origin</code>, pero en el backend de <code>main</code> no encontré ese endpoint. O el front va por delante o está en otra rama.</div>
+
+  <h2 id="orden">6. Orden sugerido</h2>
+  <ol>
+    <li><strong>Medir</strong>: conexiones SSE activas y lecturas por evento; prueba con ~200 clientes.</li>
+    <li><strong>Backend pequeño</strong>: detalle completo en <code>GET /notifications/detail?notificationId={id}</code> y motivo del fallo por intento.</li>
+    <li><strong>Frontend</strong>: línea de tiempo, cabecera resumen y campos copiables.</li>
+    <li><strong>Rendimiento SSE</strong>: lectura compartida por evento, límites por tenant, jitter en la reconexión.</li>
+    <li><strong>Funcionalidad</strong>: reintento manual (018), cancelación, estado de lote, búsqueda por <code>externalId</code>.</li>
+    <li><strong>Reanudación SSE</strong>: <code>Last-Event-ID</code> y filtros dinámicos por <code>PUT</code>.</li>
+    <li><strong>WebSocket</strong>: solo si aparece un caso bidireccional real; ADR y spec primero.</li>
+  </ol>
+</main>
+<footer>Las cifras de carga son estimaciones: RNF-03 no tiene medición todavía.</footer>
+<script>
+  (function () {
+    var root = document.documentElement, btn = document.getElementById('theme');
+    try { var saved = localStorage.getItem('theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+    btn.addEventListener('click', function () {
+      var dark = root.getAttribute('data-theme') === 'dark' ||
+        (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+      var next = dark ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      try { localStorage.setItem('theme', next); } catch (e) {}
+    });
+  })();
+</script>
+</body>
+</html>

@@ -1,5 +1,15 @@
 <!--
 Sync Impact Report
+Version change: 2.0.0 -> 2.0.1
+Rationale: PATCH -- el trabajo pasa a trunk-based con `main` como base desde 2026-10-14; se actualizan las
+referencias a `develop` y a GitFlow en el Principio V y en "Flujo de desarrollo". Ningun principio cambia de fondo.
+Modified principles: V. Trazabilidad en git (GitFlow -> trunk-based).
+Added sections: none.
+Removed sections: none.
+-->
+
+<!--
+Sync Impact Report
 Version change: 1.2.2 -> 2.0.0
 Rationale: MAJOR -- Principle II is redefined incompatibly. The pattern `recurso:accion` and the path variable
 `GET /notifications/{id}` are retired: the PDP resolves protected resources by exact match on method and literal path
@@ -104,7 +114,7 @@ el estilo. Mientras el pipeline no tenga un umbral configurado y bloqueante para
 queda como pendiente explícito de esta puerta (Principio VII), no como un criterio ya cumplido.
 
 ### V. Trazabilidad en git
-Commits de una sola línea (`tipo(ámbito): descripción`), rama por historia siguiendo GitFlow
+Commits de una sola línea (`tipo(ámbito): descripción`), rama por historia en desarrollo trunk-based
 (`feature/HU2-XXX-descripcion`, ADR-0015). El razonamiento completo vive en el cuerpo del PR o en
 `specs/<historia>/`, nunca en el commit. El usuario del repositorio siempre revisa y mergea — un
 asistente de IA nunca hace merge por su cuenta.
@@ -200,9 +210,9 @@ local por réplica permitiría que cada una agote el límite completo por su cue
 
 ## Flujo de desarrollo
 
-Rama por historia sobre `develop` (excepción documentada solo para el bootstrap inicial, ADR-0015).
+Rama por historia sobre `main` (excepción documentada solo para el bootstrap inicial, ADR-0015).
 Pipeline de CI en GitHub Actions: compilar → pruebas + puertas de calidad (ADR-0013). El reviewer
-automático de Copilot en PRs contra `develop` bloquea el merge hasta resolución explícita de cada
+automático de Copilot en PRs contra `main` bloquea el merge hasta resolución explícita de cada
 comentario — nunca se resuelve solo para desbloquear, se lee y se corrige si aplica. Para toda
 historia nueva desde el 2026-09-07: los artefactos de spec-kit (`spec.md`, `plan.md`, `tasks.md`) se
 commitean en la misma rama que el código que implementan, no después ni por separado. `tasks.md`
@@ -220,4 +230,4 @@ propio seguimiento — esta constitución no les asigna una ubicación formal ni
 herramienta externa como fuente de verdad. Lo único vinculante para el proceso de desarrollo asistido
 por IA es lo que está escrito en este archivo y en `specs/<historia>/`.
 
-**Version**: 2.0.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-10-19
+**Version**: 2.0.1 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-10-23

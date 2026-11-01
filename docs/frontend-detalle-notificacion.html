@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detalle de notificación</title>
+<style>
+  :root {
+    --bg:#f4f6fa; --card:#fff; --ink:#1b2230; --muted:#5d687b; --line:#dde2eb; --code:#eef1f6;
+    --accent:#2457d6; --ok:#1f7a4a; --ok-bg:#e3f4ea; --warn:#9a6200; --warn-bg:#fdf1d8;
+    --err:#b3261e; --err-bg:#fbe4e1; --info:#2457d6; --info-bg:#e4ecfd; --idle:#5d687b; --idle-bg:#eceff4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#10141b; --card:#181e29; --ink:#e7eaf0; --muted:#97a1b3; --line:#2a3242; --code:#212938;
+      --accent:#86a8ff; --ok:#6fd49a; --ok-bg:#16301f; --warn:#f0bd5a; --warn-bg:#35290f;
+      --err:#ff8b80; --err-bg:#3a1a17; --info:#86a8ff; --info-bg:#182a4d; --idle:#97a1b3; --idle-bg:#222a38;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#10141b; --card:#181e29; --ink:#e7eaf0; --muted:#97a1b3; --line:#2a3242; --code:#212938;
+    --accent:#86a8ff; --ok:#6fd49a; --ok-bg:#16301f; --warn:#f0bd5a; --warn-bg:#35290f;
+    --err:#ff8b80; --err-bg:#3a1a17; --info:#86a8ff; --info-bg:#182a4d; --idle:#97a1b3; --idle-bg:#222a38;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:1040px; margin:0 auto; padding:16px; }
+  .topbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; margin-bottom:14px; }
+  .back { color:var(--accent); text-decoration:none; font-weight:500; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  select, button { font:inherit; color:var(--ink); background:var(--card); border:1px solid var(--line);
+    border-radius:8px; padding:6px 12px; cursor:pointer; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.55; cursor:default; }
+  button:focus-visible, select:focus-visible, a:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-bottom:14px; }
+  .card h2 { margin:0 0 12px; font-size:1rem; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .grid2 { display:grid; grid-template-columns:2fr 1fr; gap:14px; align-items:start; }
+  @media (max-width:820px) { .grid2 { grid-template-columns:1fr; } }
+  .muted { color:var(--muted); }
+  .badge { display:inline-flex; align-items:center; gap:6px; padding:2px 10px; border-radius:999px;
+    font-size:.82rem; font-weight:600; }
+  .b-ok { background:var(--ok-bg); color:var(--ok); } .b-warn { background:var(--warn-bg); color:var(--warn); }
+  .b-err { background:var(--err-bg); color:var(--err); } .b-info { background:var(--info-bg); color:var(--info); }
+  .b-idle { background:var(--idle-bg); color:var(--idle); }
+  .dot { width:8px; height:8px; border-radius:50%; background:currentColor; }
+  .pulse { animation:pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity:.3; } }
+  @media (prefers-reduced-motion: reduce) { .pulse, .skel { animation:none !important; } }
+  .hero { display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between; }
+  .hero-status { font-size:1.5rem; font-weight:700; display:flex; align-items:center; gap:10px; }
+  .hero-ico { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; font-size:1.2rem; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-top:16px; }
+  .stat { background:var(--code); border-radius:10px; padding:10px 12px; }
+  .stat .k { font-size:.76rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .stat .v { font-weight:600; margin-top:2px; word-break:break-word; }
+  .explain { margin-top:14px; padding:10px 14px; border-radius:10px; }
+  .timeline { list-style:none; margin:0; padding:0; position:relative; }
+  .timeline li { position:relative; padding:0 0 18px 38px; }
+  .timeline li:last-child { padding-bottom:0; }
+  .timeline li::before { content:""; position:absolute; left:13px; top:26px; bottom:-2px; width:2px; background:var(--line); }
+  .timeline li:last-child::before { display:none; }
+  .node { position:absolute; left:0; top:0; width:28px; height:28px; border-radius:50%;
+    display:grid; place-items:center; font-size:.85rem; font-weight:700; }
+  .t-title { font-weight:600; display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  .t-meta { color:var(--muted); font-size:.86rem; }
+  .gap { color:var(--muted); font-size:.8rem; background:var(--code); border-radius:6px; padding:0 7px; }
+  .reason { margin-top:6px; background:var(--err-bg); color:var(--err); padding:6px 10px; border-radius:8px; font-size:.86rem; }
+  .reason.soft { background:var(--warn-bg); color:var(--warn); }
+  .tag-be { font-size:.7rem; font-weight:600; padding:1px 7px; border-radius:6px; border:1px dashed var(--muted); color:var(--muted); }
+  dl.fields { margin:0; display:grid; grid-template-columns:auto 1fr; gap:8px 12px; align-items:center; }
+  dl.fields dt { color:var(--muted); font-size:.85rem; }
+  dl.fields dd { margin:0; display:flex; gap:8px; align-items:center; min-width:0; }
+  .mono { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.84rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .copy { padding:1px 8px; font-size:.78rem; flex:none; }
+  .links { display:flex; flex-direction:column; gap:6px; }
+  .links a { color:var(--accent); text-decoration:none; }
+  .links a:hover { text-decoration:underline; }
+  .bar { height:8px; border-radius:99px; background:var(--code); overflow:hidden; margin:8px 0; }
+  .bar > span { display:block; height:100%; background:var(--ok); }
+  .content-box { background:var(--code); border-radius:10px; padding:10px 12px; font-size:.9rem; }
+  .att { display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); font-size:.9rem; }
+  .att:last-child { border-bottom:0; }
+  .modal-bg { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; place-items:center; padding:16px; }
+  .modal-bg.open { display:grid; }
+  .modal { background:var(--card); border-radius:14px; padding:20px; max-width:420px; width:100%; border:1px solid var(--line); }
+  .modal .row { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  .toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--ink); color:var(--bg);
+    padding:8px 16px; border-radius:10px; opacity:0; transition:opacity .2s; pointer-events:none; }
+  .toast.show { opacity:1; }
+  .skel { background:linear-gradient(90deg,var(--code),var(--line),var(--code)); background-size:200% 100%;
+    animation:sk 1.2s infinite; border-radius:8px; }
+  @keyframes sk { to { background-position:-200% 0; } }
+  .legend { font-size:.82rem; color:var(--muted); margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="#" onclick="return false">← Volver al listado</a>
+    <div class="controls">
+      <label class="muted" for="scenario">Escenario de demostración</label>
+      <select id="scenario">
+        <option value="recovered">Entregada tras un fallo recuperable</option>
+        <option value="failed">Fallida permanente</option>
+        <option value="recoverable">Recuperable, en espera de reintento</option>
+        <option value="pending">Pendiente, sin intentos</option>
+      </select>
+      <button id="simulate" type="button">Simular evento en vivo</button>
+      <button id="theme" type="button" aria-label="Cambiar tema">Tema</button>
+    </div>
+  </div>
+
+  <div id="app" aria-live="polite"></div>
+  <p class="legend">Prototipo con datos de ejemplo. Las secciones marcadas <span class="tag-be">requiere backend</span> dependen de campos que la API aún no expone.</p>
+</div>
+
+<div class="modal-bg" id="modalBg" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+  <div class="modal">
+    <h3 id="modalTitle" style="margin:0 0 8px">Reintentar envío</h3>
+    <p class="muted" id="modalText" style="margin:0"></p>
+    <div class="row">
+      <button type="button" id="modalCancel">Cancelar</button>
+      <button type="button" class="primary" id="modalOk">Reintentar ahora</button>
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  var NOW = Date.now();
+  var min = 60000, sec = 1000;
+  function at(offsetMs) { return NOW - offsetMs; }
+
+  var SCENARIOS = {
+    recovered: {
+      status: 'DELIVERED', acceptedAt: at(9 * min), lastUpdatedAt: at(8 * min + 20 * sec),
+      attempts: [
+        { t: at(9 * min - 2 * sec), result: 'RECOVERABLE_FAILURE', origin: 'AUTOMATIC', provider: 'brevo',
+          reason: 'Timeout del proveedor (30 s sin respuesta)' },
+        { t: at(8 * min + 20 * sec), result: 'ACCEPTED', origin: 'AUTOMATIC', provider: 'brevo' }
+      ]
+    },
+    failed: {
+      status: 'FAILED', acceptedAt: at(26 * min), lastUpdatedAt: at(20 * min),
+      attempts: [
+        { t: at(26 * min - 1 * sec), result: 'RECOVERABLE_FAILURE', origin: 'AUTOMATIC', provider: 'twilio',
+          reason: 'Proveedor respondió 503 (servicio no disponible)' },
+        { t: at(24 * min), result: 'RECOVERABLE_FAILURE', origin: 'AUTOMATIC', provider: 'twilio',
+          reason: 'Cuota del proveedor excedida' },
+        { t: at(20 * min), result: 'PERMANENT_FAILURE', origin: 'AUTOMATIC', provider: 'twilio',
+          reason: 'Número de destino inválido (código 21211)' }
+      ]
+    },
+    recoverable: {
+      status: 'RECOVERABLE', acceptedAt: at(4 * min), lastUpdatedAt: at(3 * min),
+      attempts: [
+        { t: at(3 * min), result: 'RECOVERABLE_FAILURE', origin: 'AUTOMATIC', provider: 'fcm',
+          reason: 'Token de dispositivo no disponible temporalmente' }
+      ]
+    },
+    pending: {
+      status: 'PENDING', acceptedAt: at(40 * sec), lastUpdatedAt: at(40 * sec), attempts: []
+    }
+  };
+
+  var STATUS = {
+    DELIVERED: { label: 'Entregada', cls: 'b-ok', ico: '✓',
+      text: 'El proveedor aceptó el mensaje. No se requiere ninguna acción.' },
+    FAILED: { label: 'Fallida', cls: 'b-err', ico: '✕',
+      text: 'Fallo permanente: el sistema no volverá a intentarlo solo. Puedes reintentar manualmente tras corregir la causa.' },
+    RECOVERABLE: { label: 'Recuperable', cls: 'b-warn', ico: '↻',
+      text: 'Falló de forma transitoria. El sistema la reencolará automáticamente; también puedes reintentar ahora.' },
+    PENDING: { label: 'Pendiente', cls: 'b-info', ico: '…',
+      text: 'En cola, esperando que un proveedor la tome.' }
+  };
+  var RESULT = {
+    ACCEPTED: { label: 'Aceptado por el proveedor', cls: 'b-ok', ico: '✓' },
+    RECOVERABLE_FAILURE: { label: 'Fallo recuperable', cls: 'b-warn', ico: '!' },
+    PERMANENT_FAILURE: { label: 'Fallo permanente', cls: 'b-err', ico: '✕' }
+  };
+
+  var state = { key: 'recovered', data: null, loading: false, retrying: false, lastSync: Date.now() };
+  var app = document.getElementById('app');
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function fmt(ms) { return new Date(ms).toLocaleString('es-CO'); }
+  function dur(ms) {
+    var s = Math.max(0, Math.round(ms / 1000));
+    if (s < 60) return s + ' s';
+    var m = Math.floor(s / 60);
+    return m + ' min ' + (s % 60) + ' s';
+  }
+  function ago(ms) {
+    var s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 5) return 'ahora';
+    if (s < 60) return 'hace ' + s + ' s';
+    return 'hace ' + Math.floor(s / 60) + ' min';
+  }
+
+  function field(label, value, copy) {
+    return '<dt>' + label + '</dt><dd><span class="mono" title="' + esc(value) + '">' + esc(value) + '</span>' +
+      (copy ? '<button class="copy" type="button" data-copy="' + esc(value) + '" aria-label="Copiar ' + label + '">Copiar</button>' : '') + '</dd>';
+  }
+
+  function timeline(d) {
+    var items = [];
+    items.push({ node: '＋', cls: 'b-info', title: 'Aceptada por el servicio', t: d.acceptedAt, gap: null });
+    var prev = d.acceptedAt;
+    d.attempts.forEach(function (a, i) {
+      var r = RESULT[a.result];
+      items.push({
+        node: r.ico, cls: r.cls,
+        title: 'Intento ' + (i + 1) + ' · ' + r.label,
+        t: a.t, gap: a.t - prev, provider: a.provider, origin: a.origin, reason: a.reason, result: a.result
+      });
+      prev = a.t;
+    });
+    if (d.status === 'DELIVERED') {
+      items.push({ node: '✓', cls: 'b-ok', title: 'Entregada', t: d.lastUpdatedAt, gap: d.lastUpdatedAt - prev, last: true });
+    } else if (d.status === 'PENDING' || d.status === 'RECOVERABLE') {
+      items.push({ node: '…', cls: 'b-idle', title: d.status === 'PENDING' ? 'Esperando proveedor' : 'Esperando el próximo reintento', t: null, gap: null, waiting: true });
+    }
+    return '<ol class="timeline">' + items.map(function (it) {
+      var parts = [];
+      parts.push('<div class="t-title"><span>' + esc(it.title) + '</span>');
+      if (it.gap !== null && it.gap !== undefined) parts.push('<span class="gap">+' + dur(it.gap) + '</span>');
+      if (it.provider) parts.push('<span class="badge b-idle">' + esc(it.provider) + '</span>');
+      if (it.origin) parts.push('<span class="muted" style="font-size:.82rem">' + (it.origin === 'MANUAL' ? 'manual' : 'automático') + '</span>');
+      parts.push('</div>');
+      if (it.t) parts.push('<div class="t-meta">' + fmt(it.t) + '</div>');
+      if (it.reason) {
+        parts.push('<div class="reason' + (it.result === 'RECOVERABLE_FAILURE' ? ' soft' : '') + '">' + esc(it.reason) +
+          ' <span class="tag-be">requiere backend</span></div>');
+      }
+      return '<li><span class="node ' + it.cls + (it.waiting ? ' pulse' : '') + '">' + it.node + '</span>' + parts.join('') + '</li>';
+    }).join('') + '</ol>';
+  }
+
+  function summary(d) {
+    var failedProviders = {}, deliveredBy = null;
+    d.attempts.forEach(function (a) {
+      if (a.result !== 'ACCEPTED') failedProviders[a.provider] = true;
+      else deliveredBy = a.provider;
+    });
+    var lastProvider = d.attempts.length ? d.attempts[d.attempts.length - 1].provider : null;
+    var total = (d.status === 'DELIVERED' ? d.lastUpdatedAt : Date.now()) - d.acceptedAt;
+    return { total: total, lastProvider: lastProvider, deliveredBy: deliveredBy, failed: Object.keys(failedProviders) };
+  }
+
+  function render() {
+    if (state.loading) {
+      app.innerHTML =
+        '<div class="card"><div class="skel" style="height:34px;width:40%"></div>' +
+        '<div class="skel" style="height:60px;margin-top:16px"></div></div>' +
+        '<div class="grid2"><div class="card"><div class="skel" style="height:180px"></div></div>' +
+        '<div class="card"><div class="skel" style="height:180px"></div></div></div>';
+      return;
+    }
+    var d = state.data, st = STATUS[d.status], s = summary(d);
+    var canRetry = d.status === 'FAILED' || d.status === 'RECOVERABLE';
+    var live = '<span class="badge b-ok"><span class="dot pulse"></span>En vivo</span>';
+    var ageTxt = 'Actualizado ' + ago(state.lastSync);
+
+    var html = '';
+    html += '<section class="card" aria-label="Resumen">' +
+      '<div class="hero">' +
+        '<div class="hero-status"><span class="hero-ico ' + st.cls + '">' + st.ico + '</span>' +
+          '<span>' + st.label + '</span></div>' +
+        '<div class="controls">' + live +
+          '<span class="muted" id="age">' + ageTxt + '</span>' +
+          (canRetry ? '<button class="primary" id="retry" type="button"' + (state.retrying ? ' disabled' : '') + '>' +
+            (state.retrying ? 'Reintentando…' : 'Reintentar') + '</button>' : '') +
+          '<button id="cancel" type="button" disabled title="Requiere el endpoint de cancelación">Cancelar envío</button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="explain ' + st.cls + '">' + esc(st.text) + '</div>' +
+      '<div class="stats">' +
+        '<div class="stat"><div class="k">Canal</div><div class="v">EMAIL</div></div>' +
+        '<div class="stat"><div class="k">Proveedor</div><div class="v">' + esc(s.deliveredBy || s.lastProvider || 'sin intento todavía') + '</div></div>' +
+        '<div class="stat"><div class="k">Intentos</div><div class="v">' + d.attempts.length + '</div></div>' +
+        '<div class="stat"><div class="k">' + (d.status === 'DELIVERED' ? 'Duración total' : 'Tiempo desde aceptación') + '</div><div class="v">' + dur(s.total) + '</div></div>' +
+      '</div>' +
+    '</section>';
+
+    html += '<div class="grid2"><div>';
+    html += '<section class="card"><h2>Línea de tiempo</h2>' + timeline(d) + '</section>';
+    html += '<section class="card"><h2>Contenido <span class="tag-be">requiere backend</span></h2>' +
+      '<div class="content-box"><strong>Asunto:</strong> Tu factura de octubre está disponible<br>' +
+      '<strong>Cuerpo:</strong> Hola A••••, tu factura por $••••• ya puede descargarse desde el portal…</div>' +
+      '<p class="muted" style="font-size:.84rem;margin:8px 0 0">Datos personales enmascarados por el servicio.</p></section>';
+    html += '<section class="card"><h2>Adjuntos <span class="tag-be">requiere backend</span></h2>' +
+      '<div class="att"><span>factura-octubre.pdf</span><span class="muted">application/pdf · 184 KB</span></div>' +
+      '<div class="att"><span>detalle-consumo.csv</span><span class="muted">text/csv · 12 KB</span></div></section>';
+    html += '</div><div>';
+
+    html += '<section class="card"><h2>Identificadores</h2><dl class="fields">' +
+      field('ID', '3f1c9b52-7a41-4d0e-9a55-1c2e8e7b0a11', true) +
+      field('External ID', 'FACT-2026-10-004581', true) +
+      field('Correlación', 'req-7d2a4c19e0b3', true) +
+      field('Destinatario', 'cliente-88421', true) +
+    '</dl></section>';
+
+    html += '<section class="card"><h2>Proveedores</h2>' +
+      (s.failed.length || s.deliveredBy
+        ? '<div class="links">' +
+          s.failed.map(function (p) { return '<span><span class="badge b-err">falló</span> ' + esc(p) + '</span>'; }).join('') +
+          (s.deliveredBy ? '<span><span class="badge b-ok">entregó</span> ' + esc(s.deliveredBy) + '</span>' : '') +
+          '</div>'
+        : '<p class="muted" style="margin:0">Aún sin intentos.</p>') +
+    '</section>';
+
+    html += '<section class="card"><h2>Lote <span class="tag-be">requiere backend</span></h2>' +
+      '<div style="display:flex;justify-content:space-between"><span>batch-20261014-07</span><span class="muted">412 / 500</span></div>' +
+      '<div class="bar" role="progressbar" aria-valuenow="82" aria-valuemin="0" aria-valuemax="100"><span style="width:82%"></span></div>' +
+      '<span class="muted" style="font-size:.84rem">8 fallidas · 80 pendientes</span></section>';
+
+    html += '<section class="card"><h2>Relacionadas</h2><div class="links">' +
+      '<a href="#" onclick="return false">Más notificaciones de cliente-88421</a>' +
+      '<a href="#" onclick="return false">Todas las del lote batch-20261014-07</a>' +
+      '<a href="#" onclick="return false">Misma notificación en logs (correlación)</a>' +
+    '</div></section>';
+    html += '</div></div>';
+
+    app.innerHTML = html;
+  }
+
+  function load(key) {
+    state.key = key;
+    state.loading = true;
+    render();
+    setTimeout(function () {
+      var src = SCENARIOS[key];
+      state.data = JSON.parse(JSON.stringify(src));
+      state.loading = false;
+      state.lastSync = Date.now();
+      render();
+    }, 450);
+  }
+
+  function toast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(function () { t.classList.remove('show'); }, 2200);
+  }
+
+  var modalBg = document.getElementById('modalBg');
+  function openModal() {
+    var d = state.data, last = d.attempts.length ? d.attempts[d.attempts.length - 1].reason : null;
+    document.getElementById('modalText').textContent =
+      'Se enviará de nuevo por ' + (d.attempts.length ? d.attempts[d.attempts.length - 1].provider : 'el proveedor preferente') +
+      '. El intento quedará registrado como manual.' + (last ? ' Último error: ' + last + '.' : '');
+    modalBg.classList.add('open');
+    document.getElementById('modalOk').focus();
+  }
+  function closeModal() { modalBg.classList.remove('open'); }
+
+  function applyRetry() {
+    closeModal();
+    state.retrying = true; render();
+    setTimeout(function () {
+      var d = state.data;
+      d.status = 'PENDING';
+      d.lastUpdatedAt = Date.now();
+      state.retrying = false; state.lastSync = Date.now();
+      render();
+      toast('Reintento encolado');
+      setTimeout(function () {
+        d.attempts.push({ t: Date.now(), result: 'ACCEPTED', origin: 'MANUAL',
+          provider: d.attempts.length ? d.attempts[d.attempts.length - 1].provider : 'brevo' });
+        d.status = 'DELIVERED'; d.lastUpdatedAt = Date.now(); state.lastSync = Date.now();
+        render();
+        toast('Evento en vivo: entregada');
+      }, 2500);
+    }, 700);
+  }
+
+  document.addEventListener('click', function (e) {
+    var c = e.target.closest('[data-copy]');
+    if (c) {
+      var v = c.getAttribute('data-copy');
+      var done = function () { toast('Copiado'); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(v).then(done, done);
+      } else { done(); }
+      return;
+    }
+    if (e.target.id === 'retry') openModal();
+  });
+  document.getElementById('modalCancel').addEventListener('click', closeModal);
+  document.getElementById('modalOk').addEventListener('click', applyRetry);
+  modalBg.addEventListener('click', function (e) { if (e.target === modalBg) closeModal(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(); });
+
+  document.getElementById('scenario').addEventListener('change', function (e) { load(e.target.value); });
+  document.getElementById('simulate').addEventListener('click', function () {
+    var d = state.data;
+    if (!d || state.loading) return;
+    d.attempts.push({ t: Date.now(), result: 'RECOVERABLE_FAILURE', origin: 'AUTOMATIC',
+      provider: d.attempts.length ? d.attempts[d.attempts.length - 1].provider : 'brevo',
+      reason: 'Timeout del proveedor (30 s sin respuesta)' });
+    d.status = 'RECOVERABLE'; d.lastUpdatedAt = Date.now(); state.lastSync = Date.now();
+    render();
+    toast('Evento en vivo: nuevo intento');
+  });
+
+  setInterval(function () {
+    var el = document.getElementById('age');
+    if (el && !state.loading) el.textContent = 'Actualizado ' + ago(state.lastSync);
+  }, 1000);
+
+  var root = document.documentElement;
+  try { var saved = localStorage.getItem('theme'); if (saved) root.setAttribute('data-theme', saved); } catch (e) {}
+  document.getElementById('theme').addEventListener('click', function () {
+    var dark = root.getAttribute('data-theme') === 'dark' ||
+      (!root.getAttribute('data-theme') && matchMedia('(prefers-color-scheme: dark)').matches);
+    var next = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', next);
+    try { localStorage.setItem('theme', next); } catch (e) {}
+  });
+
+  load('recovered');
+})();
+</script>
+</body>
+</html>

@@ -18,6 +18,7 @@ description: "Task list template for feature implementation"
 - **[P]**: Can run in parallel (different files, no dependencies)
 - **[Story]**: Which user story this task belongs to (e.g., US1, US2, US3)
 - Include exact file paths in descriptions
+- Cada tarea cabe en 2 líneas (ruta, qué hace, criterio de hecho); el razonamiento vive en plan.md, no en la tarea
 
 ## Path Conventions
 
@@ -95,49 +96,6 @@ Examples of foundational tasks (adjust based on your project):
 
 ---
 
-## Phase 4: User Story 2 - [Title] (Priority: P2)
-
-**Goal**: [Brief description of what this story delivers]
-
-**Independent Test**: [How to verify this story works on its own]
-
-### Tests for User Story 2 (OPTIONAL - only if tests requested) ⚠️
-
-- [ ] T018 [P] [US2] Unit test for the use case in `core/src/test/java/.../usecase/[Name]ServiceTest.java`
-- [ ] T019 [P] [US2] End-to-end test against `SimulatedNotificationProvider`
-
-### Implementation for User Story 2
-
-- [ ] T020 [P] [US2] Create the [Entity] value object/entity in `core/src/main/java/.../domain/[Entity].java`
-- [ ] T021 [US2] Implement [Service] in `core/src/main/java/.../usecase/[Service].java`
-- [ ] T022 [US2] Implement the corresponding adapter/endpoint
-- [ ] T023 [US2] Integrate with User Story 1 components (if needed)
-
-**Checkpoint**: At this point, User Stories 1 AND 2 should both work independently
-
----
-
-## Phase 5: User Story 3 - [Title] (Priority: P3)
-
-**Goal**: [Brief description of what this story delivers]
-
-**Independent Test**: [How to verify this story works on its own]
-
-### Tests for User Story 3 (OPTIONAL - only if tests requested) ⚠️
-
-- [ ] T024 [P] [US3] Unit test for the use case
-- [ ] T025 [P] [US3] End-to-end test against `SimulatedNotificationProvider`
-
-### Implementation for User Story 3
-
-- [ ] T026 [P] [US3] Create the [Entity] value object/entity
-- [ ] T027 [US3] Implement [Service]
-- [ ] T028 [US3] Implement the corresponding adapter/endpoint
-
-**Checkpoint**: All user stories should now be independently functional
-
----
-
 [Add more user story phases as needed, following the same pattern]
 
 ---
@@ -187,28 +145,6 @@ Examples of foundational tasks (adjust based on your project):
 - Once Foundational phase completes, all user stories can start in parallel (if capacity allows)
 - All tests for a user story marked [P] can run in parallel
 - Models within a story marked [P] can run in parallel
-
----
-
-## Implementation Strategy
-
-### MVP First (User Story 1 Only)
-
-1. Complete Phase 1: Setup
-2. Complete Phase 2: Foundational (CRITICAL - blocks all stories)
-3. Complete Phase 3: User Story 1
-4. **STOP and VALIDATE**: Test User Story 1 independently
-5. Deploy/demo if ready
-
-### Incremental Delivery
-
-1. Complete Setup + Foundational → Foundation ready
-2. Add User Story 1 → Test independently → Deploy/Demo (MVP!)
-3. Add User Story 2 → Test independently → Deploy/Demo
-4. Add User Story 3 → Test independently → Deploy/Demo
-5. Each story adds value without breaking previous stories
-
----
 
 ## Notes
 

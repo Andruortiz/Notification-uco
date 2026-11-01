@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notification-uco Mapa del Proyecto</title>
+<style>
+:root{
+  --bg:#f4f5f2; --panel:#ffffff; --fg:#1d2330; --muted:#5d6678; --line:#d9dcd3;
+  --ink:#24407a; --ink-soft:#e3e9f7;
+  --ok:#1f7a4d; --ok-soft:#dff1e7;
+  --warn:#9a6200; --warn-soft:#fbecc9;
+  --bad:#a63a2b; --bad-soft:#f6dcd6;
+  --idle:#6b7280; --idle-soft:#e8e9ec;
+  --new:#6a3fa0; --new-soft:#ebe1f6;
+  --font:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  --mono:ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12151c; --panel:#1b2030; --fg:#e6e9f0; --muted:#9aa3b5; --line:#2e3547;
+  --ink:#8fb0ff; --ink-soft:#243258;
+  --ok:#5ed39a; --ok-soft:#173a2b;
+  --warn:#f0b955; --warn-soft:#41330f;
+  --bad:#f08b7a; --bad-soft:#47201a;
+  --idle:#9aa3b5; --idle-soft:#262c3b;
+  --new:#c3a1f0; --new-soft:#33264b;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12151c; --panel:#1b2030; --fg:#e6e9f0; --muted:#9aa3b5; --line:#2e3547;
+  --ink:#8fb0ff; --ink-soft:#243258;
+  --ok:#5ed39a; --ok-soft:#173a2b;
+  --warn:#f0b955; --warn-soft:#41330f;
+  --bad:#f08b7a; --bad-soft:#47201a;
+  --idle:#9aa3b5; --idle-soft:#262c3b;
+  --new:#c3a1f0; --new-soft:#33264b;
+  color-scheme:dark}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--font);font-size:14px;line-height:1.5;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1180px;margin:0 auto}
+h1{font-size:26px;margin:0 0 4px;letter-spacing:-.01em;text-wrap:balance}
+h2{font-size:18px;margin:28px 0 10px}
+h3{font-size:15px;margin:0}
+.sub{color:var(--muted);margin:0 0 18px;max-width:70ch}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin-bottom:8px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.kpi b{display:block;font-size:26px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.kpi span{color:var(--muted);font-size:12px}
+nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:10px 0;display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:16px}
+nav button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);padding:7px 13px;border-radius:8px;cursor:pointer}
+nav button[aria-selected="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+nav button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+section[hidden]{display:none}
+.bar{height:8px;border-radius:99px;background:var(--idle-soft);overflow:hidden;min-width:60px}
+.bar i{display:block;height:100%;background:var(--ok)}
+.bar.mid i{background:var(--warn)}
+.bar.low i{background:var(--idle)}
+.pill{display:inline-block;padding:1px 9px;border-radius:99px;font-size:12px;white-space:nowrap}
+.hecho{background:var(--ok-soft);color:var(--ok)}
+.pendiente{background:var(--warn-soft);color:var(--warn)}
+.bloqueado{background:var(--bad-soft);color:var(--bad)}
+.diseno{background:var(--ink-soft);color:var(--ink)}
+.nuevo{background:var(--new-soft);color:var(--new)}
+.idle{background:var(--idle-soft);color:var(--idle)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+input,select{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel);color:var(--fg);min-width:0}
+input[type=search]{flex:1 1 220px}
+details{background:var(--panel);border:1px solid var(--line);border-radius:10px;margin-bottom:8px}
+summary{cursor:pointer;padding:11px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;list-style:none}
+summary::-webkit-details-marker{display:none}
+summary::before{content:"\25B8";color:var(--muted);transition:transform .15s}
+details[open]>summary::before{transform:rotate(90deg)}
+summary .grow{flex:1 1 200px;min-width:0}
+summary .meta{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.rows{padding:0 14px 12px}
+.row{display:grid;grid-template-columns:76px 1fr auto;gap:10px;padding:7px 0;border-top:1px solid var(--line);align-items:baseline}
+.row .id{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.row .t{min-width:0}
+.row .tipo{color:var(--muted);font-size:12px}
+.tw{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+table{border-collapse:collapse;width:100%;min-width:720px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;background:var(--panel)}
+td.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;min-width:0}
+.card h3{margin-bottom:8px}
+ul.clean{list-style:none;margin:0;padding:0}
+ul.clean li{padding:6px 0;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:space-between;align-items:baseline}
+ul.clean li:first-child{border-top:0}
+.src{font-size:11px;color:var(--muted);font-family:var(--mono)}
+.note{background:var(--warn-soft);color:var(--fg);border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:8px;padding:10px 14px;margin:10px 0;font-size:13px}
+.stack{display:flex;height:22px;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.stack i{display:block;height:100%}
+.legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px;color:var(--muted);font-size:12px}
+.legend b{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px}
+.foot{margin-top:34px;color:var(--muted);font-size:12px}
+@media (max-width:560px){.row{grid-template-columns:64px 1fr}.row .pillcell{grid-column:2}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Notification-uco: mapa del proyecto</h1>
+  <p class="sub">Backlog por fase, historias spec-kit y tareas nuevas de optimización en una sola vista. Datos del backlog de Notion y de <code>specs/</code> al 2026-10-23. Es un mockup de lectura: no edita nada.</p>
+
+  <div class="kpis" id="kpis"></div>
+
+  <nav role="tablist" aria-label="Vistas">
+    <button role="tab" data-tab="resumen" aria-selected="true">Resumen</button>
+    <button role="tab" data-tab="fases" aria-selected="false">Backlog por fase</button>
+    <button role="tab" data-tab="historias" aria-selected="false">Historias spec-kit</button>
+    <button role="tab" data-tab="nuevas" aria-selected="false">Tareas nuevas</button>
+    <button role="tab" data-tab="pendientes" aria-selected="false">Todo lo pendiente</button>
+  </nav>
+
+  <section id="tab-resumen">
+    <h2>Avance del backlog por fase</h2>
+    <div class="tw"><table id="t-fases"><thead><tr><th>Fase</th><th>Hechas</th><th>Pendientes</th><th>Bloqueadas / en diseño</th><th style="width:30%">Avance</th></tr></thead><tbody></tbody></table></div>
+    <h2>Dónde hay más trabajo abierto</h2>
+    <div class="grid2" id="focus"></div>
+    <div class="note" id="discrepancias"></div>
+  </section>
+
+  <section id="tab-fases" hidden>
+    <div class="tools">
+      <input type="search" id="q-fases" placeholder="Buscar por nombre o HU" aria-label="Buscar en el backlog">
+      <select id="f-estado" aria-label="Filtrar por estado"><option value="">Todos los estados</option><option>Hecho</option><option>Pendiente</option><option>Bloqueado</option><option>En diseño</option></select>
+      <select id="f-tipo" aria-label="Filtrar por tipo"><option value="">Todos los tipos</option><option>Historia de usuario</option><option>Caso de uso</option><option>Decisión abierta</option><option>Riesgo</option></select>
+    </div>
+    <div id="fases"></div>
+  </section>
+
+  <section id="tab-historias" hidden>
+    <div class="tools">
+      <select id="f-nivel" aria-label="Filtrar por nivel"><option value="">Todos los niveles</option><option>Completa</option><option>En curso</option><option>Sin empezar</option></select>
+      <input type="search" id="q-hist" placeholder="Buscar historia" aria-label="Buscar historia">
+    </div>
+    <div class="tw"><table id="t-hist"><thead><tr><th>Spec</th><th>Historia</th><th>Tareas</th><th style="width:22%">Avance</th><th>Nivel</th><th>Estado en la spec</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section id="tab-nuevas" hidden>
+    <p class="sub">Trabajo de optimización de agentes, contexto y spec-kit hecho en esta sesión, y lo que sigue abierto.</p>
+    <div class="grid2" id="nuevas"></div>
+  </section>
+
+  <section id="tab-pendientes" hidden>
+    <div class="tools">
+      <input type="search" id="q-pend" placeholder="Buscar en todo lo pendiente" aria-label="Buscar pendientes">
+      <select id="f-origen" aria-label="Filtrar por origen"><option value="">Todos los orígenes</option><option>Backlog</option><option>Historia spec-kit</option><option>Tarea nueva</option></select>
+    </div>
+    <div class="tw"><table id="t-pend"><thead><tr><th>Origen</th><th>Dónde</th><th>Qué falta</th><th>Estado</th></tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <p class="foot">Fuentes: backlog de Notion (Casos de uso e Historias de usuario), <code>specs/*/tasks.md</code> y <code>spec.md</code> del repositorio, y el trabajo de esta sesión. Las filas hechas de las fases 0 a 5 solo se cuentan, porque la consulta de nombres cubrió las pendientes.</p>
+</div>
+
+<script>
+const F=(n,t,h,items)=>({n,t,h,items});
+const I=(id,nom,tipo,est,pri)=>({id,nom,tipo,est,pri});
+const fases=[
+ F("Fase 0 · Decisiones abiertas",14,11,[
+  I("","Validación de token: introspección remota vs JWT autocontenido con JWKS cacheada","Decisión abierta","Bloqueado","Imprescindible"),
+  I("","¿Vive detrás de un API Gateway compartido (Kong)?","Decisión abierta","Bloqueado","Deseable"),
+  I("HU2-110","Preguntas abiertas con el equipo de MessageUcoLab","Decisión abierta","Pendiente","Deseable")]),
+ F("Fase 1 · Bootstrap",10,9,[I("","Plantilla de PR que exija enlace a la historia de usuario","Historia de usuario","Pendiente","Deseable")]),
+ F("Fase 2 · Dominio",7,7,[]),
+ F("Fase 3 · Puertos y casos de uso",20,12,[
+  I("","CU-05 · Consultar histórico y trazabilidad","Caso de uso","Pendiente","Deseable"),
+  I("","Ver recorrido completo de intentos de una notificación","Historia de usuario","Pendiente","Deseable"),
+  I("","CU-06 · Reintentar envío","Caso de uso","Pendiente","Deseable"),
+  I("","Reintentar envío manualmente (spec 018, sin empezar)","Historia de usuario","Pendiente","Deseable"),
+  I("","Distinguir reintento manual de automático en la auditoría","Historia de usuario","Pendiente","Deseable"),
+  I("","CU-09 · Gestionar preferencias del destinatario","Caso de uso","Pendiente","Deseable"),
+  I("","Gestionar preferencias del destinatario (spec 013, sin empezar)","Historia de usuario","Pendiente","Deseable"),
+  I("","Excluir destinatarios dados de baja al despachar","Historia de usuario","Pendiente","Deseable")]),
+ F("Fase 4 · Adaptadores de entrada",5,4,[I("","Definir estrategia de versionado de la API (/v1/notifications)","Decisión abierta","Pendiente","Deseable")]),
+ F("Fase 5 · Adaptadores de salida",11,8,[
+  I("","Batería de pruebas de contrato de adaptadores de proveedor","Historia de usuario","Pendiente","Imprescindible"),
+  I("","Definir y configurar rate limit por proveedor con Resilience4j","Historia de usuario","Pendiente","Imprescindible"),
+  I("","Política de retención/archivado de Notification y DeliveryAttempt en MongoDB","Historia de usuario","Pendiente","Deseable")]),
+ F("Fase 6 · Catálogo dinámico",12,1,[
+  I("","Invalidación de caché en memoria del catálogo","Historia de usuario","Pendiente","Deseable"),
+  I("","CU-07 · Registrar canal","Caso de uso","Pendiente","Imprescindible"),
+  I("","Registrar canal nuevo sin desplegar código","Historia de usuario","Pendiente","Imprescindible"),
+  I("","CU-08 · Registrar proveedor","Caso de uso","Pendiente","Imprescindible"),
+  I("HU2-045","Registrar proveedor y asociarlo a un canal","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-046","Deshabilitar proveedor sin credenciales, nunca en silencio","Historia de usuario","Pendiente","Deseable"),
+  I("HU2-047","Habilitar o deshabilitar un canal sin reiniciar el servicio","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-048","Conmutar automáticamente al siguiente proveedor","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-049","Enganchar el estado del circuit breaker a la selección de ChannelRoute","Historia de usuario","Pendiente","Imprescindible"),
+  I("","Riesgo: catálogo dinámico sin diseñar bloquea CU-07/CU-08","Riesgo","Pendiente","Imprescindible"),
+  I("","Riesgo: RF-12 subestimado como solo configuración","Riesgo","Pendiente","Imprescindible")]),
+ F("Fase 7 · Seguridad",16,4,[
+  I("HU2-050","Aislamiento multi-tenant en toda consulta","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-051","Cuotas/rate-limit por tenant (no solo por proveedor)","Historia de usuario","Pendiente","Deseable"),
+  I("HU2-052","Gestión de secretos vía la plataforma","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-053","Circuit breaker + timeout hacia MongoDB y el Componente de Seguridad","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-054","Mecanismo de rotación de Kubernetes Secrets","Historia de usuario","Pendiente","Deseable"),
+  I("","CU-10 · Autenticar y autorizar cada solicitud","Caso de uso","Pendiente","Imprescindible"),
+  I("HU2-055","Autenticar solicitudes contra el Componente de Seguridad","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-099","Aprovisionar recursos, roles y perfiles en el PDP como código (spec 028, 6 de 7)","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-100","Validar los tokens con JWKS en lugar de una clave pública fija","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-102","Resolver el starter de seguridad en CI, en la imagen y en Dependabot","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-103","Declarar las rutas públicas del PEP (spec 027, 8 de 9)","Historia de usuario","Pendiente","Deseable"),
+  I("","Riesgo: contrato de Seguridad no cerrado con el otro equipo","Riesgo","Pendiente","Imprescindible")]),
+ F("Fase 8 · Observabilidad",5,2,[
+  I("HU2-057","Sondas de readiness y liveness","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-059","Definir métricas de negocio concretas y mapeo RNF a métrica","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-060","Evaluar trazas distribuidas con OpenTelemetry","Historia de usuario","Pendiente","Opcional")]),
+ F("Fase 9 · Calidad y pruebas",3,1,[
+  I("HU2-062","Nivel de pruebas de rendimiento/carga para validar RNF-03","Historia de usuario","Pendiente","Imprescindible"),
+  I("","Riesgo: repetir la relajación temporal de cobertura","Riesgo","Pendiente","Imprescindible")]),
+ F("Fase 10 · Empaquetado y despliegue",9,1,[
+  I("HU2-064","Manifiestos base de Kubernetes (Deployment, Service, ConfigMap, Namespace)","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-065","Requests y limits de CPU/memoria en el Deployment","Historia de usuario","Pendiente","Deseable"),
+  I("HU2-066","Conectar sondas del Actuator a las probes del Deployment","Historia de usuario","Pendiente","Imprescindible"),
+  I("","Autoscaling: HPA (CPU/memoria) vs KEDA (profundidad de cola RabbitMQ)","Decisión abierta","Pendiente","Imprescindible"),
+  I("","Riesgo: ingesta y despacho comparten proceso, no escalan por separado","Riesgo","Pendiente","Deseable"),
+  I("HU2-067","Chart de Helm propio validado en CI","Historia de usuario","Pendiente","Deseable"),
+  I("HU2-068","Credenciales como Kubernetes Secrets en el chart de Helm","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-069","Desplegar en el clúster de Kubernetes de la organización","Historia de usuario","Pendiente","Deseable")]),
+ F("Fase 11 · Frontend",18,4,[
+  I("HU2-070","Frontend React consumiendo la API estable","Historia de usuario","En diseño","Deseable"),
+  I("HU2-076","Tipos del cliente sincronizados con el contrato OpenAPI","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-077","Listar y filtrar notificaciones con paginación en el panel","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-078","Ver el detalle de una notificación en el panel","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-079","Panel en vivo: el listado se actualiza solo vía SSE","Historia de usuario","En diseño","Deseable"),
+  I("HU2-080","Selector de tenant de trabajo en el panel (temporal)","Historia de usuario","Pendiente","Deseable"),
+  I("HU2-081","Ver el recorrido de intentos de una notificación en el panel","Historia de usuario","Bloqueado","Deseable"),
+  I("HU2-082","Reintentar manualmente una notificación desde el panel","Historia de usuario","Bloqueado","Deseable"),
+  I("HU2-083","Consultar el catálogo de canales y proveedores en el panel","Historia de usuario","Pendiente","Deseable"),
+  I("HU2-084","Registrar canal y proveedor desde el panel","Historia de usuario","Bloqueado","Opcional"),
+  I("HU2-086","Pruebas del frontend con Vitest, Testing Library y MSW","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-104","Montar Security UI en el panel","Historia de usuario","Pendiente","Imprescindible"),
+  I("HU2-105","Inicio de sesión real en el panel con la sesión BFF","Historia de usuario","Pendiente","Imprescindible"),
+  I("","Cómo se suscribe el frontend al SSE enviando X-Tenant-Id","Decisión abierta","Pendiente","Imprescindible"),
+  I("","Riesgo: frontend contra un contrato de API inestable","Riesgo","Pendiente","Deseable")]),
+ F("Sin fase · Transversal y futuro",12,1,[
+  I("","CU-11 · Sincronizar configuración transversal","Caso de uso","Pendiente","Deseable"),
+  I("","Riesgo: contrato de Parámetros no cerrado bloquea CU-11","Riesgo","Pendiente","Deseable"),
+  I("","CU-12 · Resolver contenido desde plantilla","Caso de uso","Pendiente","Opcional"),
+  I("HU2-074","Resolver contenido desde una plantilla","Historia de usuario","Pendiente","Opcional"),
+  I("","CU-13 · Programar envío futuro","Caso de uso","Pendiente","Opcional"),
+  I("HU2-075","Programar el envío de una notificación","Historia de usuario","Pendiente","Opcional"),
+  I("","Riesgo: CU-13 subestimado como solo un campo de fecha","Riesgo","Pendiente","Opcional"),
+  I("HU2-107","Puerto y adaptador del catálogo de textos de MessageUcoLab","Historia de usuario","Pendiente","Deseable"),
+  I("HU2-108","Caché y resiliencia del catálogo de textos","Historia de usuario","Pendiente","Deseable"),
+  I("HU2-109","Idioma del destinatario y traducción del contenido","Historia de usuario","Pendiente","Opcional")])
+];
+
+const H=(id,t,d,n,est)=>({id,t,d,n,est});
+const hist=[
+ H("001","Reencolar notificaciones recuperables vencidas (HU2-030)",21,21,"Borrador"),
+ H("002","Catálogo de canales persistido en Mongo",22,22,"Borrador"),
+ H("003","CORS para el dashboard de frontend",15,15,"Borrador"),
+ H("004","Cola de mensajes muertos (DLQ) para el despacho",18,18,"Borrador"),
+ H("005","Buscar notificaciones por filtros",18,18,"Borrador"),
+ H("006","Ver notificaciones en tiempo real en el dashboard",40,40,"Borrador"),
+ H("007","Enrutar cada notificación al adaptador de su proveedor",25,25,"Borrador"),
+ H("008","Brevo como primer proveedor real de correo",33,33,"Aprobado (2026-09-23)"),
+ H("009","Twilio como primer proveedor real de SMS",28,28,"Plan aceptado (2026-09-24)"),
+ H("010","Firebase Cloud Messaging como proveedor de push",28,28,"Plan aceptado (2026-09-24)"),
+ H("011","Consultar el catálogo de canales y proveedores",26,26,"Plan aceptado (2026-09-25)"),
+ H("012","Adjuntar un archivo a una notificación",95,95,"Plan v3 aceptado"),
+ H("013","Gestionar preferencias del destinatario",0,19,"Borrador"),
+ H("014","Enviar un lote de notificaciones por HTTP",14,14,"Borrador"),
+ H("015","Autenticación interina del servicio (HU2-055)",45,45,"Clarificado (2026-09-30)"),
+ H("016","Logs estructurados con correlation id (HU2-056)",36,36,"Plan aprobado (2026-10-01)"),
+ H("017","Corregir hallazgos de las specs 011 a 016",62,77,"Borrador"),
+ H("018","Reintentar envío manualmente",0,22,"Clarificado (2026-09-26)"),
+ H("019","Sincronizar configuración de Parámetros (HU2-073)",60,60,"Implementado (PR #62)"),
+ H("020","Observabilidad completa",48,48,"Plan aceptado (2026-10-05)"),
+ H("021","Dashboard de observabilidad con Prometheus y Grafana",16,18,"Plan aceptado (2026-10-08)"),
+ H("022","Suscripción por evento al Componente de Parámetros",25,28,"Borrador"),
+ H("023","Migración a Spring Boot 4.1 sobre Java 25 (HU2-106)",29,31,"Implementado (2026-10-17)"),
+ H("024","API v2 con rutas literales (HU2-098)",24,24,"Implementado (PR #93)"),
+ H("025","Sesión por cookie del BFF/PDP y CORS (HU2-101)",23,24,"Implementado (PR #94); falta T023 manual"),
+ H("026","Stream sin ticket (HU2-111)",10,10,"Implementado (PR #97)"),
+ H("027","Rutas públicas del PEP (HU2-103)",8,9,"Borrador"),
+ H("028a","Aprovisionar el PDP como código (HU2-099)",6,7,"Borrador"),
+ H("028b","Canal WhatsApp (HU2-112)",47,47,"Plan aprobado (2026-10-21)")
+];
+const nivel=h=>h.d>=h.n?"Completa":(h.d===0?"Sin empezar":"En curso");
+
+const N=(t,est,det)=>({t,est,det});
+const nuevas={
+ "Hecho en esta sesión":[
+  N("CLAUDE.md corto con stack, comandos Maven rápidos y reglas de contexto","Hecho","Raíz del repo"),
+  N("Agentes sin clean ni verify en caliente; verify solo al cierre","Hecho","speckit-autor y speckit-revisor"),
+  N("Lectura económica: Grep acotado, rangos de líneas, salida de Maven filtrada","Hecho","Ambos agentes"),
+  N("Resumen de la constitución (3 KB) y constitución 2.0.1 con base main","Hecho","Memoria de spec-kit"),
+  N("Plantillas recortadas y guía de tamaño en spec y tasks","Hecho","Plantillas de .specify"),
+  N("Regla ask para leer specs de historias cerradas","Hecho","Pendiente de validar la sintaxis"),
+  N("Skill frontend duplicado, lock file y .archify fuera","Hecho","Limpieza"),
+  N("Memoria condensada: estado 33 KB a 2,4 KB y reglas de git netas","Hecho","Fuera del repo"),
+  N("Script medir-tokens.ps1 y línea base de 6 sesiones","Hecho","~/.claude/scripts")],
+ "Pendiente de optimización":[
+  N("Validar que la regla ask funciona y que /speckit-tasks genera bien con la plantilla recortada","Pendiente","Sin probar"),
+  N("Medir gasto de subagentes: no se sabe dónde guardan sus transcripts","Pendiente","El script muestra 0"),
+  N("Arreglar la columna de coincidencias del script","Pendiente","No apareció en la tabla"),
+  N("Commitear CLAUDE.md, agentes, settings, resumen, plantillas y constitución","Pendiente","Todo está sin commitear"),
+  N("Perfil de Maven para pruebas de infrastructure sin Docker","Pendiente","Mayor ahorro de espera"),
+  N("Resolver la numeración duplicada 028 (aprovisionar-pdp y whatsapp-canal)","Pendiente","Revisar create-new-feature.ps1"),
+  N("Resumen por historia para specs cerradas","Pendiente","Contexto barato"),
+  N("Revisar el resto de la memoria (squash-merge, pr_base_develop)","Pendiente","Menciones a develop"),
+  N("Confirmar si existe un ADR de trunk-based que reemplace ADR-0015","Pendiente","Decisión tuya"),
+  N("Decidir qué MCP quitar: MCP_DOCKER, speckit-skills, qdrant-docs y otros","Pendiente","Recorte mayor por sesión"),
+  N("Apuntar los skills speckit-* al resumen de la constitución","Pendiente","Altera el manifiesto")]
+};
+
+const pillClass=e=>({"Hecho":"hecho","Pendiente":"pendiente","Bloqueado":"bloqueado","En diseño":"diseno"}[e]||"idle");
+const el=(t,c,x)=>{const e=document.createElement(t);if(c)e.className=c;if(x!==undefined)e.textContent=x;return e};
+const pill=e=>el("span","pill "+pillClass(e),e);
+const pct=(a,b)=>b?Math.round(a/b*100):0;
+const bar=(a,b)=>{const p=pct(a,b);const w=el("div","bar"+(p<40?" low":p<80?" mid":""));const i=el("i");i.style.width=p+"%";w.appendChild(i);return w};
+
+const totBack=fases.reduce((s,f)=>s+f.t,0),hechoBack=fases.reduce((s,f)=>s+f.h,0);
+const totT=hist.reduce((s,h)=>s+h.n,0),doneT=hist.reduce((s,h)=>s+h.d,0);
+const completas=hist.filter(h=>nivel(h)==="Completa").length;
+const nuevasPend=nuevas["Pendiente de optimización"].length;
+
+function kpis(){
+ const k=document.getElementById("kpis");
+ [[hechoBack+" de "+totBack,"filas del backlog hechas ("+pct(hechoBack,totBack)+" %)"],
+  [doneT+" de "+totT,"tareas de specs marcadas ("+pct(doneT,totT)+" %)"],
+  [completas+" de "+hist.length,"historias spec-kit completas"],
+  [String(hist.filter(h=>nivel(h)==="Sin empezar").length),"historias sin empezar (013 y 018)"],
+  [String(nuevasPend),"tareas nuevas abiertas"]].forEach(([b,s])=>{
+  const c=el("div","kpi");c.appendChild(el("b",null,b));c.appendChild(el("span",null,s));k.appendChild(c)});
+}
+
+function resumen(){
+ const tb=document.querySelector("#t-fases tbody");
+ fases.forEach(f=>{
+  const pend=f.items.filter(i=>i.est==="Pendiente").length,blq=f.items.filter(i=>i.est==="Bloqueado"||i.est==="En diseño").length;
+  const tr=el("tr");tr.appendChild(el("td",null,f.n));tr.appendChild(el("td","num",f.h+" / "+f.t));
+  tr.appendChild(el("td","num",String(pend)));tr.appendChild(el("td","num",String(blq)));
+  const td=el("td");td.appendChild(bar(f.h,f.t));tr.appendChild(td);tb.appendChild(tr)});
+ const foc=document.getElementById("focus");
+ const top=[...fases].sort((a,b)=>(b.t-b.h)-(a.t-a.h)).slice(0,3);
+ top.forEach(f=>{const c=el("div","card");c.appendChild(el("h3",null,f.n));
+  c.appendChild(el("p","sub",(f.t-f.h)+" filas abiertas de "+f.t+"."));
+  const u=el("ul","clean");f.items.filter(i=>i.pri==="Imprescindible").slice(0,5).forEach(i=>{
+   const li=el("li");li.appendChild(el("span",null,i.nom));li.appendChild(pill(i.est));u.appendChild(li)});
+  c.appendChild(u);foc.appendChild(c)});
+ const sp=el("div","card");sp.appendChild(el("h3",null,"Historias spec-kit con trabajo abierto"));
+ const u=el("ul","clean");hist.filter(h=>h.d<h.n).forEach(h=>{const li=el("li");
+  li.appendChild(el("span",null,h.id+" · "+h.t));li.appendChild(el("span","src",h.d+"/"+h.n));u.appendChild(li)});
+ sp.appendChild(u);foc.appendChild(sp);
+ document.getElementById("discrepancias").textContent="Desfase entre Notion y el repo: HU2-099 y HU2-103 figuran como pendientes en Notion y sus specs están en 6/7 y 8/9; HU2-112 (WhatsApp, 47/47 tareas) todavía no tiene fila en el backlog; las specs 013 y 018 siguen en 0 tareas aunque sus historias existen en la Fase 3.";
+}
+
+function renderFases(){
+ const q=document.getElementById("q-fases").value.toLowerCase(),e=document.getElementById("f-estado").value,t=document.getElementById("f-tipo").value;
+ const root=document.getElementById("fases");root.replaceChildren();
+ fases.forEach(f=>{
+  const its=f.items.filter(i=>(!q||(i.nom+" "+i.id).toLowerCase().includes(q))&&(!e||i.est===e)&&(!t||i.tipo===t));
+  if((q||e||t)&&!its.length)return;
+  const d=el("details");if(q||e||t)d.open=true;
+  const s=el("summary");s.appendChild(el("h3","grow",f.n));
+  s.appendChild(el("span","meta",f.h+" hechas de "+f.t));
+  const b=bar(f.h,f.t);b.style.width="120px";s.appendChild(b);d.appendChild(s);
+  const r=el("div","rows");
+  if(!f.items.length||(e==="Hecho")){r.appendChild(el("p","sub",e==="Hecho"?"Las filas hechas de esta fase se muestran solo como conteo.":"Todo hecho en esta fase."))}
+  its.forEach(i=>{const row=el("div","row");row.appendChild(el("span","id",i.id||"sin HU"));
+   const c=el("div","t");c.appendChild(el("div",null,i.nom));c.appendChild(el("div","tipo",i.tipo+" · "+i.pri));row.appendChild(c);
+   const pc=el("div","pillcell");pc.appendChild(pill(i.est));row.appendChild(pc);r.appendChild(row)});
+  d.appendChild(r);root.appendChild(d)})
+}
+
+function renderHist(){
+ const q=document.getElementById("q-hist").value.toLowerCase(),n=document.getElementById("f-nivel").value;
+ const tb=document.querySelector("#t-hist tbody");tb.replaceChildren();
+ hist.filter(h=>(!q||(h.id+" "+h.t).toLowerCase().includes(q))&&(!n||nivel(h)===n)).forEach(h=>{
+  const tr=el("tr");tr.appendChild(el("td","num",h.id));tr.appendChild(el("td",null,h.t));
+  tr.appendChild(el("td","num",h.d+" / "+h.n));const b=el("td");b.appendChild(bar(h.d,h.n));tr.appendChild(b);
+  const lv=nivel(h);const p=el("td");p.appendChild(el("span","pill "+(lv==="Completa"?"hecho":lv==="En curso"?"pendiente":"bloqueado"),lv));tr.appendChild(p);
+  tr.appendChild(el("td",null,h.est));tb.appendChild(tr)})
+}
+
+function renderNuevas(){
+ const root=document.getElementById("nuevas");
+ Object.entries(nuevas).forEach(([k,l])=>{const c=el("div","card");
+  const done=l.filter(x=>x.est==="Hecho").length;c.appendChild(el("h3",null,k+" ("+l.length+")"));
+  const u=el("ul","clean");l.forEach(x=>{const li=el("li");const s=el("span");s.appendChild(document.createTextNode(x.t));
+   s.appendChild(el("div","src",x.det));li.appendChild(s);li.appendChild(pill(x.est));u.appendChild(li)});
+  c.appendChild(u);root.appendChild(c)})
+}
+
+function pendRows(){
+ const out=[];
+ fases.forEach(f=>f.items.forEach(i=>out.push({o:"Backlog",w:f.n,q:(i.id?i.id+" · ":"")+i.nom,e:i.est})));
+ hist.filter(h=>h.d<h.n).forEach(h=>out.push({o:"Historia spec-kit",w:"Spec "+h.id,q:h.t+": "+h.d+" de "+h.n+" tareas",e:h.d===0?"Pendiente":"En diseño"}));
+ nuevas["Pendiente de optimización"].forEach(x=>out.push({o:"Tarea nueva",w:"Optimización",q:x.t,e:"Pendiente"}));
+ return out;
+}
+function renderPend(){
+ const q=document.getElementById("q-pend").value.toLowerCase(),o=document.getElementById("f-origen").value;
+ const tb=document.querySelector("#t-pend tbody");tb.replaceChildren();
+ pendRows().filter(r=>(!q||(r.w+" "+r.q).toLowerCase().includes(q))&&(!o||r.o===o)).forEach(r=>{
+  const tr=el("tr");tr.appendChild(el("td",null,r.o));tr.appendChild(el("td",null,r.w));tr.appendChild(el("td",null,r.q));
+  const p=el("td");p.appendChild(pill(r.e==="En diseño"&&r.o==="Historia spec-kit"?"En curso":r.e));tr.appendChild(p);tb.appendChild(tr)})
+}
+
+function tab(name){
+ document.querySelectorAll("nav button").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===name)));
+ document.querySelectorAll("section[id^=tab-]").forEach(s=>s.hidden=s.id!=="tab-"+name);
+}
+document.querySelectorAll("nav button").forEach(b=>b.addEventListener("click",()=>{tab(b.dataset.tab);history.replaceState(null,"","#"+b.dataset.tab)}));
+["q-fases","f-estado","f-tipo"].forEach(i=>document.getElementById(i).addEventListener("input",renderFases));
+["q-hist","f-nivel"].forEach(i=>document.getElementById(i).addEventListener("input",renderHist));
+["q-pend","f-origen"].forEach(i=>document.getElementById(i).addEventListener("input",renderPend));
+
+kpis();resumen();renderFases();renderHist();renderNuevas();renderPend();
+const h0=location.hash.slice(1);if(["resumen","fases","historias","nuevas","pendientes"].includes(h0))tab(h0);
+</script>
+</body>
+</html>

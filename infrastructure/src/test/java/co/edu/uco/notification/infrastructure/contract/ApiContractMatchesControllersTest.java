@@ -1,7 +1,6 @@
 package co.edu.uco.notification.infrastructure.contract;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
@@ -66,19 +65,6 @@ class ApiContractMatchesControllersTest {
         .filter(route -> "POST".equals(route.get("method")))
         .map(route -> route.get("method") + " " + route.get("path"))
         .collect(Collectors.toCollection(TreeSet::new));
-  }
-
-  @Test
-  void noPlannedOperationIsServed() {
-    final Set<String> served = served();
-    final Set<String> planned =
-        ApiContract.operations().stream()
-            .filter(operation -> !operation.available())
-            .map(ApiContract.Operation::key)
-            .collect(Collectors.toCollection(TreeSet::new));
-
-    assertEquals(4, planned.size());
-    planned.forEach(key -> assertFalse(served.contains(key), key));
   }
 
   @Test

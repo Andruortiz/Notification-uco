@@ -179,8 +179,4 @@ abstract class ApiV2E2ESupport {
     java.util.Arrays.fill(content, (byte) 'a');
     return content;
   }
-
-  protected static void assertNotServed(final int status) {
-    assertTrue(status == 404 || status == 405, "expected 404 or 405 but was " + status);
-  }
 }

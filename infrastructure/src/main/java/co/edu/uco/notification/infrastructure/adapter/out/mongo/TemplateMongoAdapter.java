@@ -11,6 +11,7 @@ import co.edu.uco.notification.core.exception.TemplateAlreadyExistsException;
 import co.edu.uco.notification.core.repository.TemplateRepository;
 import co.edu.uco.notification.core.repository.TemplateSearchCriteria;
 import co.edu.uco.notification.utils.Preconditions;
+import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.FindAndModifyOptions;
@@ -73,7 +74,8 @@ public class TemplateMongoAdapter implements TemplateRepository {
             .set("variables", document.variables())
             .set("status", document.status())
             .set("version", document.version())
-            .set("updatedAt", document.updatedAt());
+            .set("updatedAt", document.updatedAt())
+            .set("sampleValues", document.sampleValues());
     return mongoTemplate
         .findAndModify(
             query, update, FindAndModifyOptions.options().returnNew(true), TemplateDocument.class)
@@ -124,7 +126,8 @@ public class TemplateMongoAdapter implements TemplateRepository {
         template.status().name(),
         template.version(),
         template.createdAt(),
-        template.updatedAt());
+        template.updatedAt(),
+        template.sampleValues());
   }
 
   private static Template toDomain(final TemplateDocument document) {
@@ -143,6 +146,7 @@ public class TemplateMongoAdapter implements TemplateRepository {
         TemplateStatus.valueOf(document.status()),
         document.version(),
         document.createdAt(),
-        document.updatedAt());
+        document.updatedAt(),
+        document.sampleValues() == null ? Map.of() : document.sampleValues());
   }
 }

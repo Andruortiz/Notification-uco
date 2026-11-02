@@ -71,7 +71,7 @@
 - [ ] T027 [US4] Ampliar `TemplatePreviewE2ETest` con SC-005: vista previa con valor centinela; captura de logs del adaptador de logs sin el centinela y `templates` de Mongo sin el centinela tras la vista previa (FR-006). Criterio: verde; el control positivo debe demostrar que la captura sí recoge logs.
 - [ ] T028 [US4] Ampliar `TemplatePreviewE2ETest` con SC-004 y `Duration`: caso válido de 20000 caracteres y 50 variables en menos de 200 ms de cálculo; y caso `"{{" + " ".repeat(19990)` que es sintaxis inválida y debe devolver 400 `INVALID_TEMPLATE_SYNTAX` en menos de 200 ms. Criterio: aserciones `Duration` verdes.
 - [ ] T029 [US4] Límites de la vista previa (asunto >200, cuerpo >20000, más de 50 valores, valor >2000) respondidos con 400 `TEMPLATE_LIMIT_EXCEEDED`, reutilizando el verificador de D1. Pruebas en `PreviewTemplateServiceTest` y en `TemplatePreviewE2ETest`. Criterio: verde.
-- [ ] T030 [US4] Excepción de bloques (ver plan Errores de bloque): los códigos `BLOCK_*` (3080-3088) no existen en `utils/src/main/java/co/edu/uco/notification/utils/ErrorCode.java`. D2 no los implementa. Registrar en `plan.md` una excepción del Principio VII con dueño y fecha; el dueño y la fecha quedan para que los fije el usuario. Criterio: `plan.md` actualizado y la excepción citada aquí.
+- [ ] T030 [US4] Errores de bloque (409 BLOCK_*): diferido a D7 (HU2-130). Los códigos NTF-3080 a NTF-3088 no existen en utils/ErrorCode y D2 no los crea. La vista previa no depende de ellos: propaga sin traducir cualquier excepción del renderizador, así que D7 la hereda al integrarse. Criterio: sin código de bloque en D2; el 409 de bloques se verifica en D7.
 
 **Checkpoint**: US4 cubierta por E2E de aislamiento y privacidad.
 

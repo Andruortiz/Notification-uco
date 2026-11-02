@@ -75,6 +75,14 @@ class RouteAuthorizationPolicyTest {
   }
 
   @Test
+  void templatePreviewsAreOpenToTheEditorAndBothAdministratorsOnly() {
+    assertEquals(
+        Set.of(
+            Role.EDITOR_PLANTILLAS, Role.ADMINISTRADOR_APLICACION, Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.POST, "/template-previews"));
+  }
+
+  @Test
   void channelsAndProvidersAreManagedOnlyByThePlatformAdministrator() {
     assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.POST, "/channels"));
     assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.POST, "/providers"));

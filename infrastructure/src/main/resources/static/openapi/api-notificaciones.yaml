@@ -111,6 +111,11 @@ info:
     | (nuevo, HU2-120) | POST /devices, GET /devices, POST /device-removals, POST /device-erasures (available) |
     | (nuevo, HU2-121) | GET /provider-health (available) |
 
+    Registro de cambios 2.3.1 (HU2-126 implementada, adiciones compatibles sobre 2.3.0):
+    1. `POST /template-previews` (`previewTemplate`) pasa de planned a available; sin rutas nuevas ni cambios en rutas existentes.
+    2. `sampleValues` pasa de planned a available en `CreateTemplateRequest`, `UpdateTemplateRequest` y `TemplateResponse`.
+    3. Esquemas nuevos `PreviewTemplateRequest`, `TemplatePreviewResponse`, `SmsSegmentation` y `SmsEncoding`. Sin códigos NTF nuevos: la vista previa reutiliza NTF-1007, NTF-1008 y NTF-1009.
+
     Registro de cambios 2.3.0 (contrato del nivel 2, adiciones compatibles sobre 2.2.0; ninguna ruta existente cambia):
 
     1. Las 19 operaciones nuevas nacen `planned` y no se sirven hasta que su historia las implemente: HU2-125
@@ -133,7 +138,7 @@ info:
     AUDIT_ENTRY_NOT_FOUND y NTF-5070 AUDIT_APPEND_FAILED.
     4. Fuera de este contrato: B5, E6, F1, F6, D8, E4 y H6.
 
-  version: 2.3.0
+  version: 2.3.1
 servers:
   - url: /
     description: >
@@ -1992,12 +1997,12 @@ paths:
       tags: [Plantillas]
       summary: Previsualizar una plantilla en vivo
       description: >
-        HU2-126 (planificada). Sin estado: no guarda nada. Pasa por el renderizador único y devuelve el asunto,
+        HU2-126. Sin estado: no guarda nada. Pasa por el renderizador único y devuelve el asunto,
         el cuerpo, las variables faltantes, los conteos de caracteres y la segmentación SMS. Los valores no se
         persisten ni se registran. Un bloque inexistente, archivado o cíclico responde 409. Requiere rol
         EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
       operationId: previewTemplate
-      x-status: planned
+      x-status: available
       x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
@@ -4029,13 +4034,13 @@ components:
             $ref: '#/components/schemas/TemplateVariable'
         sampleValues:
           type: object
-          x-status: planned
+          x-status: available
           maxProperties: 50
           additionalProperties:
             type: string
             maxLength: 2000
           description: >
-            HU2-126 (planificada). Datos ficticios para la vista previa; es lo único que la plantilla guarda de valores.
+            HU2-126. Datos ficticios para la vista previa; es lo único que la plantilla guarda de valores.
 
     UpdateTemplateRequest:
       type: object
@@ -4064,13 +4069,13 @@ components:
             $ref: '#/components/schemas/TemplateVariable'
         sampleValues:
           type: object
-          x-status: planned
+          x-status: available
           maxProperties: 50
           additionalProperties:
             type: string
             maxLength: 2000
           description: >
-            HU2-126 (planificada). Datos ficticios para la vista previa; es lo único que la plantilla guarda de valores.
+            HU2-126. Datos ficticios para la vista previa; es lo único que la plantilla guarda de valores.
 
     ArchiveTemplateRequest:
       type: object
@@ -4119,8 +4124,8 @@ components:
           format: date-time
         sampleValues:
           type: object
-          x-status: planned
-          description: HU2-126 (planificada). Datos ficticios guardados; {} si no hay.
+          x-status: available
+          description: HU2-126. Datos ficticios guardados; {} si no hay.
           maxProperties: 50
           additionalProperties:
             type: string

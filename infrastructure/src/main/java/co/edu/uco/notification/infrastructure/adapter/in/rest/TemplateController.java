@@ -85,7 +85,8 @@ public class TemplateController {
                         request.language(),
                         request.subject(),
                         request.body(),
-                        variablesOf(request.variables()))))
+                        variablesOf(request.variables()),
+                        request.sampleValues())))
         .doOnNext(template -> log("created", template))
         .map(
             template ->
@@ -113,7 +114,8 @@ public class TemplateController {
                       request.category(),
                       request.subject(),
                       request.body(),
-                      variablesOf(request.variables())));
+                      variablesOf(request.variables()),
+                      request.sampleValues()));
             })
         .doOnNext(template -> log("updated", template))
         .map(TemplateResponse::from);

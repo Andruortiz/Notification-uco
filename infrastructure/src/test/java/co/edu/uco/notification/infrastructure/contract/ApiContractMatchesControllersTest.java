@@ -52,7 +52,7 @@ class ApiContractMatchesControllersTest {
             .map(ApiContract.Operation::key)
             .collect(Collectors.toCollection(TreeSet::new));
 
-    assertEquals(29, available.size());
+    assertEquals(30, available.size());
     final Set<String> served = served();
     assertTrue(served.containsAll(publicRoutes()));
     served.removeAll(publicRoutes());

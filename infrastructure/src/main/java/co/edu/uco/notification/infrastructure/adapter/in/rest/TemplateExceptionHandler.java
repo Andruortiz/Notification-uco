@@ -26,7 +26,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ServerWebExchange;
 
 @Order(Ordered.HIGHEST_PRECEDENCE)
-@RestControllerAdvice(assignableTypes = TemplateController.class)
+@RestControllerAdvice(assignableTypes = {TemplateController.class, TemplatePreviewController.class})
 public class TemplateExceptionHandler {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(TemplateExceptionHandler.class);

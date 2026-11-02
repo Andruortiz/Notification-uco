@@ -31,7 +31,7 @@ class ProtectedResourcesCatalogTest {
             .collect(Collectors.toSet())
             .size());
     assertEquals(
-        29, entries.stream().filter(entry -> "available".equals(entry.get("status"))).count());
+        30, entries.stream().filter(entry -> "available".equals(entry.get("status"))).count());
   }
 
   @Test

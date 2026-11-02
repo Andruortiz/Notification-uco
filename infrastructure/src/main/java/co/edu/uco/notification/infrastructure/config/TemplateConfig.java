@@ -3,14 +3,15 @@ package co.edu.uco.notification.infrastructure.config;
 import co.edu.uco.notification.core.port.in.ArchiveTemplateUseCase;
 import co.edu.uco.notification.core.port.in.CreateTemplateUseCase;
 import co.edu.uco.notification.core.port.in.DetectTemplateVariablesUseCase;
+import co.edu.uco.notification.core.port.in.PreviewTemplateUseCase;
 import co.edu.uco.notification.core.port.in.QueryTemplatesUseCase;
-import co.edu.uco.notification.core.port.in.RenderTemplateUseCase;
 import co.edu.uco.notification.core.port.in.UpdateTemplateUseCase;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.repository.TemplateRepository;
 import co.edu.uco.notification.core.usecase.ArchiveTemplateService;
 import co.edu.uco.notification.core.usecase.CreateTemplateService;
 import co.edu.uco.notification.core.usecase.DetectTemplateVariablesService;
+import co.edu.uco.notification.core.usecase.PreviewTemplateService;
 import co.edu.uco.notification.core.usecase.QueryTemplatesService;
 import co.edu.uco.notification.core.usecase.RenderTemplateService;
 import co.edu.uco.notification.core.usecase.UpdateTemplateService;
@@ -52,7 +53,12 @@ public class TemplateConfig {
   }
 
   @Bean
-  RenderTemplateUseCase renderTemplateUseCase(final TemplateRepository templateRepository) {
+  RenderTemplateService renderTemplateUseCase(final TemplateRepository templateRepository) {
     return new RenderTemplateService(templateRepository);
+  }
+
+  @Bean
+  PreviewTemplateUseCase previewTemplateUseCase(final RenderTemplateService renderTemplateService) {
+    return new PreviewTemplateService(renderTemplateService);
   }
 }

@@ -143,8 +143,7 @@ class ApiV2RoutesE2ETest extends ApiV2E2ESupport {
   @Test
   void thePlannedOperationsAreNotServed() {
     final String admin = TestTokens.bearer(TENANT_A, Role.ADMINISTRADOR);
-    for (final String path :
-        List.of("/notification-retries", "/channels", "/providers", "/recipients/preferences")) {
+    for (final String path : List.of("/channels", "/providers", "/recipients/preferences")) {
       final int post =
           client
               .post()

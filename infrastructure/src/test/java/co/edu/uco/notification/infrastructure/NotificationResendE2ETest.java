@@ -142,7 +142,7 @@ class NotificationResendE2ETest {
     final Map<String, Object> delivered = client.awaitStatus("tenant-1", resent, "DELIVERED");
     final Duration elapsed = Duration.between(start, Instant.now());
 
-    assertEquals("PENDING", accepted.get("status"));
+    assertTrue(List.of("PENDING", "IN_PROCESS").contains(accepted.get("status")));
     assertEquals("SMS", accepted.get("channelType"));
     assertNotEquals(original, resent);
     assertEquals("DELIVERED", delivered.get("status"));

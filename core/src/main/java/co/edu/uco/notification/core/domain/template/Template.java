@@ -6,6 +6,7 @@ import co.edu.uco.notification.core.exception.TemplateLimitExceededException;
 import co.edu.uco.notification.core.exception.UndeclaredTemplateVariableException;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -33,7 +34,8 @@ public record Template(
   public static final int MAX_BODY = 20000;
   public static final int MAX_VARIABLES = 50;
   private static final Pattern KEY = Pattern.compile("[A-Za-z0-9._-]+");
-  private static final Pattern LANGUAGE = Pattern.compile("[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*");
+  private static final Pattern LANGUAGE_PRIMARY = Pattern.compile("[A-Za-z]{2,3}");
+  private static final Pattern LANGUAGE_SUBTAG = Pattern.compile("[A-Za-z0-9]{1,8}");
 
   public Template {
     variables = List.copyOf(variables);
@@ -56,7 +58,7 @@ public record Template(
     requireLimit(
         language.length() >= 2 && language.length() <= 10, "language must have 2 to 10 characters");
     Preconditions.requireTrue(KEY.matcher(key).matches(), "key has invalid characters");
-    Preconditions.requireTrue(LANGUAGE.matcher(language).matches(), "language is not a valid tag");
+    Preconditions.requireTrue(isLanguageTag(language), "language is not a valid tag");
     final List<TemplateVariable> variables = resolve(category, subject, body, declared);
     return new Template(
         TemplateId.newId(),
@@ -147,6 +149,13 @@ public record Template(
     return detected.stream()
         .map(name -> new TemplateVariable(name, required.getOrDefault(name, Boolean.TRUE)))
         .toList();
+  }
+
+  private static boolean isLanguageTag(final String language) {
+    final String[] parts = language.split("-", -1);
+    return LANGUAGE_PRIMARY.matcher(parts[0]).matches()
+        && Arrays.stream(parts, 1, parts.length)
+            .allMatch(part -> LANGUAGE_SUBTAG.matcher(part).matches());
   }
 
   private static void requireLimit(final boolean condition, final String message) {

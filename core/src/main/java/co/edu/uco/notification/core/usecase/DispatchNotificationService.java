@@ -157,7 +157,6 @@ public final class DispatchNotificationService implements DispatchNotificationUs
     final ProviderId providerId = providers.get(index);
     final Optional<NotificationSenderPort> sender = notificationSenderRegistry.find(providerId);
     if (sender.isEmpty()) {
-      skips.missing = true;
       return tryProviders(notification, providers, index + 1, recoverables, skips);
     }
     final Optional<String> disabledReason = sender.get().disabledReason();
@@ -232,7 +231,6 @@ public final class DispatchNotificationService implements DispatchNotificationUs
 
   private static final class Skips {
     private boolean circuitOpen;
-    private boolean missing;
     private ProviderId disabledProvider;
     private String disabledReason;
 

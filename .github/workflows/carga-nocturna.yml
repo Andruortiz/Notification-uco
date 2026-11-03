@@ -48,17 +48,17 @@ jobs:
 
       - name: Credenciales efimeras del job
         run: |
-          mongo_password="$(openssl rand -hex 16)"
-          rabbit_password="$(openssl rand -hex 16)"
-          echo "::add-mask::${mongo_password}"
-          echo "::add-mask::${rabbit_password}"
+          mongo_secret="$(openssl rand -hex 16)"
+          rabbit_secret="$(openssl rand -hex 16)"
+          echo "::add-mask::${mongo_secret}"
+          echo "::add-mask::${rabbit_secret}"
           node loadtest/token.js > "${RUNNER_TEMP}/token.json"
           public_key="$(jq -r .publicKey "${RUNNER_TEMP}/token.json")"
           bearer="$(jq -r .bearer "${RUNNER_TEMP}/token.json")"
           echo "::add-mask::${bearer}"
           {
-            echo "MONGO_PASSWORD=${mongo_password}"
-            echo "RABBITMQ_PASSWORD=${rabbit_password}"
+            echo "MONGO_PASSWORD=${mongo_secret}"
+            echo "RABBITMQ_PASSWORD=${rabbit_secret}"
             echo "AUTH_PLATFORM_PUBLIC_KEY=${public_key}"
             echo "LOADTEST_BEARER=${bearer}"
           } >> "${GITHUB_ENV}"

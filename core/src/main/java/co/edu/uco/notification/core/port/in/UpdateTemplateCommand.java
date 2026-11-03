@@ -13,4 +13,9 @@ public record UpdateTemplateCommand(
     TemplateCategory category,
     String subject,
     String body,
-    List<TemplateVariable> variables) {}
+    List<TemplateVariable> variables) {
+
+  public UpdateTemplateCommand {
+    variables = List.copyOf(variables);
+  }
+}

@@ -13,7 +13,14 @@ public interface ProviderMetricsQueryPort {
   record Snapshot(
       List<Counts> counts,
       Map<String, Double> latencyP95SecondsByProvider,
-      List<ErrorMark> errors) {}
+      List<ErrorMark> errors) {
+
+    public Snapshot {
+      counts = List.copyOf(counts);
+      latencyP95SecondsByProvider = Map.copyOf(latencyP95SecondsByProvider);
+      errors = List.copyOf(errors);
+    }
+  }
 
   record Counts(
       String provider, String channel, double delivered, double failed, double recoverable) {}

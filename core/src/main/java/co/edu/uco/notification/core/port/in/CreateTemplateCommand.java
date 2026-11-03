@@ -14,4 +14,9 @@ public record CreateTemplateCommand(
     String language,
     String subject,
     String body,
-    List<TemplateVariable> variables) {}
+    List<TemplateVariable> variables) {
+
+  public CreateTemplateCommand {
+    variables = List.copyOf(variables);
+  }
+}

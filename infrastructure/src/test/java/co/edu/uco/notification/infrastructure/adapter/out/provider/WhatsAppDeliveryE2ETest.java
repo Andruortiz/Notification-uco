@@ -162,14 +162,14 @@ class WhatsAppDeliveryE2ETest {
     mongoTemplate
         .save(new ChannelCatalogDocument("WHATSAPP", List.of(providers), seeded.contentSchema()))
         .block();
-    final ProviderId expected = ProviderId.of(providers[0]);
+    final List<ProviderId> expected = Arrays.stream(providers).map(ProviderId::of).toList();
     final Instant deadline = Instant.now().plus(Duration.ofSeconds(40));
     while (Instant.now().isBefore(deadline)) {
       final ChannelRoute route =
           channelCatalogPort
               .findActiveRoute(ChannelType.of("WHATSAPP"), TenantId.of(TENANT))
               .block();
-      if (route != null && route.preferredProvider().equals(expected)) {
+      if (route != null && route.providers().equals(expected)) {
         return;
       }
     }

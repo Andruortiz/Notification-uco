@@ -111,5 +111,10 @@ public class TemplateExceptionHandler {
       String code,
       String message,
       String correlationId,
-      @JsonInclude(JsonInclude.Include.NON_NULL) List<String> missingVariables) {}
+      @JsonInclude(JsonInclude.Include.NON_NULL) List<String> missingVariables) {
+
+    public TemplateErrorResponse {
+      missingVariables = missingVariables == null ? null : List.copyOf(missingVariables);
+    }
+  }
 }

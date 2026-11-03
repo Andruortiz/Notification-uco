@@ -32,7 +32,12 @@ public final class TemplateDtos {
       String language,
       String subject,
       String body,
-      List<VariableDto> variables) {}
+      List<VariableDto> variables) {
+
+    public CreateTemplateRequest {
+      variables = variables == null ? null : List.copyOf(variables);
+    }
+  }
 
   public record UpdateTemplateRequest(
       String templateId,
@@ -40,15 +45,30 @@ public final class TemplateDtos {
       TemplateCategory category,
       String subject,
       String body,
-      List<VariableDto> variables) {}
+      List<VariableDto> variables) {
+
+    public UpdateTemplateRequest {
+      variables = variables == null ? null : List.copyOf(variables);
+    }
+  }
 
   public record ArchiveTemplateRequest(String templateId) {}
 
   public record DetectTemplateVariablesRequest(String subject, String body) {}
 
-  public record DetectedTemplateVariablesResponse(List<String> variables) {}
+  public record DetectedTemplateVariablesResponse(List<String> variables) {
 
-  public record RenderTemplateRequest(String templateId, Map<String, String> values) {}
+    public DetectedTemplateVariablesResponse {
+      variables = variables == null ? null : List.copyOf(variables);
+    }
+  }
+
+  public record RenderTemplateRequest(String templateId, Map<String, String> values) {
+
+    public RenderTemplateRequest {
+      values = values == null ? null : Map.copyOf(values);
+    }
+  }
 
   public record RenderedTemplateResponse(String subject, String body) {
 
@@ -72,6 +92,10 @@ public final class TemplateDtos {
       Instant createdAt,
       Instant updatedAt) {
 
+    public TemplateResponse {
+      variables = variables == null ? null : List.copyOf(variables);
+    }
+
     static TemplateResponse from(final Template template) {
       return new TemplateResponse(
           template.id().value(),
@@ -92,6 +116,10 @@ public final class TemplateDtos {
 
   public record TemplateListResponse(
       List<TemplateResponse> items, int page, int size, boolean hasNext) {
+
+    public TemplateListResponse {
+      items = items == null ? null : List.copyOf(items);
+    }
 
     static TemplateListResponse from(final TemplatePage page) {
       return new TemplateListResponse(

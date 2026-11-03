@@ -34,7 +34,7 @@ public final class AesGcmTokenProtection {
   private final SecretKeySpec fingerprintKey;
   private final int keyVersion;
   private final int fingerprintKeyVersion;
-  private MeterRegistry meterRegistry;
+  private Runnable unreadableIncrement = () -> {};
 
   public AesGcmTokenProtection(
       final byte[] encryptionKey,
@@ -78,7 +78,8 @@ public final class AesGcmTokenProtection {
   }
 
   public AesGcmTokenProtection withMeters(final MeterRegistry registry) {
-    this.meterRegistry = registry;
+    this.unreadableIncrement =
+        registry == null ? () -> {} : registry.counter(UNREADABLE_METER)::increment;
     return this;
   }
 
@@ -86,9 +87,7 @@ public final class AesGcmTokenProtection {
     try {
       return Optional.ofNullable(reveal(value, aad));
     } catch (IllegalStateException error) {
-      if (meterRegistry != null) {
-        meterRegistry.counter(UNREADABLE_METER).increment();
-      }
+      unreadableIncrement.run();
       return Optional.empty();
     }
   }

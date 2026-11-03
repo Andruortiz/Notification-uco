@@ -15,6 +15,10 @@ public record NotificationTimelineResponse(
     String correlationId,
     List<Attempt> attempts) {
 
+  public NotificationTimelineResponse {
+    attempts = attempts == null ? null : List.copyOf(attempts);
+  }
+
   public record Attempt(
       Instant occurredOn,
       String providerId,

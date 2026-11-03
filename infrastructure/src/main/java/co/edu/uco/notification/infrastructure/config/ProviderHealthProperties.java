@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.config;
 
 import java.time.Duration;
+import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @ConfigurationProperties(prefix = "provider-health")
@@ -16,13 +17,13 @@ public record ProviderHealthProperties(
     Double recoverableThreshold) {
 
   public ProviderHealthProperties {
-    window = window == null ? Duration.ofMinutes(5) : window;
-    lookback = lookback == null ? Duration.ofMinutes(15) : lookback;
-    timeout = timeout == null ? Duration.ofSeconds(2) : timeout;
-    minSamples = minSamples == null ? 5L : minSamples;
-    healthyThreshold = healthyThreshold == null ? 0.95 : healthyThreshold;
-    downThreshold = downThreshold == null ? 0.5 : downThreshold;
-    recoverableThreshold = recoverableThreshold == null ? 0.5 : recoverableThreshold;
+    window = Objects.requireNonNullElse(window, Duration.ofMinutes(5));
+    lookback = Objects.requireNonNullElse(lookback, Duration.ofMinutes(15));
+    timeout = Objects.requireNonNullElse(timeout, Duration.ofSeconds(2));
+    minSamples = Objects.requireNonNullElse(minSamples, Long.valueOf(5));
+    healthyThreshold = Objects.requireNonNullElse(healthyThreshold, Double.valueOf(0.95));
+    downThreshold = Objects.requireNonNullElse(downThreshold, Double.valueOf(0.5));
+    recoverableThreshold = Objects.requireNonNullElse(recoverableThreshold, Double.valueOf(0.5));
     require(window.compareTo(Duration.ZERO) > 0, "window must be positive");
     require(lookback.compareTo(Duration.ofSeconds(60)) >= 0, "lookback must be at least 60s");
     require(timeout.compareTo(Duration.ZERO) > 0, "timeout must be positive");

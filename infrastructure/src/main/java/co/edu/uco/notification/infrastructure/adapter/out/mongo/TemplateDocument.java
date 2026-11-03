@@ -27,5 +27,9 @@ public record TemplateDocument(
     Instant createdAt,
     Instant updatedAt) {
 
+  public TemplateDocument {
+    variables = variables == null ? null : List.copyOf(variables);
+  }
+
   public record VariableDocument(String name, boolean required) {}
 }

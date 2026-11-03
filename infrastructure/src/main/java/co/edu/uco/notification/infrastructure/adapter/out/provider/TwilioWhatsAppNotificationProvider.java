@@ -77,19 +77,8 @@ public class TwilioWhatsAppNotificationProvider
     if (disabledReason.isPresent()) {
       return Mono.just(ProbeOutcome.failed(ProbeErrorCode.CREDENTIALS_MISSING));
     }
-    return ProviderProbes.classify(
-        Mono.defer(
-            () ->
-                clientSource
-                    .get()
-                    .get()
-                    .uri(ACCOUNT_PATH, properties.accountSid())
-                    .headers(
-                        headers ->
-                            headers.setBasicAuth(properties.accountSid(), properties.authToken()))
-                    .exchangeToMono(
-                        response ->
-                            response.releaseBody().thenReturn(response.statusCode().value()))));
+    return ProviderProbes.getWithBasicAuth(
+        clientSource, ACCOUNT_PATH, properties.accountSid(), properties.authToken());
   }
 
   @Override

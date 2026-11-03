@@ -3,12 +3,32 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 import co.edu.uco.notification.core.domain.valueobject.ProbeErrorCode;
 import co.edu.uco.notification.core.port.out.ProbeOutcome;
 import java.io.IOException;
+import java.util.function.Supplier;
+import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientRequestException;
 import reactor.core.publisher.Mono;
 
 final class ProviderProbes {
 
   private ProviderProbes() {}
+
+  static Mono<ProbeOutcome> getWithBasicAuth(
+      final Supplier<WebClient> clientSource,
+      final String path,
+      final String accountSid,
+      final String authToken) {
+    return classify(
+        Mono.defer(
+            () ->
+                clientSource
+                    .get()
+                    .get()
+                    .uri(path, accountSid)
+                    .headers(headers -> headers.setBasicAuth(accountSid, authToken))
+                    .exchangeToMono(
+                        response ->
+                            response.releaseBody().thenReturn(response.statusCode().value()))));
+  }
 
   static Mono<ProbeOutcome> classify(final Mono<Integer> status) {
     return status

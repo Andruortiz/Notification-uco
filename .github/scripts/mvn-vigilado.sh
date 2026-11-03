@@ -50,4 +50,9 @@ wait "$COMMAND_PID"
 STATUS=$?
 sleep 1
 kill "$TAIL_PID" 2>/dev/null || true
+if ((STATUS != 0)); then
+  gzip -c "$LOG" >"$DIAG_DIR/salida-$(date +%H%M%S).log.gz"
+  echo "=== resumen de fallos (salida $STATUS) ==="
+  grep -E '^\[(ERROR|WARNING)\]|<<< (FAILURE|ERROR)|Tests run:.*(Failures: [1-9]|Errors: [1-9])|BUILD' "$LOG" | tail -80
+fi
 exit "$STATUS"

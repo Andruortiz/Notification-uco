@@ -48,6 +48,8 @@ class ProviderProbeAdaptersTest {
 
   private ListAppender<ILoggingEvent> logs;
 
+  private Level previousRootLevel;
+
   @BeforeAll
   static void start() {
     server = FakeProviderServer.start();
@@ -67,6 +69,7 @@ class ProviderProbeAdaptersTest {
     authServer.reset();
     logs = new ConcurrentListAppender();
     logs.start();
+    previousRootLevel = rootLogger().getLevel();
     rootLogger().setLevel(Level.DEBUG);
     rootLogger().addAppender(logs);
   }
@@ -74,6 +77,7 @@ class ProviderProbeAdaptersTest {
   @AfterEach
   void tearDown() {
     rootLogger().detachAppender(logs);
+    rootLogger().setLevel(previousRootLevel);
   }
 
   private static Logger rootLogger() {

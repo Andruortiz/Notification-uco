@@ -17,6 +17,7 @@ import co.edu.uco.notification.core.domain.valueobject.Attachment;
 import co.edu.uco.notification.core.domain.valueobject.AttachmentSource;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
+import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.domain.valueobject.Sha256Digest;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.domain.valueobject.UploadId;
@@ -190,7 +191,7 @@ class AttachmentUploadE2ETest {
         webTestClient
             .post()
             .uri("/attachment-uploads")
-            .header("Authorization", TestTokens.bearer(tenant))
+            .header("Authorization", TestTokens.bearer(tenant, Role.CLIENTE))
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(Map.of("fileName", fileName, "contentType", type, "sizeBytes", size))
             .exchange()
@@ -254,7 +255,7 @@ class AttachmentUploadE2ETest {
     return webTestClient
         .post()
         .uri("/attachment-upload-completions")
-        .header("Authorization", TestTokens.bearer(tenant))
+        .header("Authorization", TestTokens.bearer(tenant, Role.CLIENTE))
         .bodyValue(java.util.Map.of("uploadId", uploadId))
         .exchange();
   }
@@ -263,7 +264,7 @@ class AttachmentUploadE2ETest {
     return webTestClient
         .get()
         .uri("/attachment-uploads/status?uploadId=" + uploadId)
-        .header("Authorization", TestTokens.bearer(tenant))
+        .header("Authorization", TestTokens.bearer(tenant, Role.CLIENTE))
         .exchange();
   }
 
@@ -322,7 +323,7 @@ class AttachmentUploadE2ETest {
     return webTestClient
         .post()
         .uri("/notifications")
-        .header("Authorization", TestTokens.bearer(tenant))
+        .header("Authorization", TestTokens.bearer(tenant, Role.CLIENTE))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(body)
         .exchange();
@@ -347,7 +348,7 @@ class AttachmentUploadE2ETest {
           webTestClient
               .get()
               .uri("/notifications/detail?notificationId={id}", id)
-              .header("Authorization", TestTokens.bearer(tenant))
+              .header("Authorization", TestTokens.bearer(tenant, Role.CLIENTE))
               .exchange()
               .expectBody(new ParameterizedTypeReference<Map<String, Object>>() {})
               .returnResult()
@@ -735,7 +736,7 @@ class AttachmentUploadE2ETest {
               webTestClient
                   .get()
                   .uri("/notifications/detail?notificationId=" + notificationId)
-                  .header("Authorization", TestTokens.bearer(TENANT_A))
+                  .header("Authorization", TestTokens.bearer(TENANT_A, Role.CLIENTE))
                   .exchange(),
               200));
       everything.add(
@@ -743,7 +744,7 @@ class AttachmentUploadE2ETest {
               webTestClient
                   .get()
                   .uri("/notifications?limit=50")
-                  .header("Authorization", TestTokens.bearer(TENANT_A))
+                  .header("Authorization", TestTokens.bearer(TENANT_A, Role.OPERADOR))
                   .exchange(),
               200));
       Message message = rabbitTemplate.receive(events.getName(), 2_000);

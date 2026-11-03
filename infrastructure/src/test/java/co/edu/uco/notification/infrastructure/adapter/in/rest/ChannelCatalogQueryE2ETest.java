@@ -344,7 +344,8 @@ class ChannelCatalogQueryE2ETest {
             "[{\"channelType\":\"EMAIL\",\"preferenceOrder\":2},"
                 + "{\"channelType\":\"PUSH\",\"preferenceOrder\":2},"
                 + "{\"channelType\":\"SMS\",\"preferenceOrder\":2},"
-                + "{\"channelType\":\"WHATSAPP\",\"preferenceOrder\":2}]"),
+                + "{\"channelType\":\"TELEGRAM\",\"preferenceOrder\":2},"
+                + "{\"channelType\":\"WHATSAPP\",\"preferenceOrder\":1}]"),
         provider(providers, "simulated").get("channels"));
   }
 

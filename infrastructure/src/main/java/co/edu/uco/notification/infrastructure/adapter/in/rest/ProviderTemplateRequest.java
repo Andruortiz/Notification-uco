@@ -5,6 +5,10 @@ import java.util.Map;
 
 public record ProviderTemplateRequest(String templateId, Map<String, String> variables) {
 
+  public ProviderTemplateRequest {
+    variables = variables == null ? null : Map.copyOf(variables);
+  }
+
   ProviderTemplateReference toReference() {
     return ProviderTemplateReference.of(templateId, variables);
   }

@@ -211,6 +211,7 @@ class NotificationDocumentMapperTest {
             base.contentSubject(),
             base.contentBody(),
             base.attachments(),
+            base.providerTemplate(),
             base.priority(),
             base.status(),
             base.acceptedAt(),

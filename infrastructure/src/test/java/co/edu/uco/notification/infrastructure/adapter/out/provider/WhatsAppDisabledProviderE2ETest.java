@@ -229,7 +229,7 @@ class WhatsAppDisabledProviderE2ETest {
 
   @Test
   void aNotificationRoutedToTheDisabledProviderIsNeverDeliveredNorLostAndNeverCallsTwilio() {
-    prefer("WHATSAPP", "twilio-whatsapp", "simulated");
+    prefer("WHATSAPP", "twilio-whatsapp");
 
     final String notificationId = accept(textRequest("wa-disabled-1", "WHATSAPP"));
     final Message deadLettered = awaitDeadLetteredMessage(notificationId);

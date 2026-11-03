@@ -425,7 +425,7 @@ class WhatsAppDeliveryE2ETest {
 
   @Test
   void aTemporaryProviderFailureEndsInRecoverableWithOneAttemptPerProviderCall() {
-    preferProviders("twilio-whatsapp", "simulated");
+    preferProviders("twilio-whatsapp");
     fakeTwilio.nextResponse(500, "{\"code\":20500,\"status\":500}");
 
     final String notificationId = accept(textRequest("wa-500-1", RECIPIENT, null, "Hola"));

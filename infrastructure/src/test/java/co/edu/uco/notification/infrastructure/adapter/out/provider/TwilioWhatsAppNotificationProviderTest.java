@@ -23,6 +23,7 @@ import co.edu.uco.notification.core.domain.valueobject.Recipient;
 import co.edu.uco.notification.core.domain.valueobject.RecipientId;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.config.TwilioWhatsAppProviderProperties;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
@@ -197,7 +198,7 @@ class TwilioWhatsAppNotificationProviderTest {
     fakeServer.nextResponse(201, "{\"sid\":\"SM0001\",\"status\":\"queued\"}");
 
     StepVerifier.create(enabledProvider().send(textTo(RECIPIENT, "Asunto ignorado")))
-        .expectNext(AttemptResult.ACCEPTED)
+        .expectNext(ProviderResult.of(AttemptResult.ACCEPTED))
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());
@@ -216,7 +217,7 @@ class TwilioWhatsAppNotificationProviderTest {
     fakeServer.nextResponse(201, "{\"sid\":\"SM0002\",\"status\":\"queued\"}");
 
     StepVerifier.create(enabledProvider().send(templateTo(RECIPIENT, TEMPLATE_ID)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .expectNext(ProviderResult.of(AttemptResult.ACCEPTED))
         .verifyComplete();
 
     final Map<String, String> form = form(fakeServer.requests().get(0).body());
@@ -230,7 +231,7 @@ class TwilioWhatsAppNotificationProviderTest {
   @Test
   void aTemplateIdWithoutTheContentSidShapeFailsPermanentlyWithoutCallingTheProvider() {
     StepVerifier.create(enabledProvider().send(templateTo(RECIPIENT, "not-a-content-sid")))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .expectNext(ProviderResult.of(AttemptResult.PERMANENT_FAILURE))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -244,7 +245,7 @@ class TwilioWhatsAppNotificationProviderTest {
     fakeServer.nextResponse(404, "{\"code\":20404,\"message\":\"content not found\"}");
 
     StepVerifier.create(enabledProvider().send(templateTo(RECIPIENT, TEMPLATE_ID)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .expectNext(ProviderResult.of(AttemptResult.PERMANENT_FAILURE))
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());
@@ -258,7 +259,7 @@ class TwilioWhatsAppNotificationProviderTest {
         "{\"code\":63016,\"message\":\"Failed to send freeform message to " + RECIPIENT + "\"}");
 
     StepVerifier.create(enabledProvider().send(textTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .expectNext(ProviderResult.of(AttemptResult.PERMANENT_FAILURE))
         .verifyComplete();
 
     final List<ILoggingEvent> warnings = warnings();
@@ -277,7 +278,7 @@ class TwilioWhatsAppNotificationProviderTest {
     fakeServer.nextResponse(400, "{\"code\":12345}");
 
     StepVerifier.create(enabledProvider().send(textTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .expectNext(ProviderResult.of(AttemptResult.PERMANENT_FAILURE))
         .verifyComplete();
 
     assertTrue(logs().contains("reason=unclassified"));
@@ -343,7 +344,7 @@ class TwilioWhatsAppNotificationProviderTest {
   void recipientWithoutInternationalFormatFailsPermanentlyWithoutCallingTheProvider(
       final String recipient) {
     StepVerifier.create(enabledProvider().send(textTo(recipient, null)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .expectNext(ProviderResult.of(AttemptResult.PERMANENT_FAILURE))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -369,7 +370,7 @@ class TwilioWhatsAppNotificationProviderTest {
     fakeServer.nextResponse(status, body);
 
     StepVerifier.create(enabledProvider().send(textTo(RECIPIENT, null)))
-        .expectNext(expected)
+        .expectNext(ProviderResult.of(expected))
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());
@@ -381,7 +382,7 @@ class TwilioWhatsAppNotificationProviderTest {
     fakeServer.nextResponse(201, body);
 
     StepVerifier.create(enabledProvider().send(textTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .expectNext(ProviderResult.of(AttemptResult.ACCEPTED))
         .verifyComplete();
   }
 
@@ -390,7 +391,7 @@ class TwilioWhatsAppNotificationProviderTest {
     fakeServer.nextResponse(400, "not json");
 
     StepVerifier.create(enabledProvider().send(textTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .expectNext(ProviderResult.of(AttemptResult.PERMANENT_FAILURE))
         .verifyComplete();
   }
 
@@ -406,7 +407,7 @@ class TwilioWhatsAppNotificationProviderTest {
                 ACCOUNT_SID, AUTH_TOKEN, FROM_NUMBER, closedUrl, 10_000L, 5_000L));
 
     StepVerifier.create(provider.send(textTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .expectNext(ProviderResult.of(AttemptResult.RECOVERABLE_FAILURE))
         .verifyComplete();
 
     final String logs = logs();
@@ -431,7 +432,7 @@ class TwilioWhatsAppNotificationProviderTest {
 
     final Instant start = Instant.now();
     StepVerifier.create(provider.send(textTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .expectNext(ProviderResult.of(AttemptResult.RECOVERABLE_FAILURE))
         .verifyComplete();
     final Duration elapsed = Duration.between(start, Instant.now());
 
@@ -445,10 +446,10 @@ class TwilioWhatsAppNotificationProviderTest {
     final TwilioWhatsAppNotificationProvider provider = enabledProvider();
 
     StepVerifier.create(provider.send(notification))
-        .expectNext(AttemptResult.ACCEPTED)
+        .expectNext(ProviderResult.of(AttemptResult.ACCEPTED))
         .verifyComplete();
     StepVerifier.create(provider.send(notification))
-        .expectNext(AttemptResult.ACCEPTED)
+        .expectNext(ProviderResult.of(AttemptResult.ACCEPTED))
         .verifyComplete();
 
     assertEquals(2, fakeServer.requests().size());
@@ -467,7 +468,7 @@ class TwilioWhatsAppNotificationProviderTest {
     fakeServer.nextResponse(201, "{\"sid\":\"SM0123456789\",\"status\":\"queued\"}");
 
     StepVerifier.create(enabledProvider().send(templateTo(RECIPIENT, TEMPLATE_ID)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .expectNext(ProviderResult.of(AttemptResult.ACCEPTED))
         .verifyComplete();
 
     final String logs = logs();
@@ -487,7 +488,7 @@ class TwilioWhatsAppNotificationProviderTest {
             + "\",\"more_info\":\"https://www.twilio.com/docs/errors/63024\",\"status\":400}");
 
     StepVerifier.create(enabledProvider().send(templateTo(RECIPIENT, TEMPLATE_ID)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .expectNext(ProviderResult.of(AttemptResult.PERMANENT_FAILURE))
         .verifyComplete();
 
     final String logs = logs();

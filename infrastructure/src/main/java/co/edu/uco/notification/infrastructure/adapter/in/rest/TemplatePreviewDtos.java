@@ -14,7 +14,13 @@ public final class TemplatePreviewDtos {
       String subject,
       String body,
       List<TemplateDtos.VariableDto> variables,
-      Map<String, String> values) {}
+      Map<String, String> values) {
+
+    public PreviewTemplateRequest {
+      variables = variables == null ? null : List.copyOf(variables);
+      values = values == null ? null : Map.copyOf(values);
+    }
+  }
 
   public record SmsSegmentationResponse(
       String encoding, int units, int unitsPerSegment, int segments, boolean exceedsSingleSegment) {
@@ -36,6 +42,10 @@ public final class TemplatePreviewDtos {
       int characterCount,
       int subjectCharacterCount,
       SmsSegmentationResponse sms) {
+
+    public TemplatePreviewResponse {
+      missingVariables = missingVariables == null ? null : List.copyOf(missingVariables);
+    }
 
     static TemplatePreviewResponse from(final TemplatePreview preview) {
       return new TemplatePreviewResponse(

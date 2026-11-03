@@ -10,4 +10,10 @@ public record PreviewCommand(
     String subject,
     String body,
     List<TemplateVariable> variables,
-    Map<String, String> values) {}
+    Map<String, String> values) {
+
+  public PreviewCommand {
+    variables = variables == null ? null : List.copyOf(variables);
+    values = values == null ? null : Map.copyOf(values);
+  }
+}

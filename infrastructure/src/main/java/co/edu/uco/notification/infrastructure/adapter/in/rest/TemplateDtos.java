@@ -99,6 +99,7 @@ public final class TemplateDtos {
 
     public TemplateResponse {
       variables = variables == null ? null : List.copyOf(variables);
+      sampleValues = sampleValues == null ? null : Map.copyOf(sampleValues);
     }
 
     static TemplateResponse from(final Template template) {

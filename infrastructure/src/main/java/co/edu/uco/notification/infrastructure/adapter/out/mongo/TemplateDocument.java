@@ -31,6 +31,7 @@ public record TemplateDocument(
 
   public TemplateDocument {
     variables = variables == null ? null : List.copyOf(variables);
+    sampleValues = sampleValues == null ? null : Map.copyOf(sampleValues);
   }
 
   public record VariableDocument(String name, boolean required) {}

@@ -497,6 +497,16 @@ class ResponseSchemasConformanceE2ETest extends ApiV2E2ESupport {
             .isOk(),
         "DetectedTemplateVariablesResponse");
     conformingMap(
+        "POST /template-previews",
+        call(
+                HttpMethod.POST,
+                "/template-previews",
+                Role.EDITOR_PLANTILLAS,
+                Map.of("channel", "EMAIL", "body", "Hola {{a}}", "values", Map.of("a", "Ana")))
+            .expectStatus()
+            .isOk(),
+        "TemplatePreviewResponse");
+    conformingMap(
         "POST /template-renders",
         call(
                 HttpMethod.POST,

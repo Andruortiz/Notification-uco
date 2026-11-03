@@ -7,6 +7,7 @@ services:
       - --config.file=/etc/prometheus/prometheus.yml
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=31d
+      - --web.enable-remote-write-receiver
     ports:
       - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     extra_hosts:

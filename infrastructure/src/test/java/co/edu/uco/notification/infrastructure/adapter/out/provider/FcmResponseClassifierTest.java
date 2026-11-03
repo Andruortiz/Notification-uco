@@ -54,6 +54,23 @@ class FcmResponseClassifierTest {
   }
 
   @Test
+  void goneAndUnregisteredMarkTheRecipientAsInvalid() {
+    assertEquals(AttemptResult.INVALID_RECIPIENT, FcmResponseClassifier.classify(410, null));
+    assertEquals(
+        AttemptResult.INVALID_RECIPIENT, FcmResponseClassifier.classify(404, "UNREGISTERED"));
+  }
+
+  @Test
+  void otherFailuresNeverMarkTheRecipientAsInvalid() {
+    assertEquals(AttemptResult.PERMANENT_FAILURE, FcmResponseClassifier.classify(404, "NOT_FOUND"));
+    assertEquals(
+        AttemptResult.PERMANENT_FAILURE, FcmResponseClassifier.classify(400, "INVALID_ARGUMENT"));
+    assertEquals(AttemptResult.RECOVERABLE_FAILURE, FcmResponseClassifier.classify(429, null));
+    assertEquals(AttemptResult.RECOVERABLE_FAILURE, FcmResponseClassifier.classify(503, null));
+    assertEquals(AttemptResult.ACCEPTED, FcmResponseClassifier.classify(200, null));
+  }
+
+  @Test
   void clientTimeoutIsRecoverable() {
     assertEquals(
         AttemptResult.RECOVERABLE_FAILURE,

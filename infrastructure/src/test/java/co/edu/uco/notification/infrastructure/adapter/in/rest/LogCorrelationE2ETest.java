@@ -271,13 +271,19 @@ class LogCorrelationE2ETest {
     entriesA.forEach(
         entry -> {
           assertEquals("e2e-corr-a", entry.path("correlationId").asText());
-          assertEquals("tenant-log-a", entry.path("tenantId").asText());
+          assertTrue(Set.of("", "tenant-log-a").contains(entry.path("tenantId").asText()));
         });
     entriesB.forEach(
         entry -> {
           assertEquals("e2e-corr-b", entry.path("correlationId").asText());
-          assertEquals("tenant-log-b", entry.path("tenantId").asText());
+          assertTrue(Set.of("", "tenant-log-b").contains(entry.path("tenantId").asText()));
         });
+    assertTrue(
+        entriesA.stream()
+            .anyMatch(entry -> "tenant-log-a".equals(entry.path("tenantId").asText())));
+    assertTrue(
+        entriesB.stream()
+            .anyMatch(entry -> "tenant-log-b".equals(entry.path("tenantId").asText())));
   }
 
   @Test

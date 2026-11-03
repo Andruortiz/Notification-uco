@@ -18,6 +18,7 @@ import static org.mockito.Mockito.when;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationSnapshot;
 import co.edu.uco.notification.core.domain.configuration.ConfigurationSource;
 import co.edu.uco.notification.core.domain.configuration.ParameterRegistry;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.exception.DispatchResultNotPersistedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
@@ -115,7 +116,7 @@ class NotificationDispatchListenerTest {
   private static DispatchNotificationUseCase observing(
       final NotificationId id, final AtomicReference<Observed> observed) {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
-    when(useCase.dispatch(eq(id)))
+    when(useCase.dispatch(eq(id), any()))
         .thenReturn(
             Mono.deferContextual(
                 context -> {
@@ -134,11 +135,42 @@ class NotificationDispatchListenerTest {
   void onMessageDispatchesTheNotificationWithTheGivenIdAndAcknowledgesIt() throws IOException {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
     final NotificationId id = NotificationId.newId();
-    when(useCase.dispatch(eq(id))).thenReturn(Mono.empty());
+    when(useCase.dispatch(eq(id), any())).thenReturn(Mono.empty());
 
     listenerFor(useCase, 3).onMessage(message(id.value(), "corr-1"), channel, TAG);
 
-    verify(useCase).dispatch(id);
+    verify(useCase).dispatch(id, AttemptOrigin.AUTOMATIC);
+    verify(channel).basicAck(TAG, false);
+  }
+
+  @Test
+  void aManualOriginHeaderIsPassedToTheUseCase() throws IOException {
+    final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
+    final NotificationId id = NotificationId.newId();
+    when(useCase.dispatch(eq(id), any())).thenReturn(Mono.empty());
+    final Message manual = message(id.value(), "corr-1");
+    manual
+        .getMessageProperties()
+        .setHeader(RabbitTopologyProperties.ATTEMPT_ORIGIN_HEADER, "MANUAL");
+
+    listenerFor(useCase, 3).onMessage(manual, channel, TAG);
+
+    verify(useCase).dispatch(id, AttemptOrigin.MANUAL);
+    verify(channel).basicAck(TAG, false);
+  }
+
+  @Test
+  void anUnknownOriginHeaderGoesToTheDeadLetterQueueWithoutCallingTheUseCase() throws IOException {
+    final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
+    final Message invalid = message(NotificationId.newId().value(), null);
+    invalid
+        .getMessageProperties()
+        .setHeader(RabbitTopologyProperties.ATTEMPT_ORIGIN_HEADER, "ROBOT");
+
+    listenerFor(useCase, 3).onMessage(invalid, channel, TAG);
+
+    verify(useCase, never()).dispatch(any(), any());
+    verify(recoverer).recover(eq(invalid), any(RuntimeException.class));
     verify(channel).basicAck(TAG, false);
   }
 
@@ -148,7 +180,8 @@ class NotificationDispatchListenerTest {
     final AtomicBoolean persisted = new AtomicBoolean(false);
     final AtomicBoolean persistedAtAckTime = new AtomicBoolean(false);
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
-    when(useCase.dispatch(eq(id))).thenReturn(Mono.<Void>fromRunnable(() -> persisted.set(true)));
+    when(useCase.dispatch(eq(id), any()))
+        .thenReturn(Mono.<Void>fromRunnable(() -> persisted.set(true)));
     doAnswer(
             invocation -> {
               persistedAtAckTime.set(persisted.get());
@@ -168,7 +201,8 @@ class NotificationDispatchListenerTest {
       throws IOException {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
     final NotificationId id = NotificationId.newId();
-    when(useCase.dispatch(eq(id))).thenReturn(Mono.error(new NotificationNotFoundException(id)));
+    when(useCase.dispatch(eq(id), any()))
+        .thenReturn(Mono.error(new NotificationNotFoundException(id)));
     final Message original = message(id.value(), "corr-x");
 
     listenerFor(useCase, 3).onMessage(original, channel, TAG);
@@ -195,7 +229,7 @@ class NotificationDispatchListenerTest {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
     final NotificationId id = NotificationId.newId();
     final NotificationNotFoundException failure = new NotificationNotFoundException(id);
-    when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
+    when(useCase.dispatch(eq(id), any())).thenReturn(Mono.error(failure));
     final Message original = message(id.value(), null);
     original.getMessageProperties().setHeader(NotificationDispatchListener.ATTEMPT_HEADER, 2);
 
@@ -212,7 +246,7 @@ class NotificationDispatchListenerTest {
     final NotificationId id = NotificationId.newId();
     final DispatchResultNotPersistedException failure =
         new DispatchResultNotPersistedException(id, new IllegalStateException("mongo down"));
-    when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
+    when(useCase.dispatch(eq(id), any())).thenReturn(Mono.error(failure));
     final Message original = message(id.value(), null);
 
     listenerFor(useCase, 3).onMessage(original, channel, TAG);
@@ -229,7 +263,7 @@ class NotificationDispatchListenerTest {
 
     listenerFor(useCase, 3).onMessage(original, channel, TAG);
 
-    verify(useCase, never()).dispatch(any());
+    verify(useCase, never()).dispatch(any(), any());
     verify(recoverer).recover(eq(original), any(RuntimeException.class));
     verify(channel).basicAck(TAG, false);
   }
@@ -239,7 +273,8 @@ class NotificationDispatchListenerTest {
       throws IOException {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
     final NotificationId id = NotificationId.newId();
-    when(useCase.dispatch(eq(id))).thenReturn(Mono.error(new NotificationNotFoundException(id)));
+    when(useCase.dispatch(eq(id), any()))
+        .thenReturn(Mono.error(new NotificationNotFoundException(id)));
     org.mockito.Mockito.doThrow(new org.springframework.amqp.AmqpException("publisher nack"))
         .when(rabbitTemplate)
         .waitForConfirmsOrDie(anyLong());
@@ -297,7 +332,8 @@ class NotificationDispatchListenerTest {
   void theMdcIsRestoredAfterTheMessageWhetherItSucceedsOrFails() throws IOException {
     final NotificationId id = NotificationId.newId();
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
-    when(useCase.dispatch(eq(id))).thenReturn(Mono.error(new NotificationNotFoundException(id)));
+    when(useCase.dispatch(eq(id), any()))
+        .thenReturn(Mono.error(new NotificationNotFoundException(id)));
 
     listenerFor(useCase, 3).onMessage(message(id.value(), "corr-x"), channel, TAG);
 
@@ -344,7 +380,7 @@ class NotificationDispatchListenerTest {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
     final NotificationId id = NotificationId.newId();
     final NotificationNotFoundException failure = new NotificationNotFoundException(id);
-    when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
+    when(useCase.dispatch(eq(id), any())).thenReturn(Mono.error(failure));
     final ConfigurationHolder holder = holderWith(3);
     final NotificationDispatchListener listener = listenerFor(useCase, holder);
     final Message atThree = message(id.value(), null);
@@ -380,7 +416,7 @@ class NotificationDispatchListenerTest {
     final ConfigurationHolder holder = holderWith(3);
     final NotificationNotFoundException failure = new NotificationNotFoundException(id);
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
-    when(useCase.dispatch(eq(id)))
+    when(useCase.dispatch(eq(id), any()))
         .thenReturn(
             Mono.defer(
                 () -> {
@@ -401,7 +437,7 @@ class NotificationDispatchListenerTest {
     final DispatchNotificationUseCase useCase = mock(DispatchNotificationUseCase.class);
     final NotificationId id = NotificationId.newId();
     final NotificationNotFoundException failure = new NotificationNotFoundException(id);
-    when(useCase.dispatch(eq(id))).thenReturn(Mono.error(failure));
+    when(useCase.dispatch(eq(id), any())).thenReturn(Mono.error(failure));
     final ConfigurationHolder holder = holderWith(5);
     final NotificationDispatchListener listener = listenerFor(useCase, holder);
     final Message first = message(id.value(), null);

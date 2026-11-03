@@ -281,14 +281,14 @@ class ChannelCatalogQueryE2ETest {
 
     final JsonNode email = channel(channels, "EMAIL");
     assertTrue(email.get("contentSchema").asText().contains("attachmentsTotalBytes"));
-    final JsonNode simulated = email.get("providers").get(0);
+    final JsonNode simulated = email.get("providers").get(1);
     assertEquals("simulated", simulated.get("providerId").asText());
-    assertEquals(1, simulated.get("preferenceOrder").asInt());
+    assertEquals(2, simulated.get("preferenceOrder").asInt());
     assertEquals("ENABLED", simulated.get("status").asText());
     assertTrue(simulated.get("statusReason").isNull());
-    final JsonNode brevo = email.get("providers").get(1);
+    final JsonNode brevo = email.get("providers").get(0);
     assertEquals("brevo", brevo.get("providerId").asText());
-    assertEquals(2, brevo.get("preferenceOrder").asInt());
+    assertEquals(1, brevo.get("preferenceOrder").asInt());
     assertEquals("DISABLED", brevo.get("status").asText());
     assertEquals(
         "missing notification.provider.brevo.api-key (BREVO_API_KEY)",
@@ -297,14 +297,14 @@ class ChannelCatalogQueryE2ETest {
     final JsonNode sms = channel(channels, "SMS");
     assertEquals(
         catalogProperties.channels().get("SMS").contentSchema(), sms.get("contentSchema").asText());
-    final JsonNode twilio = sms.get("providers").get(1);
+    final JsonNode twilio = sms.get("providers").get(0);
     assertEquals("twilio", twilio.get("providerId").asText());
     assertEquals("DISABLED", twilio.get("status").asText());
     assertEquals(
         "missing notification.provider.twilio.account-sid (TWILIO_ACCOUNT_SID)",
         twilio.get("statusReason").asText());
 
-    final JsonNode fcm = channel(channels, "PUSH").get("providers").get(1);
+    final JsonNode fcm = channel(channels, "PUSH").get("providers").get(0);
     assertEquals("fcm", fcm.get("providerId").asText());
     assertEquals("DISABLED", fcm.get("status").asText());
     assertTrue(fcm.get("statusReason").asText().contains("FCM_CREDENTIALS_JSON"));
@@ -312,7 +312,8 @@ class ChannelCatalogQueryE2ETest {
 
   @Test
   void anEmailLeavesThroughTheProviderThatTheQueryShowsInFirstPosition() {
-    final JsonNode preferred = channel(channels(), "EMAIL").get("providers").get(0);
+    final JsonNode preferred = channel(channels(), "EMAIL").get("providers").get(1);
+    assertEquals("simulated", preferred.get("providerId").asText());
     assertEquals("ENABLED", preferred.get("status").asText());
 
     final Map<String, Object> delivered = awaitStatus(acceptEmail(), "DELIVERED");
@@ -340,9 +341,9 @@ class ChannelCatalogQueryE2ETest {
         parse("[{\"channelType\":\"WHATSAPP\",\"preferenceOrder\":1}]"), ghost.get("channels"));
     assertEquals(
         parse(
-            "[{\"channelType\":\"EMAIL\",\"preferenceOrder\":1},"
-                + "{\"channelType\":\"PUSH\",\"preferenceOrder\":1},"
-                + "{\"channelType\":\"SMS\",\"preferenceOrder\":1},"
+            "[{\"channelType\":\"EMAIL\",\"preferenceOrder\":2},"
+                + "{\"channelType\":\"PUSH\",\"preferenceOrder\":2},"
+                + "{\"channelType\":\"SMS\",\"preferenceOrder\":2},"
                 + "{\"channelType\":\"WHATSAPP\",\"preferenceOrder\":2}]"),
         provider(providers, "simulated").get("channels"));
   }

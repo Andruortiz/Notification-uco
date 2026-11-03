@@ -102,6 +102,35 @@ class ChannelCatalogSeederTest {
   }
 
   @Test
+  void updatesAStoredChannelWhenItHasExactlyTheLegacyOrder() {
+    channelIsStored(new ChannelCatalogDocument("EMAIL", List.of("simulated", "brevo"), "{}"));
+    when(mongoTemplate.save(any(ChannelCatalogDocument.class)))
+        .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
+    final ChannelCatalogSeeder seeder =
+        new ChannelCatalogSeeder(
+            mongoTemplate,
+            new ChannelCatalogProperties(Map.of("EMAIL", entry("brevo", "simulated"))));
+
+    StepVerifier.create(seeder.seed()).verifyComplete();
+
+    verify(mongoTemplate)
+        .save(new ChannelCatalogDocument("EMAIL", List.of("brevo", "simulated"), "{}"));
+  }
+
+  @Test
+  void leavesACustomizedStoredOrderUntouched() {
+    channelIsStored(new ChannelCatalogDocument("EMAIL", List.of("simulated", "other"), null));
+    final ChannelCatalogSeeder seeder =
+        new ChannelCatalogSeeder(
+            mongoTemplate,
+            new ChannelCatalogProperties(Map.of("EMAIL", entry("brevo", "simulated"))));
+
+    StepVerifier.create(seeder.seed()).verifyComplete();
+
+    verify(mongoTemplate, never()).save(any(ChannelCatalogDocument.class));
+  }
+
+  @Test
   void ignoresADuplicateKeyFromAConcurrentSeed() {
     channelIsMissing("EMAIL");
     when(mongoTemplate.insert(any(ChannelCatalogDocument.class)))

@@ -6,12 +6,20 @@ import co.edu.uco.notification.core.exception.AttachmentNotUploadedException;
 import co.edu.uco.notification.core.exception.AttachmentUploadExpiredException;
 import co.edu.uco.notification.core.exception.AttachmentUploadNotFoundException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
+import co.edu.uco.notification.core.exception.DeviceNotFoundException;
+import co.edu.uco.notification.core.exception.DeviceSubjectForbiddenException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
+import co.edu.uco.notification.core.exception.InvalidRecipientException;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
 import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
+import co.edu.uco.notification.core.exception.NotificationStateNotAllowedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
+import co.edu.uco.notification.core.exception.ProviderMetricsUnavailableException;
+import co.edu.uco.notification.core.exception.ProviderTestInProgressException;
+import co.edu.uco.notification.core.exception.RecipientUndeliverableException;
+import co.edu.uco.notification.core.exception.ResendChannelInvalidException;
 import co.edu.uco.notification.infrastructure.adapter.in.web.CorrelationIdWebFilter;
 import co.edu.uco.notification.infrastructure.config.LogContext;
 import co.edu.uco.notification.infrastructure.config.LogFields;
@@ -49,10 +57,56 @@ public class NotificationExceptionHandler {
         HttpStatus.BAD_REQUEST, ErrorCode.CHANNEL_NOT_AVAILABLE, e.getMessage(), exchange);
   }
 
+  @ExceptionHandler(NotificationStateNotAllowedException.class)
+  public ResponseEntity<ErrorResponse> handleStateNotAllowed(
+      final NotificationStateNotAllowedException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.BAD_REQUEST, ErrorCode.NOTIFICATION_STATE_NOT_ALLOWED, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(ResendChannelInvalidException.class)
+  public ResponseEntity<ErrorResponse> handleResendChannelInvalid(
+      final ResendChannelInvalidException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.BAD_REQUEST, ErrorCode.RESEND_CHANNEL_INVALID, e.getMessage(), exchange);
+  }
+
   @ExceptionHandler(InvalidContentException.class)
   public ResponseEntity<ErrorResponse> handleInvalidContent(
       final InvalidContentException e, final ServerWebExchange exchange) {
     return respond(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_CONTENT, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(InvalidRecipientException.class)
+  public ResponseEntity<ErrorResponse> handleInvalidRecipient(
+      final InvalidRecipientException e, final ServerWebExchange exchange) {
+    return respond(HttpStatus.BAD_REQUEST, ErrorCode.INVALID_RECIPIENT, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(RecipientUndeliverableException.class)
+  public ResponseEntity<ErrorResponse> handleRecipientUndeliverable(
+      final RecipientUndeliverableException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.CONFLICT, ErrorCode.RECIPIENT_UNDELIVERABLE, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(DeviceNotFoundException.class)
+  public ResponseEntity<ErrorResponse> handleDeviceNotFound(
+      final DeviceNotFoundException e, final ServerWebExchange exchange) {
+    return respond(HttpStatus.NOT_FOUND, ErrorCode.DEVICE_NOT_FOUND, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(DeviceSubjectForbiddenException.class)
+  public ResponseEntity<ErrorResponse> handleDeviceSubjectForbidden(
+      final DeviceSubjectForbiddenException e, final ServerWebExchange exchange) {
+    return respond(HttpStatus.FORBIDDEN, ErrorCode.INSUFFICIENT_ROLE, e.getMessage(), exchange);
+  }
+
+  @ExceptionHandler(WebhookSecretInvalidException.class)
+  public ResponseEntity<ErrorResponse> handleWebhookSecretInvalid(
+      final WebhookSecretInvalidException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.UNAUTHORIZED, ErrorCode.WEBHOOK_SECRET_INVALID, e.getMessage(), exchange);
   }
 
   @ExceptionHandler(InvalidAttachmentException.class)
@@ -88,6 +142,16 @@ public class NotificationExceptionHandler {
         exchange);
   }
 
+  @ExceptionHandler(ProviderMetricsUnavailableException.class)
+  public ResponseEntity<ErrorResponse> handleMetricsUnavailable(
+      final ProviderMetricsUnavailableException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.SERVICE_UNAVAILABLE,
+        ErrorCode.INFRASTRUCTURE_ERROR,
+        "the provider metrics source is unavailable",
+        exchange);
+  }
+
   @ExceptionHandler(DataBufferLimitException.class)
   public ResponseEntity<ErrorResponse> handleBodyTooLarge(
       final DataBufferLimitException e, final ServerWebExchange exchange) {
@@ -95,6 +159,16 @@ public class NotificationExceptionHandler {
         HttpStatus.PAYLOAD_TOO_LARGE,
         ErrorCode.REQUEST_BODY_TOO_LARGE,
         "the request body exceeds the maximum allowed size",
+        exchange);
+  }
+
+  @ExceptionHandler(ProviderTestInProgressException.class)
+  public ResponseEntity<ErrorResponse> handleProviderTestInProgress(
+      final ProviderTestInProgressException e, final ServerWebExchange exchange) {
+    return respond(
+        HttpStatus.TOO_MANY_REQUESTS,
+        ErrorCode.PROVIDER_TEST_IN_PROGRESS,
+        e.getMessage(),
         exchange);
   }
 

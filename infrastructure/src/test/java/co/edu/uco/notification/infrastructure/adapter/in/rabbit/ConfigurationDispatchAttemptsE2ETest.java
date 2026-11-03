@@ -70,7 +70,7 @@ class ConfigurationDispatchAttemptsE2ETest {
   void failEveryDispatchAndCountIt() {
     fakeSource.publishNextAndAwaitAdoption(view, maxAttempts(3), ADOPTION_LIMIT);
     assertEquals(3, view.snapshot().dispatchMaxAttempts());
-    when(dispatchNotificationUseCase.dispatch(any()))
+    when(dispatchNotificationUseCase.dispatch(any(), any()))
         .thenAnswer(
             invocation -> {
               final NotificationId id = invocation.getArgument(0);

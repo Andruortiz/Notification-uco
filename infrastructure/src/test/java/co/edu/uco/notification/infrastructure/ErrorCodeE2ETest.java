@@ -16,6 +16,7 @@ import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
@@ -84,8 +85,8 @@ class ErrorCodeE2ETest {
     NotificationSenderPort controllableSender() {
       return new NotificationSenderPort() {
         @Override
-        public Mono<AttemptResult> send(final Notification notification) {
-          return Mono.just(RESULT.get());
+        public Mono<ProviderResult> send(final Notification notification) {
+          return Mono.just(ProviderResult.of(RESULT.get()));
         }
 
         @Override

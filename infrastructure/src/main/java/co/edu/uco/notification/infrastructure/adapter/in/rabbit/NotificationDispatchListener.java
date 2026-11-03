@@ -1,5 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rabbit;
 
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.exception.DispatchResultNotPersistedException;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
@@ -114,6 +115,17 @@ public class NotificationDispatchListener {
       settler.deadLetter(message, channel, deliveryTag, cause);
       return;
     }
+    final AttemptOrigin origin;
+    try {
+      origin = originOf(message);
+    } catch (final RuntimeException cause) {
+      LOGGER.warn(
+          LogFields.failure(ErrorCode.DISPATCH_MESSAGE_INVALID),
+          "Dispatch message has an unknown attempt origin, sending it to the dead-letter queue",
+          cause);
+      settler.deadLetter(message, channel, deliveryTag, cause);
+      return;
+    }
     final Observation dispatch = startDispatchObservation(correlationId);
     final Context context =
         ReactorObservations.with(
@@ -125,7 +137,7 @@ public class NotificationDispatchListener {
             dispatch);
     RuntimeException failure = null;
     try (Observation.Scope ignored = dispatch.openScope()) {
-      dispatchNotificationUseCase.dispatch(notificationId).contextWrite(context).block();
+      dispatchNotificationUseCase.dispatch(notificationId, origin).contextWrite(context).block();
     } catch (final RuntimeException cause) {
       dispatch.error(cause);
       failure = cause;
@@ -143,6 +155,12 @@ public class NotificationDispatchListener {
     } else {
       settler.handleFailure(message, channel, deliveryTag, failure);
     }
+  }
+
+  private static AttemptOrigin originOf(final Message message) {
+    final Object header =
+        message.getMessageProperties().getHeader(RabbitTopologyProperties.ATTEMPT_ORIGIN_HEADER);
+    return header == null ? AttemptOrigin.AUTOMATIC : AttemptOrigin.valueOf(header.toString());
   }
 
   private Observation startDispatchObservation(final CorrelationId correlationId) {

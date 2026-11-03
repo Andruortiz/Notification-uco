@@ -111,6 +111,7 @@ class ConfigurationStartupTest {
     final List<String> values =
         new ArrayList<>(
             List.of(
+                "notification.provider.simulated.enabled=true",
                 "notification.catalog.channels.EMAIL.providers=simulated,brevo",
                 "notification.catalog.channels.SMS.providers=simulated,twilio",
                 "notification.catalog.channels.SMS.content-schema=" + SMS_SCHEMA_160,

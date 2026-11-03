@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.utils.CorrelationId;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationHandler;
@@ -60,7 +61,7 @@ class ObservedNotificationSenderTest {
     return notification;
   }
 
-  private static NotificationSenderPort delegate(final Mono<AttemptResult> result) {
+  private static NotificationSenderPort delegate(final Mono<ProviderResult> result) {
     final NotificationSenderPort delegate = mock(NotificationSenderPort.class);
     when(delegate.providerId()).thenReturn(ProviderId.of("brevo"));
     when(delegate.disabledReason()).thenReturn(Optional.of("off"));
@@ -80,13 +81,14 @@ class ObservedNotificationSenderTest {
   @Test
   void theCallIsATaggedSpanWithProviderChannelAndResult() {
     final ObservedNotificationSender sender =
-        new ObservedNotificationSender(delegate(Mono.just(AttemptResult.ACCEPTED)), registry);
+        new ObservedNotificationSender(
+            delegate(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED))), registry);
 
     StepVerifier.create(
             sender
                 .send(notification())
                 .contextWrite(Context.of(CorrelationId.CONTEXT_KEY, "corr-1")))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, stopped.size());
@@ -116,13 +118,14 @@ class ObservedNotificationSenderTest {
     final Observation parent = Observation.start("test.parent", registry);
     final AtomicReference<Observation.Context> child = new AtomicReference<>();
     final ObservedNotificationSender sender =
-        new ObservedNotificationSender(delegate(Mono.just(AttemptResult.ACCEPTED)), registry);
+        new ObservedNotificationSender(
+            delegate(Mono.just(ProviderResult.of(AttemptResult.ACCEPTED))), registry);
 
     StepVerifier.create(
             sender
                 .send(notification())
                 .contextWrite(Context.of(ObservationThreadLocalAccessor.KEY, parent)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     child.set(

@@ -192,7 +192,7 @@ class TwilioNotificationProviderTest {
     fakeServer.nextResponse(201, "{\"sid\":\"SM0001\",\"status\":\"queued\"}");
 
     StepVerifier.create(enabledProvider().send(smsTo(RECIPIENT, "Asunto ignorado")))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());
@@ -269,7 +269,9 @@ class TwilioNotificationProviderTest {
   void recipientWithoutInternationalFormatFailsPermanentlyWithoutCallingTheProvider(
       final String recipient) {
     StepVerifier.create(enabledProvider().send(smsTo(recipient, null)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -296,7 +298,7 @@ class TwilioNotificationProviderTest {
     fakeServer.nextResponse(status, body);
 
     StepVerifier.create(enabledProvider().send(smsTo(RECIPIENT, null)))
-        .expectNext(expected)
+        .assertNext(providerResult -> assertEquals(expected, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());
@@ -308,7 +310,7 @@ class TwilioNotificationProviderTest {
     fakeServer.nextResponse(201, body);
 
     StepVerifier.create(enabledProvider().send(smsTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
   }
 
@@ -317,7 +319,9 @@ class TwilioNotificationProviderTest {
     fakeServer.nextResponse(400, "not json");
 
     StepVerifier.create(enabledProvider().send(smsTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
   }
 
@@ -333,7 +337,9 @@ class TwilioNotificationProviderTest {
                 ACCOUNT_SID, AUTH_TOKEN, FROM_NUMBER, closedUrl, 10_000L, 5_000L));
 
     StepVerifier.create(provider.send(smsTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.RECOVERABLE_FAILURE, providerResult.result()))
         .verifyComplete();
 
     final String logs = logs();
@@ -358,7 +364,9 @@ class TwilioNotificationProviderTest {
 
     final Instant start = Instant.now();
     StepVerifier.create(provider.send(smsTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.RECOVERABLE_FAILURE, providerResult.result()))
         .verifyComplete();
     final Duration elapsed = Duration.between(start, Instant.now());
 
@@ -371,7 +379,7 @@ class TwilioNotificationProviderTest {
     fakeServer.nextResponse(201, "{\"sid\":\"SM0123456789\",\"status\":\"queued\"}");
 
     StepVerifier.create(enabledProvider().send(smsTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final String logs = logs();
@@ -388,7 +396,9 @@ class TwilioNotificationProviderTest {
         400, "{\"code\":21211,\"message\":\"" + providerMessage + "\",\"status\":400}");
 
     StepVerifier.create(enabledProvider().send(smsTo(RECIPIENT, null)))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     final String logs = logs();

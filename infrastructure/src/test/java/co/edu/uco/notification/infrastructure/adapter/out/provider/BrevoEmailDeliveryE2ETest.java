@@ -132,9 +132,7 @@ class BrevoEmailDeliveryE2ETest {
   }
 
   private void makeBrevoPreferred() {
-    mongoTemplate
-        .save(new ChannelCatalogDocument("EMAIL", List.of("brevo", "simulated"), null))
-        .block();
+    mongoTemplate.save(new ChannelCatalogDocument("EMAIL", List.of("brevo"), null)).block();
     awaitRoute("brevo");
   }
 

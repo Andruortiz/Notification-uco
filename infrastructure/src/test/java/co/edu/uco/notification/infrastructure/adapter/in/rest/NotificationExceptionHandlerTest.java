@@ -25,8 +25,10 @@ import co.edu.uco.notification.core.exception.InvalidContentException;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
 import co.edu.uco.notification.core.exception.NotificationAlreadyAcceptedException;
 import co.edu.uco.notification.core.exception.NotificationNotFoundException;
+import co.edu.uco.notification.core.exception.NotificationStateNotAllowedException;
 import co.edu.uco.notification.core.exception.NotificationVersionConflictException;
 import co.edu.uco.notification.core.exception.ProviderNotAvailableException;
+import co.edu.uco.notification.core.exception.ResendChannelInvalidException;
 import co.edu.uco.notification.infrastructure.config.LogLines;
 import co.edu.uco.notification.infrastructure.support.ConcurrentListAppender;
 import co.edu.uco.notification.utils.ErrorCode;
@@ -249,6 +251,15 @@ class NotificationExceptionHandlerTest {
             new InvalidStatusTransitionException(
                 NotificationStatus.DELIVERED, NotificationStatus.PENDING),
             exchange));
+    assertCode(
+        ErrorCode.NOTIFICATION_STATE_NOT_ALLOWED,
+        HttpStatus.BAD_REQUEST,
+        handler.handleStateNotAllowed(
+            new NotificationStateNotAllowedException(NotificationStatus.DELIVERED), exchange));
+    assertCode(
+        ErrorCode.RESEND_CHANNEL_INVALID,
+        HttpStatus.BAD_REQUEST,
+        handler.handleResendChannelInvalid(new ResendChannelInvalidException("same"), exchange));
   }
 
   @Test

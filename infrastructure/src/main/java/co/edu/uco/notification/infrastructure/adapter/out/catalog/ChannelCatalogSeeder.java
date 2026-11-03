@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.out.catalog;
 
 import co.edu.uco.notification.infrastructure.config.ChannelCatalogProperties;
 import co.edu.uco.notification.utils.Preconditions;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.slf4j.Logger;
@@ -20,6 +21,7 @@ import reactor.core.publisher.Mono;
 public class ChannelCatalogSeeder implements ApplicationRunner {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ChannelCatalogSeeder.class);
+  private static final String SIMULATED = "simulated";
 
   private final ReactiveMongoTemplate mongoTemplate;
   private final ChannelCatalogProperties properties;
@@ -47,9 +49,35 @@ public class ChannelCatalogSeeder implements ApplicationRunner {
         new ChannelCatalogDocument(channelType, entry.providers(), entry.contentSchema());
     return mongoTemplate
         .findById(channelType, ChannelCatalogDocument.class)
-        .doOnNext(stored -> logStoredChannel(configured, stored))
+        .flatMap(stored -> reconcile(configured, stored))
         .switchIfEmpty(Mono.defer(() -> insert(configured)))
         .then();
+  }
+
+  private Mono<ChannelCatalogDocument> reconcile(
+      final ChannelCatalogDocument configured, final ChannelCatalogDocument stored) {
+    if (!isLegacyOrder(configured.providers(), stored.providers())) {
+      logStoredChannel(configured, stored);
+      return Mono.just(stored);
+    }
+    return mongoTemplate
+        .save(
+            new ChannelCatalogDocument(
+                stored.channelType(), configured.providers(), stored.contentSchema()))
+        .doOnNext(
+            updated ->
+                LOGGER.info(
+                    "Catalog channel provider order updated channelType={}",
+                    updated.channelType()));
+  }
+
+  private static boolean isLegacyOrder(final List<String> configured, final List<String> stored) {
+    return configured != null
+        && stored != null
+        && configured.size() == 2
+        && SIMULATED.equals(configured.get(1))
+        && !SIMULATED.equals(configured.get(0))
+        && stored.equals(List.of(SIMULATED, configured.get(0)));
   }
 
   private Mono<ChannelCatalogDocument> insert(final ChannelCatalogDocument configured) {

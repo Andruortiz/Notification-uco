@@ -166,7 +166,9 @@ class TwilioSmsDeliveryE2ETest {
     while (Instant.now().isBefore(deadline)) {
       final ChannelRoute route =
           channelCatalogPort.findActiveRoute(ChannelType.of("SMS"), TenantId.of(TENANT)).block();
-      if (route != null && route.preferredProvider().equals(expected)) {
+      if (route != null
+          && route.preferredProvider().equals(expected)
+          && route.providers().size() == providers.length) {
         return;
       }
     }
@@ -254,7 +256,7 @@ class TwilioSmsDeliveryE2ETest {
 
   @Test
   void deliversThroughTwilioWithoutTheSubjectAndRecordsItsProviderId() {
-    preferProviders("twilio", "simulated");
+    preferProviders("twilio");
 
     final String notificationId =
         accept(smsRequest("sms-ok-1", RECIPIENT, "AsuntoQueNoViaja", "Tu codigo es 1234"));
@@ -284,7 +286,7 @@ class TwilioSmsDeliveryE2ETest {
 
   @Test
   void aPermanentProviderRejectionEndsInFailedStatus() {
-    preferProviders("twilio", "simulated");
+    preferProviders("twilio");
     fakeTwilio.nextResponse(400, "{\"code\":21610,\"status\":400}");
 
     final String notificationId = accept(smsRequest("sms-400-1", RECIPIENT, null, "Hola"));
@@ -295,7 +297,7 @@ class TwilioSmsDeliveryE2ETest {
 
   @Test
   void aTemporaryProviderFailureEndsInRecoverableStatus() {
-    preferProviders("twilio", "simulated");
+    preferProviders("twilio");
     fakeTwilio.nextResponse(500, "{\"code\":20500,\"status\":500}");
 
     final String notificationId = accept(smsRequest("sms-500-1", RECIPIENT, null, "Hola"));
@@ -305,7 +307,7 @@ class TwilioSmsDeliveryE2ETest {
 
   @Test
   void aBodyOfExactly160CharactersIsAcceptedAndDelivered() {
-    preferProviders("twilio", "simulated");
+    preferProviders("twilio");
 
     final String notificationId = accept(smsRequest("sms-160-1", RECIPIENT, null, "a".repeat(160)));
 
@@ -315,7 +317,7 @@ class TwilioSmsDeliveryE2ETest {
 
   @Test
   void aBodyLongerThan160CharactersIsRejectedAtAcceptanceWithoutPersistingOrCallingTwilio() {
-    preferProviders("twilio", "simulated");
+    preferProviders("twilio");
 
     final Map<String, Object> error =
         webTestClient
@@ -341,19 +343,29 @@ class TwilioSmsDeliveryE2ETest {
   }
 
   @Test
-  void aRecipientWithoutInternationalFormatEndsInFailedWithoutCallingTwilio() {
-    preferProviders("twilio", "simulated");
+  void aRecipientWithoutInternationalFormatIsRejectedBeforePersistingAndWithoutCallingTwilio() {
+    preferProviders("twilio");
 
-    final String notificationId =
-        accept(smsRequest("sms-bad-recipient-1", "alice@example.com", null, "Hola"));
+    webTestClient
+        .post()
+        .uri("/notifications")
+        .header("Authorization", TestTokens.bearer(TENANT))
+        .contentType(MediaType.APPLICATION_JSON)
+        .bodyValue(smsRequest("sms-bad-recipient-1", "alice@example.com", null, "Hola"))
+        .exchange()
+        .expectStatus()
+        .isBadRequest();
 
-    assertEquals("FAILED", awaitStatus(notificationId, "FAILED").get("status"));
+    assertNull(
+        notificationRepository
+            .findByTenantAndExternalId(TenantId.of(TENANT), ExternalId.of("sms-bad-recipient-1"))
+            .block());
     assertTrue(fakeTwilio.requests().isEmpty());
   }
 
   @Test
   void noSecretBodyOrFullNumberLeaksIntoLogsOrPublishedEvents() {
-    preferProviders("twilio", "simulated");
+    preferProviders("twilio");
     final String secretBody = "CuerpoSecretoSms";
 
     final String deliveredId = accept(smsRequest("sms-noleak-1", RECIPIENT, null, secretBody));

@@ -91,9 +91,7 @@ class BrevoDisabledProviderE2ETest {
     logAppender.start();
     ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).addAppender(logAppender);
 
-    mongoTemplate
-        .save(new ChannelCatalogDocument("EMAIL", List.of("brevo", "simulated"), null))
-        .block();
+    mongoTemplate.save(new ChannelCatalogDocument("EMAIL", List.of("brevo"), null)).block();
     awaitRoute();
   }
 

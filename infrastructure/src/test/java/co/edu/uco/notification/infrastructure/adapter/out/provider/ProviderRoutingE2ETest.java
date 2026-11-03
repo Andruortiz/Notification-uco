@@ -13,6 +13,7 @@ import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.ChannelRoute;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.infrastructure.adapter.out.catalog.ChannelCatalogDocument;
 import co.edu.uco.notification.infrastructure.config.RabbitTopologyProperties;
@@ -74,9 +75,9 @@ class ProviderRoutingE2ETest {
     }
 
     @Override
-    public Mono<AttemptResult> send(final Notification notification) {
+    public Mono<ProviderResult> send(final Notification notification) {
       received.add(notification.notificationId());
-      return Mono.just(AttemptResult.ACCEPTED);
+      return Mono.just(ProviderResult.of(AttemptResult.ACCEPTED));
     }
 
     @Override
@@ -156,13 +157,20 @@ class ProviderRoutingE2ETest {
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(
                 Map.of(
-                    "externalId", externalId,
-                    "channelType", channelType,
-                    "recipientId", "recipient-1",
-                    "recipientAddress", "alice@example.com",
-                    "subject", "Subject",
-                    "body", "Body",
-                    "priority", "NORMAL"))
+                    "externalId",
+                    externalId,
+                    "channelType",
+                    channelType,
+                    "recipientId",
+                    "recipient-1",
+                    "recipientAddress",
+                    "SMS".equals(channelType) ? "+573001234567" : "alice@example.com",
+                    "subject",
+                    "Subject",
+                    "body",
+                    "Body",
+                    "priority",
+                    "NORMAL"))
             .exchange()
             .expectStatus()
             .isAccepted()
@@ -193,10 +201,11 @@ class ProviderRoutingE2ETest {
       final ChannelRoute route =
           channelCatalogPort
               .findActiveRoute(ChannelType.of(channelType), TenantId.of("tenant-1"))
-              .block();
+              .block(Duration.ofSeconds(5));
       if (route != null && route.preferredProvider().equals(ProviderId.of(expectedProvider))) {
         return;
       }
+      Mono.delay(Duration.ofMillis(100)).block();
     }
     throw new IllegalStateException(
         "El catalogo nunca expuso " + expectedProvider + " para " + channelType);

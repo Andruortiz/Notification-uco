@@ -93,7 +93,8 @@ class SendNotificationServiceTest {
     when(notificationRepository.save(any(Notification.class)))
         .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class), any()))
+        .thenReturn(Mono.empty());
 
     final SendNotificationResult result = service.send(command()).block();
 
@@ -103,7 +104,7 @@ class SendNotificationServiceTest {
 
     verify(notificationRepository).save(any(Notification.class));
     verify(eventPublisherPort).publish(any());
-    verify(eventPublisherPort).enqueueForDispatch(any(Notification.class));
+    verify(eventPublisherPort).enqueueForDispatch(any(Notification.class), any());
   }
 
   @Test
@@ -132,7 +133,7 @@ class SendNotificationServiceTest {
 
     verify(notificationRepository, never()).save(any(Notification.class));
     verify(eventPublisherPort, never()).publish(any());
-    verify(eventPublisherPort, never()).enqueueForDispatch(any(Notification.class));
+    verify(eventPublisherPort, never()).enqueueForDispatch(any(Notification.class), any());
   }
 
   @Test
@@ -162,7 +163,7 @@ class SendNotificationServiceTest {
     assertTrue(result.duplicate());
 
     verify(eventPublisherPort, never()).publish(any());
-    verify(eventPublisherPort, never()).enqueueForDispatch(any(Notification.class));
+    verify(eventPublisherPort, never()).enqueueForDispatch(any(Notification.class), any());
   }
 
   @Test
@@ -189,7 +190,8 @@ class SendNotificationServiceTest {
     when(notificationRepository.save(any(Notification.class)))
         .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class), any()))
+        .thenReturn(Mono.empty());
 
     final SendNotificationResult result = service.send(command()).block();
 
@@ -320,7 +322,8 @@ class SendNotificationServiceTest {
     when(notificationRepository.save(any(Notification.class)))
         .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class), any()))
+        .thenReturn(Mono.empty());
   }
 
   private void verifyNothingWasStored() {
@@ -328,7 +331,7 @@ class SendNotificationServiceTest {
         .findByTenantAndExternalId(any(TenantId.class), any(ExternalId.class));
     verify(notificationRepository, never()).save(any(Notification.class));
     verify(eventPublisherPort, never()).publish(any());
-    verify(eventPublisherPort, never()).enqueueForDispatch(any(Notification.class));
+    verify(eventPublisherPort, never()).enqueueForDispatch(any(Notification.class), any());
   }
 
   @Test
@@ -363,7 +366,7 @@ class SendNotificationServiceTest {
     assertEquals(List.of(INVOICE, RECEIPT), saved.getValue().content().attachments());
     assertEquals("Subject", saved.getValue().content().subject());
     assertEquals("Body", saved.getValue().content().body());
-    verify(eventPublisherPort).enqueueForDispatch(any(Notification.class));
+    verify(eventPublisherPort).enqueueForDispatch(any(Notification.class), any());
   }
 
   @Test
@@ -516,7 +519,8 @@ class SendNotificationServiceTest {
     when(notificationRepository.save(any(Notification.class)))
         .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class), any()))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.send(withCorrelation)).expectNextCount(1).verifyComplete();
 
@@ -539,7 +543,8 @@ class SendNotificationServiceTest {
     when(notificationRepository.save(any(Notification.class)))
         .thenAnswer(invocation -> Mono.just(invocation.getArgument(0)));
     when(eventPublisherPort.publish(any())).thenReturn(Mono.empty());
-    when(eventPublisherPort.enqueueForDispatch(any(Notification.class))).thenReturn(Mono.empty());
+    when(eventPublisherPort.enqueueForDispatch(any(Notification.class), any()))
+        .thenReturn(Mono.empty());
 
     StepVerifier.create(service.send(command())).expectNextCount(1).verifyComplete();
 

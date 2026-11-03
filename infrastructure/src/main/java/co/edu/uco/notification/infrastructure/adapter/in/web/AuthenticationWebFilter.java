@@ -210,6 +210,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       case MISSING_EXPIRATION -> RejectionReason.MISSING_EXPIRATION;
       case MISSING_CLAIMS -> RejectionReason.MISSING_CLAIMS;
       case UNKNOWN_ROLE -> RejectionReason.UNKNOWN_ROLE;
+      case INVALID_ISSUER_OR_AUDIENCE -> RejectionReason.INVALID_ISSUER_OR_AUDIENCE;
       case INVALID_SESSION -> RejectionReason.INVALID_SESSION;
       case MALFORMED -> RejectionReason.MALFORMED_TOKEN;
     };
@@ -267,12 +268,26 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
           ErrorCode.AUTHENTICATION_UNAVAILABLE,
           "session platform unavailable");
     }
+    if (isMissingClaims(reason)) {
+      logRejection(exchange, tenantId, reason, ErrorCode.AUTHENTICATION_CLAIMS_MISSING);
+      return writeJson(
+          exchange,
+          HttpStatus.UNAUTHORIZED,
+          ErrorCode.AUTHENTICATION_CLAIMS_MISSING,
+          "token is missing required claims");
+    }
     logRejection(exchange, tenantId, reason, ErrorCode.AUTHENTICATION_REQUIRED);
     return writeJson(
         exchange,
         HttpStatus.UNAUTHORIZED,
         ErrorCode.AUTHENTICATION_REQUIRED,
         "missing or invalid bearer token");
+  }
+
+  private static boolean isMissingClaims(final RejectionReason reason) {
+    return reason == RejectionReason.MISSING_CLAIMS
+        || reason == RejectionReason.UNKNOWN_ROLE
+        || reason == RejectionReason.MISSING_EXPIRATION;
   }
 
   private Mono<Void> rejectForbidden(final ServerWebExchange exchange, final String tenantId) {

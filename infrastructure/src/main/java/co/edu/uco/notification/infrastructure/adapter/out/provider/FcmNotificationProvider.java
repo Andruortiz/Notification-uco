@@ -2,10 +2,14 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ProbeErrorCode;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProbeOutcome;
+import co.edu.uco.notification.core.port.out.ProviderProbePort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.config.FcmCredentials;
 import co.edu.uco.notification.infrastructure.config.FcmProviderProperties;
 import co.edu.uco.notification.infrastructure.config.FcmServiceAccount;
@@ -22,7 +26,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 @Component
-public class FcmNotificationProvider implements NotificationSenderPort {
+public class FcmNotificationProvider implements NotificationSenderPort, ProviderProbePort {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(FcmNotificationProvider.class);
   private static final ProviderId PROVIDER_ID = ProviderId.of("fcm");
@@ -73,7 +77,29 @@ public class FcmNotificationProvider implements NotificationSenderPort {
   }
 
   @Override
-  public Mono<AttemptResult> send(final Notification notification) {
+  public Mono<ProbeOutcome> probe() {
+    if (disabledReason.isPresent()) {
+      return Mono.just(ProbeOutcome.failed(ProbeErrorCode.CREDENTIALS_MISSING));
+    }
+    return tokenProvider
+        .probe()
+        .thenReturn(ProbeOutcome.ok())
+        .onErrorResume(FcmNotificationProvider::probeFailure);
+  }
+
+  private static Mono<ProbeOutcome> probeFailure(final Throwable error) {
+    if (error instanceof FcmAccessTokenProvider.AuthorizationRejectedException rejected) {
+      return Mono.just(ProviderProbes.ofTokenStatus(rejected.status()));
+    }
+    return Mono.just(ProviderProbes.ofError(error));
+  }
+
+  @Override
+  public Mono<ProviderResult> send(final Notification notification) {
+    return sendResult(notification).map(ProviderResult::of);
+  }
+
+  private Mono<AttemptResult> sendResult(final Notification notification) {
     Preconditions.requireNonNull(notification, "notification must not be null");
     if (disabledReason.isPresent()) {
       return Mono.error(new ProviderDisabledException(PROVIDER_ID, disabledReason.get()));
@@ -133,7 +159,8 @@ public class FcmNotificationProvider implements NotificationSenderPort {
 
   private static AttemptResult classifyAndLog(
       final Notification notification, final Outcome outcome) {
-    final AttemptResult result = FcmResponseClassifier.classifyStatus(outcome.status());
+    final AttemptResult result =
+        FcmResponseClassifier.classify(outcome.status(), outcome.errorCode());
     if (result == AttemptResult.ACCEPTED) {
       ProviderLogs.dispatched(
           LOGGER, notification, PROVIDER_ID, result, outcome.status(), outcome.messageId());

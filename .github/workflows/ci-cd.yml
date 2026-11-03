@@ -54,6 +54,7 @@ jobs:
     name: "Test"
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     services:
       rabbitmq:
         image: rabbitmq:3-management
@@ -91,11 +92,54 @@ jobs:
       - name: Configurar el acceso a GitHub Packages
         run: mkdir -p ~/.m2 && cp .mvn/settings-github-packages.xml ~/.m2/settings.xml
 
-      - name: Pruebas (unitarias, integracion, E2E con Testcontainers)
+      - name: Pruebas 1/3 (raiz de infrastructure)
+        timeout-minutes: 20
         env:
           GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
           GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
-        run: ./mvnw -B -ntp test
+        run: >
+          .github/scripts/mvn-vigilado.sh ./mvnw -B -ntp test
+          -Dsurefire.failIfNoSpecifiedTests=false
+          -Dtest='co/edu/uco/notification/infrastructure/*'
+
+      - name: Pruebas 2/3 (adaptadores REST y RabbitMQ)
+        timeout-minutes: 20
+        env:
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: >
+          .github/scripts/mvn-vigilado.sh ./mvnw -B -ntp test
+          -Dsurefire.failIfNoSpecifiedTests=false
+          -Dtest='co/edu/uco/notification/infrastructure/adapter/in/rest/**,co/edu/uco/notification/infrastructure/adapter/in/rabbit/**,co/edu/uco/notification/infrastructure/adapter/out/rabbit/**'
+
+      - name: Pruebas 3/3 (todo lo demas, incluidos utils y core)
+        timeout-minutes: 20
+        env:
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: >
+          .github/scripts/mvn-vigilado.sh ./mvnw -B -ntp test
+          -Dsurefire.failIfNoSpecifiedTests=false
+          -Dtest='!co/edu/uco/notification/infrastructure/*,!co/edu/uco/notification/infrastructure/adapter/in/rest/**,!co/edu/uco/notification/infrastructure/adapter/in/rabbit/**,!co/edu/uco/notification/infrastructure/adapter/out/rabbit/**'
+
+      - name: Comprobar que las tres ejecuciones cubrieron toda la suite
+        run: |
+          esperadas=$(find . -path '*/src/test/java/*' \( -name '*Test.java' -o -name '*Tests.java' \) | wc -l)
+          ejecutadas=$(find . -path '*/target/surefire-reports/TEST-*.xml' | wc -l)
+          echo "clases de prueba: $esperadas, informes de ejecucion: $ejecutadas"
+          if [ "$ejecutadas" -lt "$esperadas" ]; then
+            echo "::error::Se ejecutaron $ejecutadas de $esperadas clases de prueba: un patron de -Dtest no esta alcanzando algunas"
+            exit 1
+          fi
+
+      - name: Subir diagnostico del vigilante
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: diagnostico-vigilante
+          path: vigilado-diag/**
+          retention-days: 7
+          if-no-files-found: ignore
 
       - name: Subir clases compiladas y datos de cobertura
         if: always()

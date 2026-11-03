@@ -39,7 +39,7 @@ class SecurityDocumentationContractTest {
 
   @Test
   void everyOperationDocuments401403And503WithTheDecisionHeader() {
-    assertEquals(16, ApiContract.operations().size());
+    assertEquals(33, ApiContract.operations().size());
     for (final ApiContract.Operation operation : ApiContract.operations()) {
       final Map<String, Object> responses =
           ApiContract.map(operation.definition().get("responses"));

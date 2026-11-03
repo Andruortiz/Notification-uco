@@ -115,7 +115,7 @@ class BrevoCorrelationForwardingTest {
     final CorrelationId correlationId = CorrelationId.of("corr-brevo-001");
 
     StepVerifier.create(provider().send(emailWith(correlationId)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final JsonNode tags = lastBody().get("tags");
@@ -126,7 +126,7 @@ class BrevoCorrelationForwardingTest {
   @Test
   void theCorrelationIdNeverTravelsInTheEmailHeadersOrContent() throws Exception {
     StepVerifier.create(provider().send(emailWith(CorrelationId.of("corr-brevo-002"))))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final JsonNode body = lastBody();
@@ -140,7 +140,7 @@ class BrevoCorrelationForwardingTest {
     final Notification notification = emailWith(CorrelationId.of("corr-brevo-003"));
 
     StepVerifier.create(provider().send(notification))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(
@@ -151,7 +151,7 @@ class BrevoCorrelationForwardingTest {
   @Test
   void aNotificationWithoutCorrelationIdSendsNoTagsField() throws Exception {
     StepVerifier.create(provider().send(emailWith(null)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertNull(lastBody().get("tags"));
@@ -163,10 +163,10 @@ class BrevoCorrelationForwardingTest {
     final BrevoNotificationProvider provider = provider();
 
     StepVerifier.create(provider.send(notification))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
     StepVerifier.create(provider.send(notification))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(2, fakeServer.requests().size());
@@ -180,7 +180,7 @@ class BrevoCorrelationForwardingTest {
     fakeServer.nextResponse(201, "{\"messageId\":\"<202610070001.abc@smtp-relay.mailin.fr>\"}");
 
     StepVerifier.create(provider().send(emailWith(CorrelationId.of("corr-brevo-005"))))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     final String line =
@@ -199,7 +199,7 @@ class BrevoCorrelationForwardingTest {
     fakeServer.nextResponse(201, "not json");
 
     StepVerifier.create(provider().send(emailWith(CorrelationId.of("corr-brevo-006"))))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
   }
 }

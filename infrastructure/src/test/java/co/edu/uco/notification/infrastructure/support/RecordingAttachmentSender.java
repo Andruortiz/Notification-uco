@@ -5,6 +5,7 @@ import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -25,12 +26,13 @@ public final class RecordingAttachmentSender implements NotificationSenderPort {
   }
 
   @Override
-  public Mono<AttemptResult> send(final Notification notification) {
+  public Mono<ProviderResult> send(final Notification notification) {
     received.add(notification);
     return Mono.just(
-        failOnce.remove(notification.externalId().value())
-            ? AttemptResult.RECOVERABLE_FAILURE
-            : AttemptResult.ACCEPTED);
+        ProviderResult.of(
+            failOnce.remove(notification.externalId().value())
+                ? AttemptResult.RECOVERABLE_FAILURE
+                : AttemptResult.ACCEPTED));
   }
 
   @Override

@@ -337,7 +337,7 @@ class ConfigurationSyncE2ETest {
     final String joined = String.join("\n", lines);
     assertTrue(joined.contains("ProviderTimeoutBelowRequeueIntervalRule"), joined);
     assertTrue(joined.contains("param-"), joined);
-    assertFalse(joined.contains(TestTokens.SECRET), joined);
+    assertFalse(joined.contains(TestTokens.PRIVATE_KEY), joined);
     assertFalse(joined.contains("Bearer"), joined);
   }
 

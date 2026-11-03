@@ -7,7 +7,7 @@ flowchart LR
 
     subgraph SYS["Notification-uco -- MVP técnico"]
         direction TB
-        RESTAPI["API REST<br/>Contenedor Spring Boot + WebFlux<br/>POST /notifications, GET /notifications/detail?notificationId={id}"]
+        RESTAPI["API REST<br/>Contenedor Spring Boot + WebFlux<br/>POST /notifications, GET /notifications/detail"]
         DISPATCH["Listener de despacho<br/>Contenedor Spring Boot + WebFlux<br/>Consume la cola de despacho, invoca DispatchNotificationUseCase"]
         PROVIDERADAPT["Adaptador de proveedor<br/>SimulatedNotificationProvider hoy, Brevo u otro a futuro"]
     end

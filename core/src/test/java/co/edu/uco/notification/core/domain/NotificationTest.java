@@ -17,6 +17,7 @@ import co.edu.uco.notification.core.domain.event.NotificationQueued;
 import co.edu.uco.notification.core.domain.event.NotificationRecoverable;
 import co.edu.uco.notification.core.domain.event.NotificationRequeued;
 import co.edu.uco.notification.core.domain.valueobject.*;
+import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.exception.InvalidStatusTransitionException;
 import co.edu.uco.notification.utils.CorrelationId;
 import java.time.Instant;
@@ -50,10 +51,13 @@ class NotificationTest {
             new NotificationDetails(NotificationContent.of("Subject", "Body"), Priority.NORMAL),
             correlationId);
     notification.markQueued();
-    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markRecoverable(
+        AttemptRecord.of(
+            AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
     notification.requeue();
     notification.markQueued();
-    notification.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markDelivered(
+        AttemptRecord.of(AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
 
     final List<DomainEvent> events = notification.pullEvents();
 
@@ -72,10 +76,14 @@ class NotificationTest {
     final CorrelationId correlationId = CorrelationId.of("corr-43");
     final Notification failed = acceptedWith(correlationId);
     failed.markQueued();
-    failed.markFailed(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    failed.markFailed(
+        AttemptRecord.of(
+            AttemptResult.PERMANENT_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
     final Notification exhausted = acceptedWith(correlationId);
     exhausted.markQueued();
-    exhausted.markRetriesExhausted(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    exhausted.markRetriesExhausted(
+        AttemptRecord.of(
+            AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
     final Notification discarded = acceptedWith(correlationId);
     discarded.discard();
 
@@ -188,7 +196,8 @@ class NotificationTest {
     notification.markQueued();
     notification.pullEvents();
 
-    notification.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markDelivered(
+        AttemptRecord.of(AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
 
     assertEquals(NotificationStatus.DELIVERED, notification.status());
     assertEquals(1, notification.deliveryAttempts().size());
@@ -203,7 +212,10 @@ class NotificationTest {
     final Notification notification = accepted();
     assertThrows(
         InvalidStatusTransitionException.class,
-        () -> notification.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
+        () ->
+            notification.markDelivered(
+                AttemptRecord.of(
+                    AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"))));
   }
 
   @Test
@@ -212,7 +224,9 @@ class NotificationTest {
     notification.markQueued();
     notification.pullEvents();
 
-    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markRecoverable(
+        AttemptRecord.of(
+            AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
 
     assertEquals(NotificationStatus.RECOVERABLE, notification.status());
     assertEquals(
@@ -227,7 +241,9 @@ class NotificationTest {
     notification.markQueued();
     notification.pullEvents();
 
-    notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markRetriesExhausted(
+        AttemptRecord.of(
+            AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
 
     assertEquals(NotificationStatus.FAILED, notification.status());
     assertEquals(
@@ -242,7 +258,10 @@ class NotificationTest {
     final ProviderId providerId = ProviderId.of("brevo");
     assertThrows(
         InvalidStatusTransitionException.class,
-        () -> notification.markRetriesExhausted(AttemptOrigin.AUTOMATIC, providerId));
+        () ->
+            notification.markRetriesExhausted(
+                AttemptRecord.of(
+                    AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC, providerId)));
   }
 
   @Test
@@ -251,7 +270,9 @@ class NotificationTest {
     notification.markQueued();
     notification.pullEvents();
 
-    notification.markFailed(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markFailed(
+        AttemptRecord.of(
+            AttemptResult.PERMANENT_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
 
     assertEquals(NotificationStatus.FAILED, notification.status());
     assertEquals(AttemptResult.PERMANENT_FAILURE, notification.deliveryAttempts().get(0).result());
@@ -260,10 +281,42 @@ class NotificationTest {
   }
 
   @Test
+  void recordFailedOverAddsAFailedOverAttemptWithoutTransitionOrEvent() {
+    final Notification notification = accepted();
+    notification.markQueued();
+    notification.pullEvents();
+
+    notification.recordFailedOver(
+        AttemptRecord.of(
+            AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
+
+    assertEquals(NotificationStatus.IN_PROCESS, notification.status());
+    assertTrue(notification.pullEvents().isEmpty());
+    assertTrue(notification.deliveryAttempts().get(0).failedOver());
+    assertEquals(0, notification.recoverableAttemptsInCurrentCycle());
+  }
+
+  @Test
+  void failedOverAttemptsAreExcludedFromTheRecoverableCount() {
+    final Notification notification = accepted();
+    notification.markQueued();
+    final AttemptRecord record =
+        AttemptRecord.of(
+            AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.recordFailedOver(record);
+    notification.markRecoverable(record);
+
+    assertEquals(2, notification.deliveryAttempts().size());
+    assertEquals(1, notification.recoverableAttemptsInCurrentCycle());
+  }
+
+  @Test
   void requeueFromRecoverableGoesToPending() {
     final Notification notification = accepted();
     notification.markQueued();
-    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markRecoverable(
+        AttemptRecord.of(
+            AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
     notification.pullEvents();
 
     notification.requeue();
@@ -276,7 +329,9 @@ class NotificationTest {
   void requeueFromFailedGoesToPending() {
     final Notification notification = accepted();
     notification.markQueued();
-    notification.markFailed(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markFailed(
+        AttemptRecord.of(
+            AttemptResult.PERMANENT_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
     notification.pullEvents();
 
     notification.requeue();
@@ -517,7 +572,8 @@ class NotificationTest {
                 Instant.now().minusSeconds(60), 1L, null, Instant.now().minusSeconds(5), 1),
             List.of());
 
-    notification.markDelivered(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markDelivered(
+        AttemptRecord.of(AttemptResult.ACCEPTED, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
 
     assertNull(notification.dispatchReservedAt());
   }
@@ -544,7 +600,9 @@ class NotificationTest {
             new NotificationMetadata(Instant.now(), 1L, null, Instant.now(), 2),
             List.of(recoverableAttempt(1)));
 
-    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
+    notification.markRecoverable(
+        AttemptRecord.of(
+            AttemptResult.RECOVERABLE_FAILURE, AttemptOrigin.AUTOMATIC, ProviderId.of("brevo")));
 
     assertEquals(2, notification.deliveryAttempts().getLast().cycle());
   }
@@ -580,54 +638,5 @@ class NotificationTest {
                 recoverableAttempt(1)));
 
     assertEquals(1, notification.recoverableAttemptsInCurrentCycle());
-  }
-
-  @Test
-  void aManualRetryOfAFailedNotificationStartsANewCycleAndKeepsTheHistory() {
-    final Notification notification =
-        reconstituted(
-            NotificationStatus.FAILED,
-            new NotificationMetadata(Instant.now().minusSeconds(900), 4L),
-            List.of(
-                recoverableAttempt(1),
-                recoverableAttempt(1),
-                recoverableAttempt(1),
-                recoverableAttempt(1),
-                recoverableAttempt(1)));
-    final Instant before = Instant.now();
-
-    notification.retryManually();
-
-    assertEquals(NotificationStatus.PENDING, notification.status());
-    assertEquals(2, notification.currentCycle());
-    assertEquals(0, notification.recoverableAttemptsInCurrentCycle());
-    assertEquals(5, notification.deliveryAttempts().size());
-    assertFalse(notification.pendingSince().isBefore(before));
-    assertInstanceOf(NotificationRequeued.class, notification.pullEvents().getFirst());
-  }
-
-  @Test
-  void afterAManualRetryTheFirstRecoverableFailureCountsAsOneInTheNewCycle() {
-    final Notification notification =
-        reconstituted(
-            NotificationStatus.FAILED,
-            new NotificationMetadata(Instant.now().minusSeconds(900), 4L),
-            List.of(recoverableAttempt(1), recoverableAttempt(1), recoverableAttempt(1)));
-    notification.retryManually();
-    notification.markQueued();
-    notification.markRecoverable(AttemptOrigin.AUTOMATIC, ProviderId.of("brevo"));
-
-    assertEquals(1, notification.recoverableAttemptsInCurrentCycle());
-    assertEquals(NotificationStatus.RECOVERABLE, notification.status());
-  }
-
-  @Test
-  void aManualRetryIsRejectedFromAStateOtherThanFailed() {
-    final Notification delivered =
-        reconstituted(
-            NotificationStatus.DELIVERED, new NotificationMetadata(Instant.now(), 1L), List.of());
-
-    assertThrows(InvalidStatusTransitionException.class, delivered::retryManually);
-    assertEquals(1, delivered.currentCycle());
   }
 }

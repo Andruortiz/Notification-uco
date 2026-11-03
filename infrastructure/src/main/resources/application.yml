@@ -74,13 +74,10 @@ security:
       environment: ${SECURITY_ENVIRONMENT:local}
       application-credential: ${PEP_REGISTRATION_TOKEN:}
       allow-insecure-http: ${SECURITY_PEP_ALLOW_INSECURE_HTTP:false}
-      public-paths: ${SECURITY_PEP_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,/openapi/api-notificaciones.yaml,/v3/api-docs}
+      public-paths: ${SECURITY_PEP_PUBLIC_PATHS:/actuator/health,/actuator/health/**,/actuator/prometheus,/openapi/api-notificaciones.yaml,/v3/api-docs,/providers/brevo/bounce-events}
 
 notification:
   auth:
-    # local: JWT firmado con un secreto compartido, obligatorio y de al menos 32 bytes (perfil local para desarrollo). platform: tokens de la plataforma central
-    # de seguridad, validados con su clave publica (ver README, "Autenticacion").
-    mode: ${NOTIFICATION_AUTH_MODE:local}
     platform:
       public-key: ${AUTH_PLATFORM_PUBLIC_KEY:}
       issuer: ${AUTH_PLATFORM_ISSUER:}
@@ -88,10 +85,8 @@ notification:
       subject-claim: ${AUTH_PLATFORM_SUBJECT_CLAIM:sub}
       tenant-claim: ${AUTH_PLATFORM_TENANT_CLAIM:tenantId}
       role-claim: ${AUTH_PLATFORM_ROLE_CLAIM:role}
+      client-claim: ${AUTH_PLATFORM_CLIENT_CLAIM:azp}
       clock-skew-seconds: ${AUTH_PLATFORM_CLOCK_SKEW_SECONDS:30}
-    jwt:
-      hs256-secret: ${AUTH_JWT_HS256_SECRET:}
-      ttl-minutes: ${AUTH_JWT_TTL_MINUTES:720}
     session:
       url: ${AUTH_SESSION_URL:http://localhost:18080}
       path: ${AUTH_SESSION_PATH:/api/v1/session}
@@ -118,17 +113,20 @@ notification:
     refresh-interval-ms: ${NOTIFICATION_CATALOG_REFRESH_INTERVAL_MS:30000}
     channels:
       EMAIL:
-        providers: ${NOTIFICATION_EMAIL_PROVIDERS:simulated,brevo}
+        providers: ${NOTIFICATION_EMAIL_PROVIDERS:brevo,simulated}
         content-schema: '{"type":"object","properties":{"attachments":{"type":"array","maxItems":5,"items":{"type":"object","properties":{"sizeBytes":{"type":"integer","maximum":4000000}}}},"attachmentsTotalBytes":{"type":"integer","maximum":4000000}}}'
       SMS:
-        providers: ${NOTIFICATION_SMS_PROVIDERS:simulated,twilio}
+        providers: ${NOTIFICATION_SMS_PROVIDERS:twilio,simulated}
         content-schema: '{"type":"object","required":["body"],"properties":{"body":{"type":"string","maxLength":160}}}'
       PUSH:
-        providers: ${NOTIFICATION_PUSH_PROVIDERS:simulated,fcm}
+        providers: ${NOTIFICATION_PUSH_PROVIDERS:fcm,simulated}
         content-schema: '{"type":"object","required":["body"],"properties":{"subject":{"maxLength":100},"body":{"type":"string","maxLength":900}}}'
+  brevo:
+    webhook-secret: ${BREVO_WEBHOOK_SECRET:}
   provider:
     simulated:
       result: ${SIMULATED_PROVIDER_RESULT:ACCEPTED}
+      enabled: ${SIMULATED_PROVIDER_ENABLED:false}
     brevo:
       api-key: ${BREVO_API_KEY:}
       sender-email: ${BREVO_SENDER_EMAIL:}
@@ -192,3 +190,14 @@ notification:
       host: ${CLAMAV_HOST:localhost}
       port: ${CLAMAV_PORT:3310}
       max-concurrent-scans: ${CLAMAV_MAX_CONCURRENT_SCANS:4}
+
+provider-health:
+  prometheus-url: ${PROMETHEUS_URL:http://localhost:9090}
+  grafana-url: ${GRAFANA_URL:}
+  window: ${PROVIDER_HEALTH_WINDOW:5m}
+  lookback: ${PROVIDER_HEALTH_LOOKBACK:15m}
+  timeout: ${PROVIDER_HEALTH_TIMEOUT:2s}
+  min-samples: ${PROVIDER_HEALTH_MIN_SAMPLES:5}
+  healthy-threshold: ${PROVIDER_HEALTH_HEALTHY_THRESHOLD:0.95}
+  down-threshold: ${PROVIDER_HEALTH_DOWN_THRESHOLD:0.5}
+  recoverable-threshold: ${PROVIDER_HEALTH_RECOVERABLE_THRESHOLD:0.5}

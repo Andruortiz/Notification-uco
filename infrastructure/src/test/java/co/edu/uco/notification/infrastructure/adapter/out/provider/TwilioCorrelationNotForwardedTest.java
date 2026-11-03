@@ -78,7 +78,7 @@ class TwilioCorrelationNotForwardedTest {
     assertNotNull(notification.correlationId());
 
     StepVerifier.create(provider().send(notification))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());
@@ -97,7 +97,7 @@ class TwilioCorrelationNotForwardedTest {
   @Test
   void aNotificationWithoutCorrelationIdIsSentTheSameWay() {
     StepVerifier.create(provider().send(smsWith(null)))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());

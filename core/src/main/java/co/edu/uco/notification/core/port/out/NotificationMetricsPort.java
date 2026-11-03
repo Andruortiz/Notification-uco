@@ -3,6 +3,7 @@ package co.edu.uco.notification.core.port.out;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.utils.ErrorCode;
 import java.time.Duration;
 
@@ -17,4 +18,10 @@ public interface NotificationMetricsPort {
   void errorRecorded(ErrorCode errorCode);
 
   void errorRecorded(ErrorCode errorCode, ChannelType channel, ProviderId provider);
+
+  void recipientRejected(TenantId tenantId, ChannelType channel, String reason);
+
+  void recipientMarkedUndeliverable(TenantId tenantId, ChannelType channel);
+
+  void bounceUnresolved();
 }

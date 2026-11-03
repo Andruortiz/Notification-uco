@@ -14,7 +14,8 @@ class RouteAuthorizationPolicyContractTest {
 
   @Test
   void theInterimPolicyReturnsTheMinimumRoleDeclaredInTheContractForEveryOperation() {
-    assertTrue(ApiContract.operations().size() >= 16);
+    assertTrue(ApiContract.operations().size() >= 33);
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.GET, "/provider-health"));
     ApiContract.operations()
         .forEach(
             operation ->

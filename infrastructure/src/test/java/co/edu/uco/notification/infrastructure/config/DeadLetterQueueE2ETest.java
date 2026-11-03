@@ -49,7 +49,7 @@ class DeadLetterQueueE2ETest {
   @Test
   void aMessageThatFailsProcessingRepeatedlyEndsUpInTheDeadLetterQueue() {
     final NotificationId poisonId = NotificationId.newId();
-    when(dispatchNotificationUseCase.dispatch(any()))
+    when(dispatchNotificationUseCase.dispatch(any(), any()))
         .thenReturn(Mono.error(new NotificationNotFoundException(poisonId)));
 
     rabbitTemplate.convertAndSend(
@@ -72,7 +72,7 @@ class DeadLetterQueueE2ETest {
             .get(RepublishMessageRecoverer.X_EXCEPTION_MESSAGE);
     assertNotNull(exceptionMessage, "el header de causa debe estar presente");
     assertTrue(exceptionMessage.toString().contains(poisonId.value()));
-    verify(dispatchNotificationUseCase, times(3)).dispatch(any());
+    verify(dispatchNotificationUseCase, times(3)).dispatch(any(), any());
     assertEquals(2, deadLettered.getMessageProperties().getHeaders().get("x-dispatch-attempt"));
     assertNull(rabbitTemplate.receive(properties.dispatch().queue(), 500));
   }
@@ -80,7 +80,7 @@ class DeadLetterQueueE2ETest {
   @Test
   void aMessageProcessedSuccessfullyIsAcknowledgedAndNeverReachesTheDeadLetterQueue() {
     final NotificationId okId = NotificationId.newId();
-    when(dispatchNotificationUseCase.dispatch(any())).thenReturn(Mono.empty());
+    when(dispatchNotificationUseCase.dispatch(any(), any())).thenReturn(Mono.empty());
 
     rabbitTemplate.convertAndSend(
         properties.dispatch().exchange(),
@@ -91,7 +91,7 @@ class DeadLetterQueueE2ETest {
           return message;
         });
 
-    verify(dispatchNotificationUseCase, timeout(10_000).times(1)).dispatch(any());
+    verify(dispatchNotificationUseCase, timeout(10_000).times(1)).dispatch(any(), any());
     assertNull(rabbitTemplate.receive(properties.dlq().queue(), 2_000));
     assertNull(rabbitTemplate.receive(properties.dispatch().queue(), 500));
   }
@@ -99,7 +99,7 @@ class DeadLetterQueueE2ETest {
   @Test
   void theCorrelationIdSurvivesTheRetriesAndReachesTheDeadLetterQueue() {
     final NotificationId poisonId = NotificationId.newId();
-    when(dispatchNotificationUseCase.dispatch(any()))
+    when(dispatchNotificationUseCase.dispatch(any(), any()))
         .thenReturn(Mono.error(new NotificationNotFoundException(poisonId)));
 
     rabbitTemplate.convertAndSend(

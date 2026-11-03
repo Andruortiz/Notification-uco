@@ -3,10 +3,14 @@ package co.edu.uco.notification.infrastructure.adapter.out.provider;
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.valueobject.Attachment;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.ProbeErrorCode;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.core.exception.ProviderDisabledException;
 import co.edu.uco.notification.core.port.in.ConfigurationView;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProbeOutcome;
+import co.edu.uco.notification.core.port.out.ProviderProbePort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.infrastructure.config.BrevoProviderProperties;
 import co.edu.uco.notification.utils.CorrelationId;
 import co.edu.uco.notification.utils.Preconditions;
@@ -22,11 +26,12 @@ import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 @Component
-public class BrevoNotificationProvider implements NotificationSenderPort {
+public class BrevoNotificationProvider implements NotificationSenderPort, ProviderProbePort {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(BrevoNotificationProvider.class);
   private static final ProviderId PROVIDER_ID = ProviderId.of("brevo");
   private static final String SEND_PATH = "/v3/smtp/email";
+  private static final String ACCOUNT_PATH = "/v3/account";
 
   static final long MAX_ATTACHMENTS_BYTES = 4_000_000L;
 
@@ -69,7 +74,29 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
   }
 
   @Override
-  public Mono<AttemptResult> send(final Notification notification) {
+  public Mono<ProbeOutcome> probe() {
+    if (disabledReason.isPresent()) {
+      return Mono.just(ProbeOutcome.failed(ProbeErrorCode.CREDENTIALS_MISSING));
+    }
+    return ProviderProbes.classify(
+        Mono.defer(
+            () ->
+                clientSource
+                    .get()
+                    .get()
+                    .uri(ACCOUNT_PATH)
+                    .header("api-key", properties.apiKey())
+                    .exchangeToMono(
+                        response ->
+                            response.releaseBody().thenReturn(response.statusCode().value()))));
+  }
+
+  @Override
+  public Mono<ProviderResult> send(final Notification notification) {
+    return sendResult(notification);
+  }
+
+  private Mono<ProviderResult> sendResult(final Notification notification) {
     Preconditions.requireNonNull(notification, "notification must not be null");
     if (disabledReason.isPresent()) {
       return Mono.error(new ProviderDisabledException(PROVIDER_ID, disabledReason.get()));
@@ -77,12 +104,12 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
     final String subject = notification.content().subject();
     if (subject == null || subject.isBlank()) {
       ProviderLogs.rejectedBeforeCall(LOGGER, notification, PROVIDER_ID, "missing-subject");
-      return Mono.just(AttemptResult.PERMANENT_FAILURE);
+      return Mono.just(ProviderResult.of(AttemptResult.PERMANENT_FAILURE));
     }
     final List<Attachment> attachments = notification.content().attachments();
     if (attachments.stream().mapToLong(Attachment::sizeBytes).sum() > MAX_ATTACHMENTS_BYTES) {
       ProviderLogs.rejectedBeforeCall(LOGGER, notification, PROVIDER_ID, "attachments-too-large");
-      return Mono.just(AttemptResult.PERMANENT_FAILURE);
+      return Mono.just(ProviderResult.of(AttemptResult.PERMANENT_FAILURE));
     }
     final WebClient client = clientSource.get();
     return attachmentContentLoader
@@ -94,17 +121,17 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
             error -> {
               ProviderLogs.rejectedBeforeCall(
                   LOGGER, notification, PROVIDER_ID, "attachment-content-unavailable");
-              return Mono.just(AttemptResult.PERMANENT_FAILURE);
+              return Mono.just(ProviderResult.of(AttemptResult.PERMANENT_FAILURE));
             })
         .onErrorResume(
             error -> {
               final AttemptResult result = BrevoResponseClassifier.classifyError(error);
               logFailure(notification, result, error);
-              return Mono.just(result);
+              return Mono.just(ProviderResult.of(result));
             });
   }
 
-  private Mono<AttemptResult> post(
+  private Mono<ProviderResult> post(
       final WebClient client, final Notification notification, final BrevoEmailRequest request) {
     return client
         .post()
@@ -124,19 +151,19 @@ public class BrevoNotificationProvider implements NotificationSenderPort {
             error -> {
               final AttemptResult result = BrevoResponseClassifier.classifyError(error);
               logFailure(notification, result, error);
-              return Mono.just(result);
+              return Mono.just(ProviderResult.of(result));
             });
   }
 
-  private static AttemptResult classifyAndLog(
+  private static ProviderResult classifyAndLog(
       final Notification notification, final int status, final BrevoApiResponse body) {
     final AttemptResult result = BrevoResponseClassifier.classifyStatus(status);
     if (result == AttemptResult.ACCEPTED) {
       ProviderLogs.dispatched(LOGGER, notification, PROVIDER_ID, result, status, body.messageId());
-    } else {
-      ProviderLogs.dispatchedWithoutDetails(LOGGER, notification, PROVIDER_ID, result);
+      return new ProviderResult(result, null, null, body.messageId(), null);
     }
-    return result;
+    ProviderLogs.dispatchedWithoutDetails(LOGGER, notification, PROVIDER_ID, result);
+    return ProviderResult.of(result);
   }
 
   private void logFailure(

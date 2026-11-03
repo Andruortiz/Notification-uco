@@ -5,6 +5,7 @@ import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.policy.AttachmentPolicy;
 import co.edu.uco.notification.core.domain.policy.ContentSchemaValidator;
 import co.edu.uco.notification.core.domain.valueobject.Attachment;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationRouting;
@@ -98,7 +99,7 @@ public final class SendNotificationService implements SendNotificationUseCase {
             saved ->
                 eventPublisherPort
                     .publish(events)
-                    .then(eventPublisherPort.enqueueForDispatch(saved))
+                    .then(eventPublisherPort.enqueueForDispatch(saved, AttemptOrigin.AUTOMATIC))
                     .thenReturn(toResult(saved, false)))
         .onErrorResume(
             NotificationAlreadyAcceptedException.class,

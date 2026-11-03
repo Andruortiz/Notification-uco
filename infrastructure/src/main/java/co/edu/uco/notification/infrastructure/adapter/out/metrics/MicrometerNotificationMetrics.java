@@ -3,6 +3,7 @@ package co.edu.uco.notification.infrastructure.adapter.out.metrics;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
+import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.NotificationMetricsPort;
 import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.Preconditions;
@@ -19,6 +20,10 @@ public class MicrometerNotificationMetrics implements NotificationMetricsPort {
   static final String DISPATCHED = "notification.dispatched";
   static final String PROVIDER_DURATION = "notification.provider.duration";
   static final String ERRORS = "notification.errors";
+  static final String RECIPIENT_REJECTED = "notification.recipient.rejected";
+  static final String RECIPIENT_UNDELIVERABLE_MARKED =
+      "notification.recipient.undeliverable.marked";
+  static final String BOUNCE_UNRESOLVED = "notification.recipient.bounce.unresolved";
 
   private static final String NONE = "none";
 
@@ -84,11 +89,39 @@ public class MicrometerNotificationMetrics implements NotificationMetricsPort {
         .increment();
   }
 
+  @Override
+  public void recipientRejected(
+      final TenantId tenantId, final ChannelType channel, final String reason) {
+    registry
+        .counter(
+            RECIPIENT_REJECTED,
+            "tenant",
+            tenantId.value(),
+            "channel",
+            channel.value(),
+            "reason",
+            reason)
+        .increment();
+  }
+
+  @Override
+  public void recipientMarkedUndeliverable(final TenantId tenantId, final ChannelType channel) {
+    registry
+        .counter(
+            RECIPIENT_UNDELIVERABLE_MARKED, "tenant", tenantId.value(), "channel", channel.value())
+        .increment();
+  }
+
+  @Override
+  public void bounceUnresolved() {
+    registry.counter(BOUNCE_UNRESOLVED).increment();
+  }
+
   public static String resultLabel(final AttemptResult result) {
     return switch (result) {
       case ACCEPTED -> "delivered";
       case RECOVERABLE_FAILURE -> "recoverable";
-      case PERMANENT_FAILURE -> "failed";
+      case PERMANENT_FAILURE, INVALID_RECIPIENT -> "failed";
     };
   }
 }

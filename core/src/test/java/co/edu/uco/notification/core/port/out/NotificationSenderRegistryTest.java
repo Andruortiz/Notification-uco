@@ -28,9 +28,9 @@ class NotificationSenderRegistryTest {
     }
 
     @Override
-    public Mono<AttemptResult> send(final Notification notification) {
+    public Mono<ProviderResult> send(final Notification notification) {
       received.add(notification);
-      return Mono.just(AttemptResult.ACCEPTED);
+      return Mono.just(ProviderResult.of(AttemptResult.ACCEPTED));
     }
 
     @Override

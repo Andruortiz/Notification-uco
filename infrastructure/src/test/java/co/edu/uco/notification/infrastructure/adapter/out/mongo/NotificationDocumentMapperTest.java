@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
@@ -9,6 +10,7 @@ import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
+import co.edu.uco.notification.core.domain.valueobject.FailureCause;
 import co.edu.uco.notification.core.domain.valueobject.NotificationContent;
 import co.edu.uco.notification.core.domain.valueobject.NotificationDetails;
 import co.edu.uco.notification.core.domain.valueobject.NotificationId;
@@ -70,6 +72,7 @@ class NotificationDocumentMapperTest {
             document.channelType(),
             document.recipientId(),
             document.recipientAddress(),
+            document.recipientIdFingerprint(),
             document.contentSubject(),
             document.contentBody(),
             document.attachments(),
@@ -131,6 +134,99 @@ class NotificationDocumentMapperTest {
   }
 
   @Test
+  void roundTripPreservesTheFailedOverMarkAndTheOptionalAttemptFields() {
+    final Instant acceptedAt = Instant.parse("2026-10-05T10:00:00Z");
+    final DeliveryAttempt switched =
+        new DeliveryAttempt(
+            acceptedAt,
+            AttemptResult.RECOVERABLE_FAILURE,
+            AttemptOrigin.AUTOMATIC,
+            ProviderId.of("brevo"),
+            1,
+            true,
+            120L,
+            FailureCause.TRANSPORT_ERROR,
+            "corr-1",
+            "msg-1");
+    final Notification original =
+        Notification.reconstitute(
+            NotificationId.newId(),
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Subject", "Body"), Priority.NORMAL),
+            NotificationStatus.RECOVERABLE,
+            new NotificationMetadata(acceptedAt, 2L),
+            List.of(switched));
+
+    final Notification restored =
+        NotificationDocumentMapper.toDomain(NotificationDocumentMapper.toDocument(original));
+
+    assertEquals(switched, restored.deliveryAttempts().get(0));
+  }
+
+  @Test
+  void anAttemptDocumentWithoutTheFailoverFieldsIsReadAsNotFailedOver() {
+    final DeliveryAttemptDocument legacy =
+        new DeliveryAttemptDocument(
+            Instant.parse("2026-10-05T10:00:00Z"),
+            AttemptResult.ACCEPTED,
+            AttemptOrigin.AUTOMATIC,
+            "brevo",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null);
+    final Notification original =
+        Notification.reconstitute(
+            NotificationId.newId(),
+            new NotificationRouting(
+                TenantId.of("tenant-1"),
+                ExternalId.of("order-42"),
+                ChannelType.of("EMAIL"),
+                RecipientId.of("recipient-1"),
+                Recipient.of("alice@example.com")),
+            new NotificationDetails(NotificationContent.of("Subject", "Body"), Priority.NORMAL),
+            NotificationStatus.DELIVERED,
+            new NotificationMetadata(Instant.parse("2026-10-05T10:00:00Z"), 2L),
+            List.of());
+    final NotificationDocument base = NotificationDocumentMapper.toDocument(original);
+    final NotificationDocument withLegacyAttempt =
+        new NotificationDocument(
+            base.id(),
+            base.tenantId(),
+            base.externalId(),
+            base.channelType(),
+            base.recipientId(),
+            base.recipientAddress(),
+            base.recipientIdFingerprint(),
+            base.contentSubject(),
+            base.contentBody(),
+            base.attachments(),
+            base.priority(),
+            base.status(),
+            base.acceptedAt(),
+            List.of(legacy),
+            base.correlationId(),
+            base.pendingSince(),
+            base.dispatchReservedAt(),
+            base.currentCycle(),
+            base.version());
+
+    final DeliveryAttempt restored =
+        NotificationDocumentMapper.toDomain(withLegacyAttempt).deliveryAttempts().get(0);
+
+    assertFalse(restored.failedOver());
+    assertNull(restored.latencyMillis());
+    assertEquals(1, restored.cycle());
+  }
+
+  @Test
   void aDocumentWithoutTheNewFieldsIsReadWithPendingSinceAcceptedAtAndCycleOne() {
     final Instant acceptedAt = Instant.parse("2026-10-05T10:00:00Z");
     final NotificationDocument legacy =
@@ -141,6 +237,7 @@ class NotificationDocumentMapperTest {
             "EMAIL",
             "recipient-1",
             "alice@example.com",
+            null,
             "Subject",
             "Body",
             null,
@@ -153,6 +250,11 @@ class NotificationDocumentMapperTest {
                     AttemptResult.RECOVERABLE_FAILURE,
                     AttemptOrigin.AUTOMATIC,
                     "brevo",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
                     null)),
             null,
             null,

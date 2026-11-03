@@ -132,7 +132,7 @@ class BrevoNotificationProviderTest {
     final Notification notification = notificationWith("Subject", "Body");
 
     StepVerifier.create(provider.send(notification))
-        .expectNext(AttemptResult.ACCEPTED)
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
         .verifyComplete();
 
     assertEquals(1, fakeServer.requests().size());
@@ -213,7 +213,9 @@ class BrevoNotificationProviderTest {
         new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
 
     StepVerifier.create(provider.send(notificationWith(null, "Body")))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -225,7 +227,9 @@ class BrevoNotificationProviderTest {
         new BrevoNotificationProvider(webClient, enabledProperties(), LOADER);
 
     StepVerifier.create(provider.send(notificationWith("   ", "Body")))
-        .expectNext(AttemptResult.PERMANENT_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.PERMANENT_FAILURE, providerResult.result()))
         .verifyComplete();
 
     assertTrue(fakeServer.requests().isEmpty());
@@ -251,7 +255,9 @@ class BrevoNotificationProviderTest {
 
     final Instant start = Instant.now();
     StepVerifier.create(provider.send(notificationWith("Subject", "Body")))
-        .expectNext(AttemptResult.RECOVERABLE_FAILURE)
+        .assertNext(
+            providerResult ->
+                assertEquals(AttemptResult.RECOVERABLE_FAILURE, providerResult.result()))
         .verifyComplete();
     final Duration elapsed = Duration.between(start, Instant.now());
 
@@ -266,9 +272,15 @@ class BrevoNotificationProviderTest {
     final Notification first = notificationWith("Subject", "Body");
     final Notification second = notificationWith("Subject", "Body");
 
-    StepVerifier.create(provider.send(first)).expectNext(AttemptResult.ACCEPTED).verifyComplete();
-    StepVerifier.create(provider.send(first)).expectNext(AttemptResult.ACCEPTED).verifyComplete();
-    StepVerifier.create(provider.send(second)).expectNext(AttemptResult.ACCEPTED).verifyComplete();
+    StepVerifier.create(provider.send(first))
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
+        .verifyComplete();
+    StepVerifier.create(provider.send(first))
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
+        .verifyComplete();
+    StepVerifier.create(provider.send(second))
+        .assertNext(providerResult -> assertEquals(AttemptResult.ACCEPTED, providerResult.result()))
+        .verifyComplete();
 
     final JsonNode firstAttempt1 = MAPPER.readTree(fakeServer.requests().get(0).body());
     final JsonNode firstAttempt2 = MAPPER.readTree(fakeServer.requests().get(1).body());

@@ -52,6 +52,17 @@ class RouteAuthorizationPolicyTest {
   }
 
   @Test
+  void retryAndResendRequireOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/notification-retries"));
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/notification-resends"));
+  }
+
+  @Test
+  void timelineRequiresOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.GET, "/notifications/timeline"));
+  }
+
+  @Test
   void sendRequiresOnlyCliente() {
     assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications"));
   }
@@ -85,6 +96,48 @@ class RouteAuthorizationPolicyTest {
   void catalogReadRequiresOnlyCliente() {
     assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/channels"));
     assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/providers"));
+  }
+
+  @Test
+  void providerConnectionTestRequiresAdministrador() {
+    assertEquals(
+        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.POST, "/provider-connection-tests"));
+  }
+
+  @Test
+  void createTemplateRequiresOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/templates"));
+  }
+
+  @Test
+  void updateTemplateRequiresOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.PUT, "/templates"));
+  }
+
+  @Test
+  void listTemplatesRequiresOnlyCliente() {
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/templates"));
+  }
+
+  @Test
+  void templateDetailRequiresOnlyCliente() {
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/templates/detail"));
+  }
+
+  @Test
+  void archiveTemplateRequiresOperador() {
+    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/template-archivals"));
+  }
+
+  @Test
+  void detectTemplateVariablesRequiresOperador() {
+    assertEquals(
+        Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/template-variable-detections"));
+  }
+
+  @Test
+  void renderTemplateRequiresOnlyCliente() {
+    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/template-renders"));
   }
 
   @Test

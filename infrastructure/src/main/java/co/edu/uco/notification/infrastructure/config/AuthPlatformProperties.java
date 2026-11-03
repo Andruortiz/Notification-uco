@@ -11,18 +11,21 @@ public record AuthPlatformProperties(
     String subjectClaim,
     String tenantClaim,
     String roleClaim,
+    String clientClaim,
     Map<String, String> roleMapping,
     Long clockSkewSeconds) {
 
   private static final String DEFAULT_SUBJECT_CLAIM = "sub";
   private static final String DEFAULT_TENANT_CLAIM = "tenantId";
   private static final String DEFAULT_ROLE_CLAIM = "role";
+  private static final String DEFAULT_CLIENT_CLAIM = "azp";
   private static final Long DEFAULT_CLOCK_SKEW_SECONDS = 30L;
 
   public AuthPlatformProperties {
     subjectClaim = valueOrDefault(subjectClaim, DEFAULT_SUBJECT_CLAIM);
     tenantClaim = valueOrDefault(tenantClaim, DEFAULT_TENANT_CLAIM);
     roleClaim = valueOrDefault(roleClaim, DEFAULT_ROLE_CLAIM);
+    clientClaim = valueOrDefault(clientClaim, DEFAULT_CLIENT_CLAIM);
     roleMapping = roleMapping == null ? Map.of() : Map.copyOf(roleMapping);
     clockSkewSeconds = clockSkewSeconds == null ? DEFAULT_CLOCK_SKEW_SECONDS : clockSkewSeconds;
   }

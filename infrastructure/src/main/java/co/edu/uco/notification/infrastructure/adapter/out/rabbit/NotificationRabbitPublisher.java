@@ -5,6 +5,7 @@ import co.edu.uco.notification.core.domain.event.DomainEvent;
 import co.edu.uco.notification.core.domain.event.NotificationDiscarded;
 import co.edu.uco.notification.core.domain.event.NotificationFailed;
 import co.edu.uco.notification.core.domain.event.NotificationRecoverable;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.infrastructure.config.CorrelationContext;
 import co.edu.uco.notification.infrastructure.config.LogContext;
@@ -48,8 +49,10 @@ public class NotificationRabbitPublisher implements NotificationEventPublisherPo
   }
 
   @Override
-  public Mono<Void> enqueueForDispatch(final Notification notification) {
+  public Mono<Void> enqueueForDispatch(
+      final Notification notification, final AttemptOrigin origin) {
     Preconditions.requireNonNull(notification, "notification must not be null");
+    Preconditions.requireNonNull(origin, "origin must not be null");
     return Mono.deferContextual(
         context -> {
           final CorrelationId correlationId =
@@ -71,6 +74,11 @@ public class NotificationRabbitPublisher implements NotificationEventPublisherPo
                                         .setMessageId(notification.notificationId().value());
                                     CorrelationContext.stamp(
                                         message.getMessageProperties(), correlationId);
+                                    message
+                                        .getMessageProperties()
+                                        .setHeader(
+                                            RabbitTopologyProperties.ATTEMPT_ORIGIN_HEADER,
+                                            origin.name());
                                     return message;
                                   })))
               .subscribeOn(Schedulers.boundedElastic());

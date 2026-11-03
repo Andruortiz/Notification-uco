@@ -5,6 +5,8 @@ import co.edu.uco.notification.core.exception.AttachmentNotReadyException;
 import co.edu.uco.notification.core.exception.ChannelNotAvailableException;
 import co.edu.uco.notification.core.exception.InvalidAttachmentException;
 import co.edu.uco.notification.core.exception.InvalidContentException;
+import co.edu.uco.notification.core.exception.InvalidRecipientException;
+import co.edu.uco.notification.core.exception.RecipientUndeliverableException;
 import co.edu.uco.notification.core.port.in.BatchAcceptedResult;
 import co.edu.uco.notification.core.port.in.BatchItemResult;
 import co.edu.uco.notification.core.port.in.BatchNotificationItem;
@@ -118,6 +120,8 @@ public final class SendNotificationBatchService implements SendNotificationBatch
     return error instanceof ChannelNotAvailableException
         || error instanceof InvalidContentException
         || error instanceof InvalidAttachmentException
-        || error instanceof AttachmentNotReadyException;
+        || error instanceof AttachmentNotReadyException
+        || error instanceof InvalidRecipientException
+        || error instanceof RecipientUndeliverableException;
   }
 }

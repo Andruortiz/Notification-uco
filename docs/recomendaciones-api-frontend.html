@@ -98,7 +98,7 @@
   <div class="table-wrap"><table>
     <tr><th>Propuesta</th><th>Por qué</th></tr>
     <tr><td>Cancelar: <code>POST /notification-cancellations</code></td><td>Contraparte natural del reintento; comparte <code>StatusTransitionPolicy</code>.</td></tr>
-    <tr><td>Historial de intentos: <code>GET /notifications/attempts?notificationId={id}</code></td><td>La spec 017 ya modela el ciclo de intentos pero la API no lo expone. Depura fallos sin ir a logs.</td></tr>
+    <tr><td>Historial de intentos: <code>GET /notifications/timeline?notificationId={id}</code></td><td>La spec 017 ya modela el ciclo de intentos pero la API no lo expone. Depura fallos sin ir a logs.</td></tr>
     <tr><td>Estado del lote: <code>GET /batches/{batchId}</code></td><td><code>sendBatch</code> devuelve un <code>batchId</code> sin forma de ver el progreso ni los resultados por ítem.</td></tr>
     <tr><td>Paginación real en la búsqueda</td><td><code>limit/offset</code> sin total ni cursor se degrada con volumen. Falta ordenamiento y filtros por <code>externalId</code>, <code>priority</code> y <code>batchId</code>.</td></tr>
     <tr><td>Búsqueda por <code>externalId</code></td><td>El cliente manda su propio ID para idempotencia y no puede consultarlo por ese ID.</td></tr>
@@ -193,7 +193,7 @@
   <p>Para este servicio, poco: casi todo se resuelve con una petición REST mientras el SSE sigue abierto.</p>
   <div class="table-wrap"><table>
     <tr><th>Caso</th><th>Hoy</th><th>Con WS</th><th>Alternativa sin WS</th></tr>
-    <tr><td>Cambiar filtros sin reconectar</td><td>Cerrar y reabrir, con snapshot nuevo</td><td>Mensaje <code>subscribe</code></td><td><code>PUT /notifications/stream/subscriptions?subscriptionId={id}</code> sobre el stream existente</td></tr>
+    <tr><td>Cambiar filtros sin reconectar</td><td>Cerrar y reabrir, con snapshot nuevo</td><td>Mensaje <code>subscribe</code></td><td><code>PUT /notifications/subscriptions?id={id}</code> sobre el stream existente</td></tr>
     <tr><td>Ack y reanudación</td><td>Cada reconexión repite el snapshot</td><td>El cliente confirma el último evento</td><td><code>id:</code> en cada evento SSE y soporte de <code>Last-Event-ID</code></td></tr>
     <tr><td>Backpressure real</td><td>No hay forma</td><td>El cliente pide menos tráfico</td><td>Política de cierre por cliente lento</td></tr>
     <tr><td>Acciones del operador</td><td><code>POST</code> aparte</td><td>Comando por el socket</td><td>Mantener <code>POST</code>: más simple de auditar y proteger por roles</td></tr>

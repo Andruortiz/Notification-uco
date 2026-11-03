@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.Notification;
 import co.edu.uco.notification.core.domain.event.DomainEvent;
+import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
 import co.edu.uco.notification.core.domain.valueobject.ExternalId;
@@ -24,6 +25,7 @@ import co.edu.uco.notification.core.port.in.RequeuePendingNotificationsUseCase;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.core.port.out.NotificationEventPublisherPort;
 import co.edu.uco.notification.core.port.out.NotificationSenderPort;
+import co.edu.uco.notification.core.port.out.ProviderResult;
 import co.edu.uco.notification.core.repository.NotificationRepository;
 import co.edu.uco.notification.core.repository.NotificationSearchCriteria;
 import co.edu.uco.notification.infrastructure.adapter.out.mongo.NotificationMongoAdapter;
@@ -84,11 +86,11 @@ class DispatchIdempotencyE2ETest {
     private final Map<String, AtomicInteger> sends = new ConcurrentHashMap<>();
 
     @Override
-    public Mono<AttemptResult> send(final Notification notification) {
+    public Mono<ProviderResult> send(final Notification notification) {
       sends
           .computeIfAbsent(notification.notificationId().value(), key -> new AtomicInteger())
           .incrementAndGet();
-      return Mono.just(AttemptResult.ACCEPTED);
+      return Mono.just(ProviderResult.of(AttemptResult.ACCEPTED));
     }
 
     int sendsOf(final NotificationId id) {
@@ -190,10 +192,11 @@ class DispatchIdempotencyE2ETest {
     }
 
     @Override
-    public Mono<Void> enqueueForDispatch(final Notification notification) {
+    public Mono<Void> enqueueForDispatch(
+        final Notification notification, final AttemptOrigin origin) {
       return failureSwitch.enqueueFailuresFor.remove(notification.notificationId().value())
           ? Mono.error(new IllegalStateException("broker down"))
-          : delegate.enqueueForDispatch(notification);
+          : delegate.enqueueForDispatch(notification, origin);
     }
 
     @Override

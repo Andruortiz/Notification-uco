@@ -23,13 +23,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 
 @Component
-@ConditionalOnProperty(name = "notification.auth.mode", havingValue = "platform")
 public final class PlatformJwtTokenValidationAdapter implements TokenValidationPort {
 
   private final JwtParser parser;
@@ -75,7 +73,7 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
   private static PublicKey parsePublicKey(final String pem) {
     if (!hasText(pem)) {
       throw new IllegalStateException(
-          "notification.auth.mode=platform requires notification.auth.platform.public-key");
+          "AUTH_PLATFORM_PUBLIC_KEY (notification.auth.platform.public-key) is required");
     }
     final String base64 =
         pem.replace("-----BEGIN PUBLIC KEY-----", "")
@@ -117,8 +115,12 @@ public final class PlatformJwtTokenValidationAdapter implements TokenValidationP
       throw new InvalidTokenException(
           "missing required claims", InvalidTokenException.Reason.MISSING_CLAIMS, tenantHint, null);
     }
+    final Object client = claims.get(properties.clientClaim());
     return new AuthenticatedPrincipal(
-        subjectText, TenantId.of(tenantHint), resolveRole(claims, tenantHint));
+        subjectText,
+        TenantId.of(tenantHint),
+        resolveRole(claims, tenantHint),
+        client instanceof String clientText && hasText(clientText) ? clientText : null);
   }
 
   private Role resolveRole(final Claims claims, final String tenantHint) {

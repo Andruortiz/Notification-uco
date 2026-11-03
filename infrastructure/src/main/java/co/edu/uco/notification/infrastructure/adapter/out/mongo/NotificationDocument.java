@@ -14,8 +14,13 @@ import org.springframework.data.mongodb.core.mapping.Document;
     name = "tenant_external_unique",
     def = "{'tenantId': 1, 'externalId': 1}",
     unique = true)
+@CompoundIndex(
+    name = "tenant_recipientIdFingerprint",
+    def = "{'tenantId': 1, 'recipientIdFingerprint': 1}",
+    sparse = true)
 @CompoundIndex(name = "tenant_acceptedAt", def = "{'tenantId': 1, 'acceptedAt': -1}")
 @CompoundIndex(name = "status_pendingSince", def = "{'status': 1, 'pendingSince': 1}")
+@CompoundIndex(name = "attempt_messageId", def = "{'deliveryAttempts.messageId': 1}", sparse = true)
 public record NotificationDocument(
     @Id String id,
     String tenantId,
@@ -23,6 +28,7 @@ public record NotificationDocument(
     String channelType,
     String recipientId,
     String recipientAddress,
+    String recipientIdFingerprint,
     String contentSubject,
     String contentBody,
     List<AttachmentDocument> attachments,

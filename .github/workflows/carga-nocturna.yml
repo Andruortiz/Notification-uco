@@ -1,0 +1,108 @@
+name: Carga nocturna
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: carga-nocturna
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  carga:
+    name: "Prueba de carga RNF-02 y RNF-03"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MONGO_USERNAME: loadtest
+      RABBITMQ_USERNAME: loadtest
+      LOADTEST_CONFIRM_SIMULATED: "true"
+      SIMULATED_PROVIDER_RESULT: ACCEPTED
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Configurar JDK 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Configurar Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "20"
+
+      - name: Configurar el acceso a GitHub Packages
+        run: mkdir -p ~/.m2 && cp .mvn/settings-github-packages.xml ~/.m2/settings.xml
+
+      - name: Empaquetar el servicio
+        env:
+          GITHUB_PACKAGES_USER: ${{ secrets.PACKAGES_USER }}
+          GITHUB_PACKAGES_TOKEN: ${{ secrets.PACKAGES_TOKEN }}
+        run: ./mvnw -B -ntp -DskipTests -Djacoco.skip=true package
+
+      - name: Credenciales efimeras del job
+        run: |
+          mongo_secret="$(openssl rand -hex 16)"
+          rabbit_secret="$(openssl rand -hex 16)"
+          echo "::add-mask::${mongo_secret}"
+          echo "::add-mask::${rabbit_secret}"
+          node loadtest/token.js > "${RUNNER_TEMP}/token.json"
+          public_key="$(jq -r .publicKey "${RUNNER_TEMP}/token.json")"
+          bearer="$(jq -r .bearer "${RUNNER_TEMP}/token.json")"
+          echo "::add-mask::${bearer}"
+          {
+            echo "MONGO_PASSWORD=${mongo_secret}"
+            echo "RABBITMQ_PASSWORD=${rabbit_secret}"
+            echo "AUTH_PLATFORM_PUBLIC_KEY=${public_key}"
+            echo "LOADTEST_BEARER=${bearer}"
+          } >> "${GITHUB_ENV}"
+          rm "${RUNNER_TEMP}/token.json"
+
+      - name: Levantar MongoDB, RabbitMQ y Prometheus
+        run: |
+          docker compose up -d mongodb rabbitmq
+          docker compose -f docker-compose.observability.yml up -d prometheus
+
+      - name: Arrancar el servicio en el host
+        env:
+          SPRING_PROFILES_ACTIVE: local
+          SECURITY_PEP_ENFORCEMENT_ENABLED: "false"
+        run: |
+          jar="$(ls infrastructure/target/*.jar | grep -v '\.original$' | head -n 1)"
+          nohup java -jar "${jar}" > "${RUNNER_TEMP}/app.log" 2>&1 &
+          for _ in $(seq 1 60); do
+            curl -fs http://localhost:8061/actuator/health/readiness > /dev/null && exit 0
+            sleep 2
+          done
+          tail -n 50 "${RUNNER_TEMP}/app.log"
+          exit 1
+
+      - uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1.2.2
+
+      - name: Prueba de carga
+        id: primera
+        continue-on-error: true
+        env:
+          LOADTEST_RESULT_FILE: resultado.json
+        run: LOADTEST_COMMIT="${GITHUB_SHA::7}" ./loadtest/run.sh
+
+      - name: Prueba de carga (repeticion ante rojo)
+        if: steps.primera.outcome == 'failure'
+        env:
+          LOADTEST_RESULT_FILE: resultado-repeticion.json
+        run: LOADTEST_COMMIT="${GITHUB_SHA::7}" ./loadtest/run.sh
+
+      - name: Publicar resultado
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: resultado-carga
+          path: loadtest/resultado*.json
+          retention-days: 90
+          if-no-files-found: warn

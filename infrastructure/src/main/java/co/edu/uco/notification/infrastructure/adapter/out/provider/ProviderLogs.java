@@ -153,6 +153,8 @@ final class ProviderLogs {
 
   private static ErrorCode codeOf(
       final AttemptResult result, final ErrorCode permanent, final ErrorCode recoverable) {
-    return result == AttemptResult.PERMANENT_FAILURE ? permanent : recoverable;
+    return result == AttemptResult.PERMANENT_FAILURE || result == AttemptResult.INVALID_RECIPIENT
+        ? permanent
+        : recoverable;
   }
 }

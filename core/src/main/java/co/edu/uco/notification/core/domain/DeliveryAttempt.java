@@ -2,6 +2,7 @@ package co.edu.uco.notification.core.domain;
 
 import co.edu.uco.notification.core.domain.valueobject.AttemptOrigin;
 import co.edu.uco.notification.core.domain.valueobject.AttemptResult;
+import co.edu.uco.notification.core.domain.valueobject.FailureCause;
 import co.edu.uco.notification.core.domain.valueobject.ProviderId;
 import co.edu.uco.notification.utils.Preconditions;
 import java.time.Instant;
@@ -11,7 +12,12 @@ public record DeliveryAttempt(
     AttemptResult result,
     AttemptOrigin origin,
     ProviderId providerId,
-    int cycle) {
+    int cycle,
+    boolean failedOver,
+    Long latencyMillis,
+    FailureCause failureCause,
+    String correlationId,
+    String messageId) {
 
   public DeliveryAttempt {
     Preconditions.requireNonNull(occurredOn, "occurredOn must not be null");
@@ -26,7 +32,7 @@ public record DeliveryAttempt(
       final AttemptResult result,
       final AttemptOrigin origin,
       final ProviderId providerId) {
-    return new DeliveryAttempt(occurredOn, result, origin, providerId, 1);
+    return of(occurredOn, result, origin, providerId, 1);
   }
 
   public static DeliveryAttempt of(
@@ -35,6 +41,22 @@ public record DeliveryAttempt(
       final AttemptOrigin origin,
       final ProviderId providerId,
       final int cycle) {
-    return new DeliveryAttempt(occurredOn, result, origin, providerId, cycle);
+    return new DeliveryAttempt(
+        occurredOn, result, origin, providerId, cycle, false, null, null, null, null);
+  }
+
+  public static DeliveryAttempt of(
+      final Instant occurredOn, final AttemptRecord record, final int cycle) {
+    return new DeliveryAttempt(
+        occurredOn,
+        record.result(),
+        record.origin(),
+        record.providerId(),
+        cycle,
+        record.failedOver(),
+        record.latencyMillis(),
+        record.failureCause(),
+        record.correlationId(),
+        record.messageId());
   }
 }

@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
@@ -23,6 +24,7 @@ public final class StubSecurityPlatform implements AutoCloseable {
   private final HttpServer server;
   private final Map<String, String> tenantBySession = new ConcurrentHashMap<>();
   private final List<String> sessionCookiesReceived = new CopyOnWriteArrayList<>();
+  private final Set<String> deniedDecisions = ConcurrentHashMap.newKeySet();
   private final AtomicInteger sessionCalls = new AtomicInteger();
   private final AtomicInteger decisionCalls = new AtomicInteger();
   private volatile int forcedSessionStatus;
@@ -50,6 +52,11 @@ public final class StubSecurityPlatform implements AutoCloseable {
     return this;
   }
 
+  public StubSecurityPlatform denyDecisionsFor(final String cookieValue) {
+    deniedDecisions.add(cookieValue);
+    return this;
+  }
+
   public void revoke(final String cookieValue) {
     tenantBySession.remove(cookieValue);
   }
@@ -67,6 +74,7 @@ public final class StubSecurityPlatform implements AutoCloseable {
   }
 
   public void reset() {
+    deniedDecisions.clear();
     forcedSessionStatus = 0;
     sessionDelay = Duration.ZERO;
     forcedSessionBody = null;
@@ -125,6 +133,10 @@ public final class StubSecurityPlatform implements AutoCloseable {
     exchange.getRequestBody().readAllBytes();
     final boolean bearer = exchange.getRequestHeaders().getFirst("Authorization") != null;
     final String cookie = sessionCookie(exchange.getRequestHeaders().getFirst("Cookie"));
+    if (cookie != null && deniedDecisions.contains(cookie)) {
+      respond(exchange, 403, "{\"code\":\"FORBIDDEN\"}");
+      return;
+    }
     if (bearer || (cookie != null && tenantBySession.containsKey(cookie))) {
       exchange.getResponseHeaders().add("X-Decision-Id", "decision-1");
       respond(exchange, 200, "{}");

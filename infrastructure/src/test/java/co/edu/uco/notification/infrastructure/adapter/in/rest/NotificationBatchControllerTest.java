@@ -26,7 +26,7 @@ import co.edu.uco.notification.core.port.in.SendNotificationBatchUseCase;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticatedPrincipalArgumentResolver;
 import co.edu.uco.notification.infrastructure.adapter.in.web.AuthenticationWebFilter;
 import co.edu.uco.notification.infrastructure.adapter.in.web.RouteAuthorizationPolicy;
-import co.edu.uco.notification.infrastructure.adapter.out.security.local.LocalJwtTokenValidationAdapter;
+import co.edu.uco.notification.infrastructure.adapter.out.security.platform.PlatformJwtTokenValidationAdapter;
 import co.edu.uco.notification.infrastructure.config.SecurityConfig;
 import co.edu.uco.notification.infrastructure.support.TestTokens;
 import co.edu.uco.notification.utils.CorrelationId;
@@ -53,7 +53,7 @@ import reactor.core.publisher.Mono;
 @Import({
   SecurityConfig.class,
   AuthenticationWebFilter.class,
-  LocalJwtTokenValidationAdapter.class,
+  PlatformJwtTokenValidationAdapter.class,
   RouteAuthorizationPolicy.class,
   AuthenticatedPrincipalArgumentResolver.class
 })

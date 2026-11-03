@@ -18,9 +18,11 @@ proceso existía desde el inicio.
 
 El canal EMAIL entrega adjuntos por Brevo. Los envia como Base64 dentro de la solicitud al proveedor.
 
-- **Activacion:** el proveedor por defecto del canal es el simulado, que no envia nada. Para entregar de
-  verdad, definir `NOTIFICATION_EMAIL_PROVIDERS=brevo` y las variables `BREVO_API_KEY`,
-  `BREVO_SENDER_EMAIL` y `BREVO_SENDER_NAME`.
+- **Activacion:** el orden por defecto del canal es `brevo,simulated`. Definir las variables `BREVO_API_KEY`,
+  `BREVO_SENDER_EMAIL` y `BREVO_SENDER_NAME` para entregar de verdad. `simulated` no envia nada y solo esta
+  habilitado con `SIMULATED_PROVIDER_ENABLED=true` (falso por defecto; verdadero en el perfil `local` y en
+  pruebas). En un despliegue sin credenciales reales y con `simulated` deshabilitado, el despacho falla con
+  `ProviderDisabledException` y el mensaje sigue el camino de reintento y DLQ.
 - **Limite:** Brevo admite menos de 4 MB de adjuntos por correo transaccional. Se aplica ese limite como
   **suma de todos los adjuntos** (4 000 000 bytes), en dos puntos: al aceptar la notificacion, con el
   esquema del canal (`attachmentsTotalBytes` y `sizeBytes`, 400 con el motivo), y al despachar, donde un
@@ -73,12 +75,9 @@ que empezaron.
 
 ## Autenticacion
 
-El servicio exige un JWT en `Authorization: Bearer`. El modo se elige con `NOTIFICATION_AUTH_MODE`:
+El servicio exige un JWT de la plataforma central de seguridad en `Authorization: Bearer`, validado con **su clave publica** (RSA o EC) en el adaptador del puerto `TokenValidationPort`. `AUTH_PLATFORM_PUBLIC_KEY` es obligatoria siempre, tambien si solo se usa la cookie de sesion: sin ella el servicio no arranca. Usuario, tenant y rol salen unicamente de las claims configuradas; `X-Tenant-Id` y cualquier otro encabezado se ignoran. Todo token debe traer `exp`. Un token firmado sin sujeto, tenant o rol conocido responde `401` con `NTF-2004`; el resto de rechazos, `401` con `NTF-2001`. La claim de cliente (`azp`) es opcional.
 
-- **`local`** (por defecto): JWT firmado con un secreto compartido (`AUTH_JWT_HS256_SECRET`), que es obligatorio, de al menos 32 bytes y no tiene valor por defecto. Para desarrollo, activa el perfil `local` (`SPRING_PROFILES_ACTIVE=local`), que trae un secreto de desarrollo; el servicio no arranca con ese valor fuera del perfil `local`. Todo token debe traer la claim `exp`. Es la autenticacion interina para desarrollo y pruebas.
-- **`platform`**: tokens de la plataforma central de seguridad, validados con **su clave publica** (RSA o EC). Hay un solo adaptador activo por modo; un valor desconocido impide que la aplicacion arranque.
-
-Cada modo es un adaptador del puerto `TokenValidationPort`; el dominio y el filtro de autenticacion no cambian. En modo `platform` el arranque falla si falta la clave publica.
+Desarrollo local: `pwsh scripts/dev-token.ps1 -Tenant tenant-a -Role OPERADOR` genera un par RSA en `.dev-keys/` (ignorado en git), imprime el valor de `AUTH_PLATFORM_PUBLIC_KEY` que debes exportar antes de arrancar con `SPRING_PROFILES_ACTIVE=local` y emite un token RS256. Alternativa: una sesion real del PDP.
 
 Panel en vivo: `GET /notifications/stream` se autentica con la cabecera `Authorization: Bearer` o con la cookie de sesion `SECURITY_BASELINE_SESSION` (un `EventSource` nativo la envia con `withCredentials`). Sin credenciales o con una sesion invalida responde 401; si la plataforma de sesiones no responde, 503. Desde HU2-111 se retiraron `POST /notifications/stream/tickets` y el parametro `ticket`; `access_token` tampoco se acepta.
 
@@ -92,6 +91,7 @@ Contrato de la API (version 2.0.0): todas las rutas son literales, sin `:` ni `{
 | `AUTH_PLATFORM_SUBJECT_CLAIM` | Claim con el usuario o sistema | `sub` |
 | `AUTH_PLATFORM_TENANT_CLAIM` | Claim con el tenant | `tenantId` |
 | `AUTH_PLATFORM_ROLE_CLAIM` | Claim con el rol; puede ser un texto o una lista | `role` |
+| `AUTH_PLATFORM_CLIENT_CLAIM` | Claim opcional con el identificador del cliente | `azp` |
 | `AUTH_PLATFORM_CLOCK_SKEW_SECONDS` | Tolerancia de reloj | `30` |
 
 Los roles de la plataforma se traducen a los del servicio (`CLIENTE`, `OPERADOR`, `ADMINISTRADOR`) con una tabla, que se define en `application.yml` o en un archivo de configuracion (no en variables de entorno):
@@ -132,9 +132,10 @@ Esta resolucion de identidad es provisional (excepcion registrada en `specs/025-
 
 ## Rutas publicas con el PEP activo
 
-El starter del PEP exige credencial en toda ruta salvo las de `security.pep.enforcement.public-paths` (`SECURITY_PEP_PUBLIC_PATHS`, separadas por comas, patrones de ruta completa; `/**` final cubre el subarbol; no distingue metodo). Por defecto son solo lectura de documentacion y sondas: `GET /openapi/api-notificaciones.yaml` y `GET /v3/api-docs` (contrato, sin datos) y, en el puerto de gestion, `/actuator/health`, `/actuator/health/**` y `/actuator/prometheus`. Estan declaradas en `x-public-routes` del contrato y no son recursos que haya que registrar en el PDP.
+El starter del PEP exige credencial en toda ruta salvo las de `security.pep.enforcement.public-paths` (`SECURITY_PEP_PUBLIC_PATHS`, separadas por comas, patrones de ruta completa; `/**` final cubre el subarbol; no distingue metodo). Por defecto son lectura de documentacion y sondas, mas el webhook de Brevo: `GET /openapi/api-notificaciones.yaml` y `GET /v3/api-docs` (contrato, sin datos), `POST /providers/brevo/bounce-events` y, en el puerto de gestion, `/actuator/health`, `/actuator/health/**` y `/actuator/prometheus`. Estan declaradas en `x-public-routes` del contrato y no son recursos que haya que registrar en el PDP.
 
 - **Swagger UI** (`/swagger-ui.html`, `/swagger-ui/**`, `/v3/api-docs/swagger-config`) esta deshabilitada y no es publica por defecto; el perfil `local` la habilita. Para otro entorno: `SWAGGER_UI_ENABLED=true` y anadir esas rutas a `SECURITY_PEP_PUBLIC_PATHS`. El criterio esta en `specs/027-rutas-publicas-pep/research.md`.
+- **Webhook de rebotes de Brevo** (`POST /providers/brevo/bounce-events`, HU2-116) es publico y se protege con el secreto `BREVO_WEBHOOK_SECRET` en la cabecera `X-Brevo-Webhook-Secret`. Si `SECURITY_PEP_PUBLIC_PATHS` se define en el despliegue debe incluir `/providers/brevo/bounce-events`; de lo contrario el PEP responde 401 a Brevo.
 - Una prueba compara el contrato, `application.yml`, `application-local.yml` y la lista del filtro del servicio.
 
 ## Credenciales de GitHub Packages (starter del PEP)
@@ -170,12 +171,31 @@ Que demuestra cada panel de RNF y que no:
 - RNF-02: percentil 95 de `POST /notifications` con 202 frente a 0,2 s. El percentil se interpola entre cubos fijos del histograma, es una aproximacion.
 - RNF-03: aceptadas e intentos por minuto y por replica frente a 500. Muestra el ritmo observado, no la capacidad sostenida: la prueba de carga que la demuestra esta pendiente (dueno: equipo de desarrollo del componente, fecha 2026-11-05).
 - RNF-01: fraccion de raspados exitosos (`up`) en la ventana elegida frente al 99,5 %. Mide si el raspado funciono, no la disponibilidad percibida por los clientes; la lectura mensual necesita una ventana de 30 dias.
-- RNF-10: las filas de negocio y tecnicas leen las series del endpoint de metricas; una prueba automatizada (`ObservabilityDashboardE2ETest`) verifica que cada metrica y etiqueta del tablero y de las reglas existe y que cada consulta es valida en un Prometheus real.
+- RNF-10: las filas de negocio y tecnicas leen las series del endpoint de metricas; la prueba automatizada que verificaba contra un Prometheus real que cada metrica, etiqueta y consulta del tablero y de las reglas existe (`ObservabilityDashboardE2ETest`) se retiro de la suite por su coste; la verificacion queda pendiente de una ejecucion nocturna.
 - Alertas: `observability/alerts.yml` define `NotificationDispatchFailedHigh` (mas de 5 % de despachos fallidos en 5 minutos) y `NotificationServiceDown`. Se evaluan en Prometheus sin Alertmanager; el destino externo esta pendiente (dueno: equipo de desarrollo del componente, fecha 2026-11-12).
+- Pruebas de carga: el tablero muestra el resultado de la ultima prueba de RNF-02 y RNF-03 junto a sus umbrales; la prueba, su ejecucion y su alcance estan en [loadtest/README.md](loadtest/README.md).
+
+## Panel de salud de proveedores
+
+`GET /provider-health` (rol `OPERADOR`) devuelve, por proveedor y canal, estado, tasa de exito, latencia p95 y ultimo error, calculados con consultas a Prometheus sobre `notification_dispatched_total` y `notification_provider_duration_seconds`. Si Prometheus no responde dentro del tiempo limite, responde 503 con `NTF-5000` sin incluir su direccion. La respuesta incluye `grafanaUrl` (tablero `notification-service`) o nulo si `GRAFANA_URL` esta vacia.
+
+- `PROMETHEUS_URL` (por defecto `http://localhost:9090`) y `GRAFANA_URL` (vacia por defecto).
+- Ajustes opcionales: `PROVIDER_HEALTH_WINDOW` (5m), `PROVIDER_HEALTH_LOOKBACK` (15m), `PROVIDER_HEALTH_TIMEOUT` (2s), `PROVIDER_HEALTH_MIN_SAMPLES` (5), `PROVIDER_HEALTH_HEALTHY_THRESHOLD` (0,95), `PROVIDER_HEALTH_DOWN_THRESHOLD` (0,5) y `PROVIDER_HEALTH_RECOVERABLE_THRESHOLD` (0,5).
+- Limites: con el breaker de E3 abierto el proveedor puede salir `UNKNOWN` o ausente y no `DOWN` (dueno: equipo de backend, fecha 2026-12-15); un proveedor desactivado con trafico sale `DOWN` porque la metrica no distingue `ProviderDisabledException` de un fallo (dueno: equipo de backend, fecha 2026-12-15); los proveedores sin trafico en la ventana no aparecen; el instante del ultimo error tiene resolucion de 60 segundos.
+
+## Conmutacion entre proveedores y prueba de conexion
+
+Cada canal tiene una lista de proveedores en orden de preferencia (`NOTIFICATION_EMAIL_PROVIDERS`, `NOTIFICATION_SMS_PROVIDERS`, `NOTIFICATION_PUSH_PROVIDERS`). Si un proveedor falla o su breaker esta abierto, el despacho pasa al siguiente; el intento queda en el historial con `failedOver` y no cuenta para el tope de reintentos. El breaker es por proveedor y canal y se ajusta con `notification.provider.circuit-breaker.*`: `failure-rate-threshold` (50), `minimum-calls` (5), `sliding-window-size` (10), `open-wait` (30s) y `half-open-calls` (2); como variables de entorno, `NOTIFICATION_PROVIDER_CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD` y las equivalentes. `SIMULATED_PROVIDER_ENABLED` solo debe ser `true` en local y pruebas.
+
+`POST /provider-connection-tests` (rol `ADMINISTRADOR`) ejecuta una sonda sin crear notificaciones; su limite de tiempo es `notification.provider.probe.timeout` (`NOTIFICATION_PROVIDER_PROBE_TIMEOUT`, 5s).
+
+## Registro de dispositivos push
+
+`POST /devices`, `GET /devices`, `POST /device-removals` y `POST /device-erasures` guardan los tokens push cifrados con AES-GCM. `DEVICE_TOKEN_KEY` y `DEVICE_FINGERPRINT_KEY` (claves de 32 bytes en Base64, por ejemplo `openssl rand -base64 32`) son obligatorias salvo que todos los perfiles activos sean `local` o `test`, donde se usan claves efimeras; `DEVICE_TOKEN_KEY_VERSION` y `DEVICE_FINGERPRINT_KEY_VERSION` (1) permiten rotarlas. Ajustes: `notification.devices.retention-days` (270), `notification.devices.sweep-enabled` (true) y `notification.devices.sweep-batch-size` (200). Nunca pongas claves reales en el repositorio ni en el `.env.example`.
 
 ## Azure Key Vault
 
-Las variables de entorno del servicio (`MONGO_PASSWORD`, `BREVO_API_KEY`, `AUTH_JWT_HS256_SECRET`, etc.)
+Las variables de entorno del servicio (`MONGO_PASSWORD`, `BREVO_API_KEY`, `AUTH_PLATFORM_PUBLIC_KEY`, etc.)
 pueden leerse tambien desde un Azure Key Vault. Los contenedores (MongoDB, RabbitMQ, MinIO, ClamAV) no
 cambian.
 

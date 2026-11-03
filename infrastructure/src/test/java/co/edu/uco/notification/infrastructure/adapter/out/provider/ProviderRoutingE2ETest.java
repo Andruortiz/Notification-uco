@@ -201,10 +201,11 @@ class ProviderRoutingE2ETest {
       final ChannelRoute route =
           channelCatalogPort
               .findActiveRoute(ChannelType.of(channelType), TenantId.of("tenant-1"))
-              .block();
+              .block(Duration.ofSeconds(5));
       if (route != null && route.preferredProvider().equals(ProviderId.of(expectedProvider))) {
         return;
       }
+      Mono.delay(Duration.ofMillis(100)).block();
     }
     throw new IllegalStateException(
         "El catalogo nunca expuso " + expectedProvider + " para " + channelType);

@@ -1,6 +1,7 @@
 package co.edu.uco.notification.infrastructure.contract;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.IOException;
@@ -14,59 +15,50 @@ import tools.jackson.databind.ObjectMapper;
 
 class ProtectedResourcesCatalogTest {
 
-  private static final List<String> ROLES = ProtectedResourcesCatalog.ROLES;
-
-  private static List<String> profilesFor(final String minimumRole) {
-    return ProtectedResourcesCatalog.profilesFor(minimumRole);
-  }
-
   private static List<Map<String, Object>> catalog() {
     return ProtectedResourcesCatalog.entries();
-  }
-
-  private static long countForProfile(final List<Map<String, Object>> entries, final String role) {
-    return entries.stream()
-        .filter(entry -> ((List<?>) entry.get("profiles")).contains(role))
-        .count();
   }
 
   @Test
   void theCatalogHasOneEntryPerOperationWithoutDuplicates() {
     final List<Map<String, Object>> entries = catalog();
 
-    assertEquals(33, entries.size());
+    assertEquals(52, entries.size());
     assertEquals(
-        33,
+        52,
         entries.stream()
             .map(entry -> entry.get("method") + " " + entry.get("path"))
             .collect(Collectors.toSet())
             .size());
     assertEquals(
-        29, entries.stream().filter(entry -> "available".equals(entry.get("status"))).count());
+        30, entries.stream().filter(entry -> "available".equals(entry.get("status"))).count());
   }
 
   @Test
-  void everyEntryDeclaresARegistrablePathARoleAndAnOperationId() {
+  void everyEntryDeclaresARegistrablePathAllowedRolesAndAnOperationId() {
     for (final Map<String, Object> entry : catalog()) {
       assertTrue(((String) entry.get("path")).matches(ApiContract.PATH_REGEX), entry.toString());
-      assertTrue(ROLES.contains(entry.get("minimumRole")), entry.toString());
       assertTrue(Set.of("GET", "POST", "PUT").contains(entry.get("method")), entry.toString());
       assertTrue(entry.get("operationId") != null, entry.toString());
+      assertFalse(entry.containsKey("minimumRole"), entry.toString());
+      assertFalse(entry.containsKey("profiles"), entry.toString());
+      final List<?> roles = (List<?>) entry.get("allowedRoles");
+      assertFalse(roles.isEmpty(), entry.toString());
+      assertTrue(ProtectedResourcesCatalog.ROLES.containsAll(roles), entry.toString());
     }
   }
 
   @Test
-  void profilesAreCumulativeAndComputedFromTheMinimumRole() {
-    final List<Map<String, Object>> entries = catalog();
-    final long clientes =
-        entries.stream().filter(entry -> "CLIENTE".equals(entry.get("minimumRole"))).count();
-    final long operadores =
-        entries.stream().filter(entry -> "OPERADOR".equals(entry.get("minimumRole"))).count();
-
-    assertEquals(clientes, countForProfile(entries, "CLIENTE"));
-    assertEquals(clientes + operadores, countForProfile(entries, "OPERADOR"));
-    assertEquals(33, countForProfile(entries, "ADMINISTRADOR"));
-    assertEquals(List.of("OPERADOR", "ADMINISTRADOR"), profilesFor("OPERADOR"));
+  void theCatalogCarriesTheSixRolesOfTheContract() {
+    assertEquals(
+        List.of(
+            "ADMINISTRADOR_PLATAFORMA",
+            "ADMINISTRADOR_APLICACION",
+            "EDITOR_PLANTILLAS",
+            "OPERADOR",
+            "AUDITOR",
+            "CLIENTE"),
+        ProtectedResourcesCatalog.ROLES);
   }
 
   @Test
@@ -75,6 +67,6 @@ class ProtectedResourcesCatalogTest {
     ProtectedResourcesCatalog.write(target, catalog());
 
     final List<?> written = new ObjectMapper().readValue(target.toFile(), List.class);
-    assertEquals(33, written.size());
+    assertEquals(52, written.size());
   }
 }

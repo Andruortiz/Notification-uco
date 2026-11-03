@@ -34,8 +34,10 @@ class DeviceServiceTest {
   private static final TenantId TENANT = TenantId.of("tenant-1");
   private static final AuthenticatedPrincipal CLIENT =
       new AuthenticatedPrincipal("app-1", TENANT, Role.CLIENTE);
+  private static final AuthenticatedPrincipal APP_ADMIN =
+      new AuthenticatedPrincipal("app-admin-1", TENANT, Role.ADMINISTRADOR_APLICACION);
   private static final AuthenticatedPrincipal ADMIN =
-      new AuthenticatedPrincipal("admin-1", TENANT, Role.ADMINISTRADOR);
+      new AuthenticatedPrincipal("admin-1", TENANT, Role.ADMINISTRADOR_PLATAFORMA);
 
   private static final RecipientIdentity APP_IDENTITY = identity("app-1");
   private static final RecipientIdentity BOB_IDENTITY = identity("bob");
@@ -137,7 +139,23 @@ class DeviceServiceTest {
   }
 
   @Test
-  void erasureIsAdministratorOnly() {
+  void anAdminOfTheApplicationNeitherErasesNorActsOnAnotherSubject() {
+    when(registry.eraseBySubject(TENANT, "bob")).thenReturn(Mono.empty());
+
+    StepVerifier.create(service.erase(APP_ADMIN, "bob"))
+        .expectError(DeviceSubjectForbiddenException.class)
+        .verify();
+    StepVerifier.create(service.list(APP_ADMIN, "bob"))
+        .expectError(DeviceSubjectForbiddenException.class)
+        .verify();
+    StepVerifier.create(service.register(APP_ADMIN, DevicePlatform.WEB, "token-abcdef", "bob"))
+        .expectError(DeviceSubjectForbiddenException.class)
+        .verify();
+    verify(registry, never()).eraseBySubject(TENANT, "bob");
+  }
+
+  @Test
+  void erasureIsPlatformAdministratorOnly() {
     when(registry.eraseBySubject(TENANT, "bob")).thenReturn(Mono.empty());
 
     StepVerifier.create(service.erase(CLIENT, "bob"))

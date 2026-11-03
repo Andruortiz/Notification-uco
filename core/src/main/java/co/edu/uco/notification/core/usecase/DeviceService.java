@@ -60,7 +60,7 @@ public final class DeviceService
     return Mono.defer(
         () -> {
           Preconditions.requireNonBlank(deviceId, "deviceId must not be blank");
-          final String scope = isAdmin(principal) ? null : principal.subject();
+          final String scope = isPlatformAdmin(principal) ? null : principal.subject();
           return registry
               .remove(principal.tenantId(), deviceId, scope)
               .flatMap(
@@ -74,7 +74,7 @@ public final class DeviceService
     return Mono.defer(
         () -> {
           Preconditions.requireNonBlank(subject, "subject must not be blank");
-          if (!isAdmin(principal)) {
+          if (!isPlatformAdmin(principal)) {
             return Mono.error(new DeviceSubjectForbiddenException());
           }
           return registry.eraseBySubject(principal.tenantId(), subject);
@@ -86,13 +86,13 @@ public final class DeviceService
     if (subject == null || subject.isBlank() || subject.equals(principal.subject())) {
       return principal.subject();
     }
-    if (!isAdmin(principal)) {
+    if (!isPlatformAdmin(principal)) {
       throw new DeviceSubjectForbiddenException();
     }
     return subject;
   }
 
-  private static boolean isAdmin(final AuthenticatedPrincipal principal) {
-    return principal.role() == Role.ADMINISTRADOR;
+  private static boolean isPlatformAdmin(final AuthenticatedPrincipal principal) {
+    return principal.roles().contains(Role.ADMINISTRADOR_PLATAFORMA);
   }
 }

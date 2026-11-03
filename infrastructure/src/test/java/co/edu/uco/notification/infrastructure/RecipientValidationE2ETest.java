@@ -353,7 +353,9 @@ class RecipientValidationE2ETest {
     assertEquals("hard_bounce", marked.get("reason"));
     assertEquals("b***@example.com", marked.get("address"));
     assertEquals(marked.get("markedAt"), replayed.get("markedAt"));
-    assertEquals("bounced.user@example.com", lookup("tenant-a", Role.ADMINISTRADOR).get("address"));
+    assertEquals(
+        "bounced.user@example.com",
+        lookup("tenant-a", Role.ADMINISTRADOR_PLATAFORMA).get("address"));
 
     final int before = bounceEmail.invocations();
     final Instant start = Instant.now();
@@ -379,10 +381,18 @@ class RecipientValidationE2ETest {
         .isForbidden();
     send("tenant-a", "bounce-3", "EMAIL", ADDRESS).expectStatus().isEqualTo(409);
 
-    markCall("/recipients/undeliverable-releases", "tenant-a", Role.ADMINISTRADOR, ADDRESS)
+    markCall(
+            "/recipients/undeliverable-releases",
+            "tenant-a",
+            Role.ADMINISTRADOR_PLATAFORMA,
+            ADDRESS)
         .expectStatus()
         .isNoContent();
-    markCall("/recipients/undeliverable-releases", "tenant-a", Role.ADMINISTRADOR, ADDRESS)
+    markCall(
+            "/recipients/undeliverable-releases",
+            "tenant-a",
+            Role.ADMINISTRADOR_PLATAFORMA,
+            ADDRESS)
         .expectStatus()
         .isNoContent();
     assertFalse((Boolean) lookup("tenant-a", Role.OPERADOR).get("marked"));
@@ -421,7 +431,11 @@ class RecipientValidationE2ETest {
     assertEquals(false, lookup("tenant-y", Role.OPERADOR).get("marked"));
     send("tenant-x", "iso-x2", "EMAIL", ADDRESS).expectStatus().isEqualTo(409);
     send("tenant-y", "iso-y2", "EMAIL", ADDRESS).expectStatus().isAccepted();
-    markCall("/recipients/undeliverable-releases", "tenant-y", Role.ADMINISTRADOR, ADDRESS)
+    markCall(
+            "/recipients/undeliverable-releases",
+            "tenant-y",
+            Role.ADMINISTRADOR_PLATAFORMA,
+            ADDRESS)
         .expectStatus()
         .isNoContent();
     assertEquals(true, lookup("tenant-x", Role.OPERADOR).get("marked"));

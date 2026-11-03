@@ -6,21 +6,21 @@ info:
     toda ruta es literal, sin `:` ni `{}`, para que el PDP la registre como recurso protegido por
     igualdad exacta de método y ruta. Los identificadores de recurso viajan en la query string
     (consultas) o en el cuerpo (comandos). Cada operación declara `x-status` (`available` si el
-    servicio la sirve, `planned` si solo está documentada) y `x-minimum-role` (rol mínimo: `CLIENTE`,
-    `OPERADOR` o `ADMINISTRADOR`, jerárquico). CU-03 (despachar) no
+    servicio la sirve, `planned` si solo está documentada) y `x-allowed-roles` (lista de roles permitidos por operación;
+    sin orden entre ellos; el permiso efectivo es la unión de los roles del solicitante). CU-03 (despachar) no
     tiene endpoint propio -- es un proceso interno disparado por el consumidor de RabbitMQ, nunca
     invocado directamente por un cliente. Autenticación (HU2-096): toda operación exige
     `Authorization: Bearer <JWT>` -- un token firmado por la plataforma de Seguridad y validado con su
-    clave pública, con las claims `sub`, `tenantId`, `role` (`ADMINISTRADOR`, `OPERADOR` o `CLIENTE`,
-    jerárquico) y `exp`, y una claim de cliente opcional. El tenant y el rol del solicitante salen
+    clave pública, con las claims `sub`, `tenantId`, `role` (texto o lista de los roles `ADMINISTRADOR_PLATAFORMA`, `ADMINISTRADOR_APLICACION`,
+    `EDITOR_PLANTILLAS`, `OPERADOR`, `AUDITOR` y `CLIENTE`; los desconocidos se ignoran) y `exp`, y una claim de cliente opcional. El tenant y el rol del solicitante salen
     siempre del token, nunca de un encabezado (`X-Tenant-Id` no se acepta). Una claim obligatoria
     ausente responde 401 con NTF-2004; el resto de rechazos, 401 con NTF-2001. Con el PEP activo, la credencial puede ser también la
     cookie de sesión `SECURITY_BASELINE_SESSION` (HU2-101): el servicio resuelve tenant y usuario
     consultando la sesión a la plataforma de Seguridad, el rol efectivo es CLIENTE y el Bearer tiene
     precedencia sobre la cookie. El PEP puede responder 401, 403 o 503 con `PepErrorResponse` y la
     cabecera `X-Decision-Id`; si la plataforma de sesiones no responde, el servicio responde 503 con
-    `ErrorResponse` (NTF-2003). GET /configuration (HU2-073) exige como mínimo
-    el rol ADMINISTRADOR.
+    `ErrorResponse` (NTF-2003). GET /configuration (HU2-073) exige
+    el rol ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
 
     Registro de cambios 2.0.0 (incompatible con 1.0.0, corte directo sin alias ni prefijo /v2):
 
@@ -37,7 +37,7 @@ info:
     `NotificationHistoryItem` y `DeliveryAttempt` declaran `required`.
     7. Se añade el esquema de seguridad `SessionCookie` y las respuestas 401, 403 y 503 del PEP con
     `X-Decision-Id`.
-    8. Cada operación declara `x-status` y `x-minimum-role`.
+    8. Cada operación declara `x-status` y `x-allowed-roles`.
     9. HU2-111, incompatible: se retira `POST /notifications/stream/tickets` y el parámetro `ticket`
     de `GET /notifications/stream`. El stream se autentica con Bearer o con la cookie de sesión.
     10. HU2-103: se declaran en `x-public-routes` las rutas de documentación que no exigen credencial
@@ -67,6 +67,17 @@ info:
     4. `POST /template-renders` limita `values` a 50 variables de hasta 2000 caracteres.
     5. Límites conocidos documentados: un reenvío con adjuntos responde 400; `GET /provider-health`
     puede mostrar UNKNOWN o no listar un proveedor cuyo breaker de conmutación está abierto.
+
+    Registro de cambios 2.2.0 (autorización no lineal por roles, HU2-123; rutas sin cambios):
+
+    1. `x-minimum-role` (rol mínimo jerárquico) se sustituye por `x-allowed-roles` (lista de roles permitidos) en las 33
+    operaciones. El permiso efectivo de un solicitante es la unión de sus roles.
+    2. `role` (`ADMINISTRADOR`, `OPERADOR`, `CLIENTE`) se sustituye por seis roles sin orden: `ADMINISTRADOR_PLATAFORMA`,
+    `ADMINISTRADOR_APLICACION`, `EDITOR_PLANTILLAS`, `OPERADOR`, `AUDITOR` y `CLIENTE`. Un token cuyo `role` solo trae
+    valores desconocidos, como `ADMINISTRADOR`, responde 401 con NTF-2004.
+    3. El claim `role` acepta un texto o una lista; los valores desconocidos se ignoran.
+    4. Una operación que no admite ninguno de los roles del solicitante responde 403 con NTF-2002 (sin PEP) o con el
+    rechazo del PEP.
 
     Tabla de migración (método y ruta v1 a método y ruta v2):
 
@@ -99,7 +110,35 @@ info:
     | (nuevo, HU2-119) | POST /template-archivals, POST /template-variable-detections, POST /template-renders (available) |
     | (nuevo, HU2-120) | POST /devices, GET /devices, POST /device-removals, POST /device-erasures (available) |
     | (nuevo, HU2-121) | GET /provider-health (available) |
-  version: 2.1.0
+
+    Registro de cambios 2.3.1 (HU2-126 implementada, adiciones compatibles sobre 2.3.0):
+    1. `POST /template-previews` (`previewTemplate`) pasa de planned a available; sin rutas nuevas ni cambios en rutas existentes.
+    2. `sampleValues` pasa de planned a available en `CreateTemplateRequest`, `UpdateTemplateRequest` y `TemplateResponse`.
+    3. Esquemas nuevos `PreviewTemplateRequest`, `TemplatePreviewResponse`, `SmsSegmentation` y `SmsEncoding`. Sin códigos NTF nuevos: la vista previa reutiliza NTF-1007, NTF-1008 y NTF-1009.
+
+    Registro de cambios 2.3.0 (contrato del nivel 2, adiciones compatibles sobre 2.2.0; ninguna ruta existente cambia):
+
+    1. Las 19 operaciones nuevas nacen `planned` y no se sirven hasta que su historia las implemente: HU2-125
+    `GET /audit-entries` y `GET /audit-entries/detail`; HU2-126 `POST /template-previews`; HU2-127 no añade rutas;
+    HU2-128 `PUT /template-mappings`, `GET /template-mappings` y `POST /template-mapping-resolutions`; HU2-129
+    `POST /template-provider-links`, `GET /template-provider-links`, `POST /template-approval-syncs`,
+    `POST /template-publications`, `POST /template-unpublications`, `POST /provider-template-allowlist-entries`,
+    `GET /provider-template-allowlist-entries` y `POST /provider-template-allowlist-removals`; HU2-130
+    `POST /template-blocks`, `PUT /template-blocks`, `GET /template-blocks`, `GET /template-blocks/detail` y
+    `POST /template-block-archivals`.
+    2. Propiedades planned en esquemas de operaciones ya servidas (`x-status: planned` en la propiedad): HU2-127
+    `templateId`, `templateValues` y `event` en `SendNotificationRequest`; HU2-126 `sampleValues` en
+    `CreateTemplateRequest`, `UpdateTemplateRequest` y `TemplateResponse`; HU2-130 `blockRefs` en `TemplateResponse`.
+    3. Códigos NTF planificados, sin entrada en `ErrorCode` ni en el enum de `ErrorResponse.code` hasta que tengan
+    emisor en el código: HU2-127 NTF-1011 TEMPLATE_CONTENT_CONFLICT y NTF-1012 TEMPLATE_CHANNEL_MISMATCH; HU2-128
+    NTF-1013 INVALID_MAPPING_PATH, NTF-1014 UNKNOWN_MAPPING_VARIABLE, NTF-1015 MAPPING_LIMIT_EXCEEDED, NTF-1016
+    EVENT_LIMIT_EXCEEDED y NTF-3054 TEMPLATE_MAPPING_VERSION_CONFLICT; HU2-129 NTF-3071 PROVIDER_TEMPLATE_NOT_FOUND,
+    NTF-3072 PROVIDER_TEMPLATE_NOT_APPROVED, NTF-3073 TEMPLATE_PUBLISHED, NTF-3074 TEMPLATE_NOT_WHATSAPP y NTF-4070
+    PROVIDER_TEMPLATE_UNAVAILABLE; HU2-130 NTF-3080 BLOCK_NOT_FOUND a NTF-3088 BLOCK_ARCHIVED; HU2-125 NTF-3090
+    AUDIT_ENTRY_NOT_FOUND y NTF-5070 AUDIT_APPEND_FAILED.
+    4. Fuera de este contrato: B5, E6, F1, F6, D8, E4 y H6.
+
+  version: 2.3.1
 servers:
   - url: /
     description: >
@@ -162,14 +201,17 @@ tags:
   - name: Configuración
     description: >
       CU-11 (lectura). GET /configuration expone los parámetros gestionables y la configuración en uso;
-      exige el rol ADMINISTRADOR.
+      exige el rol ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
   - name: Dispositivos
     description: >
       HU2-120. Registro de dispositivos push por identidad de destinatario. Los tokens se almacenan
-      cifrados y se devuelven enmascarados salvo para ADMINISTRADOR.
+      cifrados y se devuelven enmascarados salvo para ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
   - name: Plantillas
     description: >
       HU2-119. Plantillas con variables {{nombre}} por canal e idioma, propias de cada tenant.
+  - name: Auditoría
+    description: >
+      HU2-125. Consulta de solo lectura del registro de actividad de configuración. Nunca contiene contenido de mensajes.
 
 paths:
   /notifications:
@@ -185,7 +227,7 @@ paths:
         misma notificación en vez de crear una segunda (idempotencia).
       operationId: sendNotification
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -272,10 +314,10 @@ paths:
       description: >
         CU-05. Busca notificaciones por filtros combinables. Cada resultado incluye su recorrido
         completo de intentos, no solo el estado actual (a diferencia de GET /notifications/detail, que
-        solo exige rol CLIENTE). Requiere rol OPERADOR o ADMINISTRADOR.
+        solo exige rol CLIENTE). Requiere rol OPERADOR, ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
       operationId: searchNotifications
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - name: recipientId
           in: query
@@ -363,7 +405,7 @@ paths:
         sesión inválida, responde 401; si la plataforma de sesiones no responde, 503.
       operationId: subscribeToNotificationUpdates
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - name: recipientId
           in: query
@@ -444,7 +486,7 @@ paths:
         procesar los elementos (la deduplicación por externalId evita duplicar notificaciones).
       operationId: sendNotificationBatch
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -494,7 +536,7 @@ paths:
       description: CU-04. Devuelve el estado actual, canal, proveedor y marca de tiempo del último intento.
       operationId: getNotificationStatus
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - $ref: '#/components/parameters/NotificationId'
       responses:
@@ -544,11 +586,11 @@ paths:
       description: >
         CU-06. Solo válido si el estado actual es FAILED o RECOVERABLE. Reencola la notificación y
         registra el reintento como manual (distinto del automático) para efectos de auditoría.
-        Requiere rol OPERADOR o ADMINISTRADOR. No reinicia el contador de intentos. 400 con NTF-3022 si el estado actual no admite
+        Requiere rol OPERADOR o ADMINISTRADOR_PLATAFORMA. No reinicia el contador de intentos. 400 con NTF-3022 si el estado actual no admite
         reintento; 409 si otro proceso (manual o automático) ganó la carrera sobre la misma notificación.
       operationId: retryNotification
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -617,7 +659,7 @@ paths:
         respuesta.
       operationId: issueAttachmentUpload
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       requestBody:
         required: true
         content:
@@ -688,7 +730,7 @@ paths:
         estado vigente sin volver a analizar. Si la subida ya venció, responde 409 y pasa a FAILED.
       operationId: completeAttachmentUpload
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       requestBody:
         required: true
         content:
@@ -773,7 +815,7 @@ paths:
       summary: Consultar el estado de una subida
       operationId: getAttachmentUpload
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       parameters:
         - $ref: '#/components/parameters/UploadId'
       responses:
@@ -828,7 +870,7 @@ paths:
         credencial.
       operationId: listChannels
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, AUDITOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       responses:
         '200':
           headers:
@@ -849,13 +891,13 @@ paths:
       tags: [Catálogo]
       summary: Registrar o actualizar un canal
       description: >
-        CU-07. Requiere permiso de ADMINISTRADOR. Da de alta el canal en el catálogo, sin
+        CU-07. Requiere rol ADMINISTRADOR_PLATAFORMA. Da de alta el canal en el catálogo, sin
         desplegar código (RF-19). Si el canal ya existe, esta misma operación lo actualiza.
         Bloqueado: el catálogo dinámico ya existe, pero su escritura por API aún no está
         habilitada.
       operationId: registerChannel
       x-status: planned
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -900,7 +942,7 @@ paths:
         valor de una credencial.
       operationId: listProviders
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, AUDITOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       responses:
         '200':
           headers:
@@ -921,13 +963,13 @@ paths:
       tags: [Catálogo]
       summary: Registrar un proveedor para uno o más canales
       description: >
-        CU-08. Requiere permiso de ADMINISTRADOR y que el adaptador del proveedor ya exista en el
+        CU-08. Requiere rol ADMINISTRADOR_PLATAFORMA y que el adaptador del proveedor ya exista en el
         código (no puede registrarse un providerId sin adaptador). Si falta una credencial
         requerida, el proveedor queda registrado pero deshabilitado -- nunca a medias en silencio.
         Bloqueado hasta que exista el catálogo dinámico (Fase 6).
       operationId: registerProvider
       x-status: planned
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -968,13 +1010,13 @@ paths:
       tags: [Configuración]
       summary: Consultar los parámetros gestionables y la configuración en uso
       description: >
-        CU-11 (lectura). Requiere permiso de ADMINISTRADOR. Devuelve el registro de parámetros que el
+        CU-11 (lectura). Requiere rol ADMINISTRADOR_PLATAFORMA. Devuelve el registro de parámetros que el
         servicio permite gestionar y, para la réplica que responde, la versión de la configuración en uso,
         su origen y las claves aceptadas que esperan un reinicio. Ningún campo contiene credenciales,
         topología de colas ni direcciones base.
       operationId: getConfiguration
       x-status: available
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       responses:
         '200':
           headers:
@@ -1004,11 +1046,11 @@ paths:
         Un destinatario que nunca declaró preferencias no es un error: se devuelve el valor por
         defecto (optedOutAll false, acceptedChannels vacía -- todos los canales aceptados -- y
         updatedAt nulo). Las preferencias de un tenant nunca son visibles desde otro, aunque usen el
-        mismo recipientId. Requiere rol CLIENTE o superior. Planificada: sin controlador REST todavía
+        mismo recipientId. Requiere rol CLIENTE o ADMINISTRADOR_APLICACION. Planificada: sin controlador REST todavía
         (el mapeo de rol queda documentado para cuando exista).
       operationId: getRecipientPreferences
       x-status: planned
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       responses:
         '200':
           headers:
@@ -1035,11 +1077,11 @@ paths:
         reintentos --, una notificación de ese destinatario termina en DISCARDED sin contactar a
         ningún proveedor si está dado de baja o si su canal no está entre los aceptados. La aceptación
         de notificaciones no cambia, y las notificaciones ya terminales no se modifican. Requiere rol
-        CLIENTE o superior. Planificada: sin controlador REST todavía (el mapeo de rol queda
+        CLIENTE o ADMINISTRADOR_APLICACION. Planificada: sin controlador REST todavía (el mapeo de rol queda
         documentado para cuando exista).
       operationId: updateRecipientPreferences
       x-status: planned
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, ADMINISTRADOR_APLICACION]
       requestBody:
         required: true
         content:
@@ -1084,11 +1126,11 @@ paths:
       description: >
         HU2-118. Devuelve la cabecera de la notificación y sus intentos de entrega ordenados por fecha,
         con latencia, causa del fallo (conjunto cerrado, nunca texto del proveedor) y correlationId.
-        El destinatario sale enmascarado salvo para ADMINISTRADOR. El tenant sale de la sesión.
+        El destinatario sale enmascarado salvo para ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION. El tenant sale de la sesión.
         Un identificador inexistente o de otro tenant responde 404.
       operationId: getNotificationTimeline
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - $ref: '#/components/parameters/NotificationId'
       responses:
@@ -1125,14 +1167,14 @@ paths:
         HU2-117. Solo válido si la notificación original está en FAILED. Crea una notificación nueva
         por el canal indicado, con un externalId derivado de máximo 255 caracteres, y no modifica la
         original. La dirección recibida es dato personal: no se devuelve ni se registra. Requiere
-        rol OPERADOR o ADMINISTRADOR. Límite conocido: una notificación original con adjuntos no se
+        rol OPERADOR o ADMINISTRADOR_PLATAFORMA. Límite conocido: una notificación original con adjuntos no se
         reenvía y responde 400 con NTF-3070 (RESEND_CHANNEL_INVALID); lo mismo ocurre si el canal nuevo
         es el original o el externalId derivado supera el máximo. Un canal no disponible responde
         400 con NTF-1003 y una dirección con formato inválido para el canal, 400 con NTF-1006. Si
         el estado original no es FAILED, 400 con NTF-3022 (NOTIFICATION_STATE_NOT_ALLOWED).
       operationId: resendNotification
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1175,10 +1217,10 @@ paths:
         HU2-114. Ejecuta una sonda contra el proveedor del canal indicado sin crear notificaciones.
         Responde 200 también cuando la prueba falla (status FAILED con un errorCode cerrado); nunca
         devuelve credenciales ni texto crudo del proveedor. Solo una prueba en vuelo por par (canal,
-        proveedor) y por réplica; la segunda recibe 429. Requiere rol ADMINISTRADOR.
+        proveedor) y por réplica; la segunda recibe 429. Requiere rol ADMINISTRADOR_PLATAFORMA.
       operationId: testProviderConnection
       x-status: available
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1231,7 +1273,7 @@ paths:
         no responde, 503 con NTF-5000; el cuerpo nunca incluye su dirección.
       operationId: getProviderHealth
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       responses:
         '200':
           headers:
@@ -1274,10 +1316,10 @@ paths:
       summary: Consultar si una dirección está marcada como no entregable
       description: >
         HU2-116. Consulta sin efectos; es POST para que la dirección no viaje en la URL. La dirección
-        sale enmascarada. Requiere rol OPERADOR o ADMINISTRADOR.
+        sale enmascarada. Requiere rol OPERADOR o ADMINISTRADOR_PLATAFORMA.
       operationId: lookupUndeliverableRecipient
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [OPERADOR, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1314,10 +1356,10 @@ paths:
       summary: Levantar la marca de no entregable de una dirección
       description: >
         HU2-116. Permite volver a enviar a la dirección. Idempotente: levantar una marca inexistente
-        responde 204. Requiere rol ADMINISTRADOR.
+        responde 204. Requiere rol ADMINISTRADOR_PLATAFORMA.
       operationId: releaseUndeliverableRecipient
       x-status: available
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1349,14 +1391,14 @@ paths:
       tags: [Dispositivos]
       summary: Registrar un dispositivo push
       description: >
-        HU2-120. Asocia un token de dispositivo a la identidad de la sesión. CLIENTE y OPERADOR operan
-        solo sobre su propia identidad (un subject ajeno responde 403); ADMINISTRADOR puede indicar
-        subject. Registrar un token ya existente en el tenant lo deja asociado a la sesión y la
+        HU2-120. Asocia un token de dispositivo a la identidad de la sesión. CLIENTE opera
+        solo sobre su propia identidad; la lista de roles de esta operación no incluye administradores, así que un subject ajeno
+        responde 403 hasta que Seguridad habilite roles por sesión. Registrar un token ya existente en el tenant lo deja asociado a la sesión y la
         respuesta no revela si era de otra identidad: 201 si se creó, 200 si ya existía para la sesión.
         Nunca responde 409. El token se almacena cifrado.
       operationId: registerDevice
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE]
       requestBody:
         required: true
         content:
@@ -1397,15 +1439,15 @@ paths:
       summary: Listar los dispositivos registrados
       description: >
         HU2-120. Lista los dispositivos de la identidad de la sesión con el token enmascarado
-        (**** y los últimos 4 caracteres). ADMINISTRADOR puede indicar subject y ve el token completo.
+        (**** y los últimos 4 caracteres). Un subject distinto del de la sesión responde 403 con la lista de roles actual.
       operationId: listDevices
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE]
       parameters:
         - name: subject
           in: query
           required: false
-          description: Sujeto cuyos dispositivos se listan. Solo ADMINISTRADOR; otros roles reciben 403.
+          description: Sujeto cuyos dispositivos se listan. Hoy solo el sujeto de la sesión; un valor distinto responde 403.
           schema:
             type: string
       responses:
@@ -1441,7 +1483,7 @@ paths:
         (NTF-3041), sin revelar su existencia.
       operationId: removeDevice
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE]
       requestBody:
         required: true
         content:
@@ -1476,10 +1518,10 @@ paths:
       summary: Borrar los dispositivos de un titular
       description: >
         HU2-120. Borra la identidad del subject y todos sus dispositivos en el tenant. Responde 204
-        también si no existían. Requiere rol ADMINISTRADOR.
+        también si no existían. Requiere rol ADMINISTRADOR_PLATAFORMA.
       operationId: eraseRecipientDevices
       x-status: available
-      x-minimum-role: ADMINISTRADOR
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1513,10 +1555,10 @@ paths:
       description: >
         HU2-119. Crea una plantilla con variables {{nombre}} detectadas en asunto y cuerpo; lo no
         declarado es obligatorio. Única por (tenant, key, channel, language). El canal debe tener ruta
-        activa para el tenant. Requiere rol OPERADOR o ADMINISTRADOR.
+        activa para el tenant. Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
       operationId: createTemplate
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1550,11 +1592,11 @@ paths:
       summary: Actualizar una plantilla
       description: >
         HU2-119. Control optimista: version debe coincidir con la vigente; si no, 409 con
-        NTF-3052. Una plantilla archivada no se actualiza (NTF-3053). Requiere rol OPERADOR o
-        ADMINISTRADOR.
+        NTF-3052. Una plantilla archivada no se actualiza (NTF-3053). Requiere rol EDITOR_PLANTILLAS o
+        ADMINISTRADOR_PLATAFORMA.
       operationId: updateTemplate
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1591,7 +1633,7 @@ paths:
       description: HU2-119. Lista las plantillas del tenant con filtros combinables y paginación.
       operationId: listTemplates
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - name: category
           in: query
@@ -1657,7 +1699,7 @@ paths:
       description: HU2-119. Una plantilla ajena o inexistente responde 404.
       operationId: getTemplate
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       parameters:
         - $ref: '#/components/parameters/TemplateId'
       responses:
@@ -1692,10 +1734,10 @@ paths:
       summary: Archivar una plantilla
       description: >
         HU2-119. La plantilla sigue visible en el listado con estado ARCHIVADA y deja de poder
-        renderizarse. Requiere rol OPERADOR o ADMINISTRADOR.
+        renderizarse. Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
       operationId: archiveTemplate
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1734,10 +1776,10 @@ paths:
       summary: Detectar las variables de un texto
       description: >
         HU2-119. Devuelve las variables {{nombre}} del asunto y del cuerpo, sin duplicados y en orden
-        de aparición, sin guardar nada. Requiere rol OPERADOR o ADMINISTRADOR.
+        de aparición, sin guardar nada. Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
       operationId: detectTemplateVariables
       x-status: available
-      x-minimum-role: OPERADOR
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1778,7 +1820,7 @@ paths:
         obligatoria responde 422 con la lista completa en missingVariables.
       operationId: renderTemplate
       x-status: available
-      x-minimum-role: CLIENTE
+      x-allowed-roles: [CLIENTE, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
       requestBody:
         required: true
         content:
@@ -1819,6 +1861,870 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /audit-entries:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    get:
+      tags: [Auditoría]
+      summary: Listar entradas de auditoría de la configuración
+      description: >
+        HU2-125 (planificada). Solo lectura. Devuelve las entradas del tenant del solicitante más las de
+        ámbito PLATFORM; nunca las de otro tenant. Sin antes ni después. Un rango con from posterior a to, o
+        limit u offset fuera de rango, responde 400. Requiere rol AUDITOR o ADMINISTRADOR_PLATAFORMA.
+      operationId: listAuditEntries
+      x-status: planned
+      x-allowed-roles: [AUDITOR, ADMINISTRADOR_PLATAFORMA]
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+        - name: actor
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: resourceType
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^[A-Z][A-Z0-9_]{2,39}$'
+        - name: resourceId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: action
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/AuditAction'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          description: Desplazamiento de la página; más de 10000 responde 400. Se migrará a cursor.
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 10000
+            default: 0
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Página de entradas en resumen.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEntrySearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /audit-entries/detail:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    get:
+      tags: [Auditoría]
+      summary: Consultar una entrada de auditoría
+      description: >
+        HU2-125 (planificada). Devuelve la entrada completa, con antes y después. Una entrada de otro tenant
+        responde 404 igual que una inexistente. Requiere rol AUDITOR o ADMINISTRADOR_PLATAFORMA.
+      operationId: getAuditEntry
+      x-status: planned
+      x-allowed-roles: [AUDITOR, ADMINISTRADOR_PLATAFORMA]
+      parameters:
+        - name: entryId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Entrada completa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEntryDetail'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-previews:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Previsualizar una plantilla en vivo
+      description: >
+        HU2-126. Sin estado: no guarda nada. Pasa por el renderizador único y devuelve el asunto,
+        el cuerpo, las variables faltantes, los conteos de caracteres y la segmentación SMS. Los valores no se
+        persisten ni se registran. Un bloque inexistente, archivado o cíclico responde 409. Requiere rol
+        EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
+      operationId: previewTemplate
+      x-status: available
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewTemplateRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Vista previa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplatePreviewResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-mappings:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    put:
+      tags: [Plantillas]
+      summary: Guardar el mapeo de evento de una plantilla
+      description: >
+        HU2-128 (planificada). Guarda el único mapeo de la plantilla, con control optimista por version (0 si
+        aún no existe). Rutas simples separadas por punto, hasta 8 segmentos y 200 caracteres; hasta 50 entradas.
+        Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
+      operationId: saveTemplateMapping
+      x-status: planned
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveTemplateMappingRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Mapeo guardado con su nueva versión.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateMappingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Plantillas]
+      summary: Consultar el mapeo de evento de una plantilla
+      description: >
+        HU2-128 (planificada). Devuelve el mapeo vigente; si la plantilla existe y aún no tiene mapeo, responde 200
+        con la lista vacía. Requiere rol CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION o
+        ADMINISTRADOR_PLATAFORMA.
+      operationId: getTemplateMapping
+      x-status: planned
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
+      parameters:
+        - $ref: '#/components/parameters/TemplateId'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Mapeo vigente (lista vacía si no existe).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateMappingResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-mapping-resolutions:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Resolver los valores de una plantilla a partir de un evento
+      description: >
+        HU2-128 (planificada). Aplica el mapeo de la plantilla sobre el evento y devuelve los valores resueltos.
+        Un evento por encima de 32768 caracteres o profundidad 10 responde 400 EVENT_LIMIT_EXCEEDED sin eco de
+        su contenido. Requiere rol CLIENTE, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
+      operationId: resolveTemplateMapping
+      x-status: planned
+      x-allowed-roles: [CLIENTE, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveTemplateValuesRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Valores resueltos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResolveTemplateValuesResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-provider-links:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Vincular una plantilla WhatsApp con una plantilla aprobada del proveedor
+      description: >
+        HU2-129 (planificada). La plantilla debe estar ACTIVA y ser WHATSAPP, y el providerTemplateId debe figurar
+        en la lista del tenant. Lee el estado al proveedor antes de guardar el vínculo. Requiere rol
+        EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
+      operationId: linkProviderTemplate
+      x-status: planned
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LinkProviderTemplateRequest'
+      responses:
+        '201':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Vínculo creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateProviderLinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Plantillas]
+      summary: Consultar el vínculo de aprobación de una plantilla
+      description: >
+        HU2-129 (planificada). Devuelve el estado de aprobación y de publicación del vínculo. Requiere rol CLIENTE,
+        OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
+      operationId: getTemplateProviderLink
+      x-status: planned
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
+      parameters:
+        - $ref: '#/components/parameters/TemplateId'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Vínculo vigente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateProviderLinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-approval-syncs:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Sincronizar el estado de aprobación con el proveedor
+      description: >
+        HU2-129 (planificada). Lectura fresca al proveedor. Un fallo del proveedor conserva el último estado y
+        registra lastSyncError. Un vínculo PUBLICADA que pasa a RECHAZADA o PAUSADA queda SUSPENDIDA. Requiere rol
+        EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
+      operationId: syncTemplateApproval
+      x-status: planned
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncTemplateApprovalRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Vínculo tras la sincronización.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateProviderLinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-publications:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Publicar una plantilla WhatsApp aprobada
+      description: >
+        HU2-129 (planificada). Exige APROBADA en lectura fresca al proveedor; si no lo está responde 409
+        PROVIDER_TEMPLATE_NOT_APPROVED (NTF-3072). Requiere rol ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
+      operationId: publishTemplate
+      x-status: planned
+      x-allowed-roles: [ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishTemplateRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Vínculo publicado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateProviderLinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-unpublications:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Despublicar una plantilla WhatsApp
+      description: >
+        HU2-129 (planificada). Pasa el vínculo a BORRADOR. Requiere rol ADMINISTRADOR_APLICACION o
+        ADMINISTRADOR_PLATAFORMA.
+      operationId: unpublishTemplate
+      x-status: planned
+      x-allowed-roles: [ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublishTemplateRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Vínculo despublicado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateProviderLinkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /provider-template-allowlist-entries:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Agregar un providerTemplateId a la lista de la plataforma
+      description: >
+        HU2-129 (planificada). La cuenta del proveedor es de plataforma; un providerTemplateId solo puede estar en la
+        lista de un tenant (NTF-3071 si no existe en el proveedor o no es del tenant). Requiere rol
+        ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
+      operationId: addProviderTemplateAllowEntry
+      x-status: planned
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA, ADMINISTRADOR_APLICACION]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderTemplateAllowEntryRequest'
+      responses:
+        '201':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Entrada agregada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderTemplateAllowEntryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Plantillas]
+      summary: Listar la lista de providerTemplateId del tenant
+      description: >
+        HU2-129 (planificada). Paginado con limit y offset. Requiere rol ADMINISTRADOR_PLATAFORMA o
+        ADMINISTRADOR_APLICACION.
+      operationId: listProviderTemplateAllowEntries
+      x-status: planned
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA, ADMINISTRADOR_APLICACION]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Página de entradas.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProviderTemplateAllowEntryListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /provider-template-allowlist-removals:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Quitar un providerTemplateId de la lista
+      description: >
+        HU2-129 (planificada). Una entrada en uso por un vínculo PUBLICADA responde 409 TEMPLATE_PUBLISHED (NTF-3073).
+        Requiere rol ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
+      operationId: removeProviderTemplateAllowEntry
+      x-status: planned
+      x-allowed-roles: [ADMINISTRADOR_PLATAFORMA, ADMINISTRADOR_APLICACION]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProviderTemplateAllowEntryRequest'
+      responses:
+        '204':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Entrada quitada.
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-blocks:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Crear un bloque reutilizable
+      description: >
+        HU2-130 (planificada). Bloque por tenant, con clave, canal, idioma, cuerpo y variables. Hasta 5000 caracteres
+        y profundidad 3. Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
+      operationId: createTemplateBlock
+      x-status: planned
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateBlockRequest'
+      responses:
+        '201':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Bloque creado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateBlockResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Plantillas]
+      summary: Actualizar un bloque reutilizable
+      description: >
+        HU2-130 (planificada). Control optimista por version; una versión desfasada responde 409
+        BLOCK_VERSION_CONFLICT (NTF-3082). Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
+      operationId: updateTemplateBlock
+      x-status: planned
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateBlockRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Bloque actualizado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateBlockResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Plantillas]
+      summary: Listar bloques reutilizables
+      description: >
+        HU2-130 (planificada). Filtros por clave, canal, idioma y estado; paginado con page y size (máximo 100).
+        Requiere rol CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
+      operationId: listTemplateBlocks
+      x-status: planned
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
+      parameters:
+        - name: key
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: channel
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: language
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/TemplateBlockStatus'
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Página de bloques.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateBlockListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-blocks/detail:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    get:
+      tags: [Plantillas]
+      summary: Consultar un bloque reutilizable
+      description: >
+        HU2-130 (planificada). Un bloque ajeno o inexistente responde 404. Requiere rol CLIENTE, OPERADOR,
+        EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION o ADMINISTRADOR_PLATAFORMA.
+      operationId: getTemplateBlockDetail
+      x-status: planned
+      x-allowed-roles: [CLIENTE, OPERADOR, EDITOR_PLANTILLAS, ADMINISTRADOR_APLICACION, ADMINISTRADOR_PLATAFORMA]
+      parameters:
+        - name: blockId
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Bloque.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateBlockResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /template-block-archivals:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
+      - $ref: '#/components/parameters/TraceParent'
+    post:
+      tags: [Plantillas]
+      summary: Archivar un bloque reutilizable
+      description: >
+        HU2-130 (planificada). Un bloque referenciado por una plantilla o bloque activo responde 409
+        BLOCK_IN_USE (NTF-3083). Requiere rol EDITOR_PLANTILLAS o ADMINISTRADOR_PLATAFORMA.
+      operationId: archiveTemplateBlock
+      x-status: planned
+      x-allowed-roles: [EDITOR_PLANTILLAS, ADMINISTRADOR_PLATAFORMA]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ArchiveTemplateBlockRequest'
+      responses:
+        '200':
+          headers:
+            X-Correlation-Id:
+              $ref: '#/components/headers/CorrelationId'
+          description: Bloque archivado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateBlockResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '503':
+          $ref: '#/components/responses/PepUnavailable'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   headers:
     CorrelationId:
@@ -1840,7 +2746,7 @@ components:
       bearerFormat: JWT
       description: >
         JWT firmado por la plataforma de Seguridad y validado con su clave pública. Claims esperadas:
-        sub (sujeto), tenantId, role (ADMINISTRADOR, OPERADOR o CLIENTE) y exp; la claim del cliente
+        sub (sujeto), tenantId, role (lista de roles de los seis conocidos) y exp; la claim del cliente
         de plataforma (azp por defecto) es opcional. El tenant y el rol salen siempre del token: no se
         acepta el encabezado X-Tenant-Id ni ningún otro mecanismo de identidad. Una claim obligatoria
         ausente responde 401 con NTF-2004; cualquier otro rechazo, 401 con NTF-2001.
@@ -1864,7 +2770,7 @@ components:
       description: >
         Sin credencial, credencial mal formada, firma inválida, emisor o audiencia incorrectos, o
         expirada: ErrorResponse con NTF-2001. Con alguna claim obligatoria (sub, tenantId, role, exp)
-        ausente o con role fuera de ADMINISTRADOR/OPERADOR/CLIENTE: ErrorResponse con NTF-2004.
+        ausente o con role fuera de uno de los seis roles conocidos: ErrorResponse con NTF-2004.
         También cuando la cookie de sesión es inválida, expirada o revocada (NTF-2001). Con el PEP
         activo puede responder PepErrorResponse con code TOKEN_INVALID. El cuerpo nunca detalla la
         causa criptográfica exacta del rechazo ni incluye valores del token.
@@ -1882,7 +2788,7 @@ components:
         X-Decision-Id:
           $ref: '#/components/headers/DecisionId'
       description: >
-        Credencial válida, pero el rol no alcanza el mínimo requerido por esta operación. Con el modo
+        Credencial válida, pero ninguno de sus roles está en la lista permitida de esta operación. Con el modo
         interino responde ErrorResponse (NTF-2002); con el PEP activo responde PepErrorResponse con
         code ACCESS_DENIED.
       content:
@@ -2081,6 +2987,30 @@ components:
             proveedor que la despacha no sabe enviar adjuntos, termina en FAILED sin enviarse.
           items:
             $ref: '#/components/schemas/Attachment'
+        templateId:
+          type: [string, 'null']
+          format: uuid
+          x-status: planned
+          description: >
+            HU2-127 (planificada). Envío por plantilla guardada. Excluyente con body y providerTemplate; sin él,
+            subject, templateValues y event no se admiten.
+        templateValues:
+          type: [object, 'null']
+          x-status: planned
+          maxProperties: 50
+          additionalProperties:
+            type: string
+            maxLength: 2000
+          description: >
+            HU2-127 (planificada). Valor de cada variable de la plantilla. Faltantes obligatorias: 422 con
+            missingVariables (NTF-1010).
+        event:
+          type: [object, 'null']
+          x-status: planned
+          additionalProperties: true
+          description: >
+            HU2-128 (planificada). Evento que alimenta el mapeo de la plantilla; solo con templateId. Límites:
+            32768 caracteres serializados y profundidad 10 (NTF-1016).
 
     Attachment:
       type: object
@@ -2786,7 +3716,7 @@ components:
           type: string
         recipient:
           type: string
-          description: Destinatario enmascarado, salvo para ADMINISTRADOR.
+          description: Destinatario enmascarado, salvo para ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
         correlationId:
           type: [string, 'null']
           maxLength: 64
@@ -2995,7 +3925,7 @@ components:
           description: Token del dispositivo emitido por el proveedor de push. Se almacena cifrado.
         subject:
           type: string
-          description: Solo ADMINISTRADOR. Con otros roles, un valor distinto del sujeto de la sesión responde 403.
+          description: Hoy solo el sujeto de la sesión; un valor distinto responde 403.
 
     DevicePlatform:
       type: string
@@ -3015,7 +3945,7 @@ components:
           $ref: '#/components/schemas/DevicePlatform'
         token:
           type: string
-          description: Enmascarado (**** y los últimos 4 caracteres), salvo para ADMINISTRADOR.
+          description: Enmascarado (**** y los últimos 4 caracteres), salvo para ADMINISTRADOR_PLATAFORMA o ADMINISTRADOR_APLICACION.
         originComponent:
           type: string
           description: Sujeto de la sesión que registró el dispositivo.
@@ -3102,6 +4032,15 @@ components:
           description: Declaración de obligatoriedad. Cada nombre debe aparecer en el texto.
           items:
             $ref: '#/components/schemas/TemplateVariable'
+        sampleValues:
+          type: object
+          x-status: available
+          maxProperties: 50
+          additionalProperties:
+            type: string
+            maxLength: 2000
+          description: >
+            HU2-126. Datos ficticios para la vista previa; es lo único que la plantilla guarda de valores.
 
     UpdateTemplateRequest:
       type: object
@@ -3128,6 +4067,15 @@ components:
           maxItems: 50
           items:
             $ref: '#/components/schemas/TemplateVariable'
+        sampleValues:
+          type: object
+          x-status: available
+          maxProperties: 50
+          additionalProperties:
+            type: string
+            maxLength: 2000
+          description: >
+            HU2-126. Datos ficticios para la vista previa; es lo único que la plantilla guarda de valores.
 
     ArchiveTemplateRequest:
       type: object
@@ -3174,6 +4122,20 @@ components:
         updatedAt:
           type: string
           format: date-time
+        sampleValues:
+          type: object
+          x-status: available
+          description: HU2-126. Datos ficticios guardados; {} si no hay.
+          maxProperties: 50
+          additionalProperties:
+            type: string
+            maxLength: 2000
+        blockRefs:
+          type: array
+          x-status: planned
+          description: HU2-130 (planificada). Claves de bloque que el cuerpo incluye.
+          items:
+            type: string
 
     TemplateListResponse:
       type: object
@@ -3236,3 +4198,447 @@ components:
           type: [string, 'null']
         body:
           type: string
+
+    AuditScope:
+      type: string
+      enum: [PLATFORM, TENANT]
+
+    AuditAction:
+      type: string
+      enum: [CREATED, UPDATED, ARCHIVED, DELETED]
+
+    AuditActorType:
+      type: string
+      enum: [USER, APPLICATION, SYSTEM]
+
+    AuditOriginType:
+      type: string
+      enum: [REST, EVENT, SCHEDULER]
+
+    AuditActor:
+      type: object
+      required: [type, subject]
+      properties:
+        type:
+          $ref: '#/components/schemas/AuditActorType'
+        subject:
+          type: string
+        client:
+          type: [string, 'null']
+
+    AuditOrigin:
+      type: object
+      required: [type]
+      properties:
+        type:
+          $ref: '#/components/schemas/AuditOriginType'
+        client:
+          type: [string, 'null']
+
+    AuditEntrySummary:
+      type: object
+      required: [entryId, occurredAt, scope, tenantId, actor, origin, action, resourceType, resourceId, changedKeys, correlationId]
+      properties:
+        entryId:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        scope:
+          $ref: '#/components/schemas/AuditScope'
+        tenantId:
+          type: [string, 'null']
+        actor:
+          $ref: '#/components/schemas/AuditActor'
+        origin:
+          $ref: '#/components/schemas/AuditOrigin'
+        action:
+          $ref: '#/components/schemas/AuditAction'
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+        changedKeys:
+          type: array
+          items:
+            type: string
+        correlationId:
+          type: string
+
+    AuditEntryDetail:
+      allOf:
+        - $ref: '#/components/schemas/AuditEntrySummary'
+        - type: object
+          required: [before, after]
+          properties:
+            before:
+              type: [object, 'null']
+              additionalProperties: true
+            after:
+              type: [object, 'null']
+              additionalProperties: true
+
+    AuditEntrySearchResponse:
+      type: object
+      required: [items, limit, offset, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntrySummary'
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+          format: int64
+
+    PreviewTemplateRequest:
+      type: object
+      required: [channel, body]
+      properties:
+        channel:
+          type: string
+        subject:
+          type: [string, 'null']
+          maxLength: 200
+        body:
+          type: string
+          minLength: 1
+          maxLength: 20000
+        variables:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+        values:
+          type: object
+          maxProperties: 50
+          additionalProperties:
+            type: string
+            maxLength: 2000
+          description: Valores de ejemplo. Se tratan como texto literal y no se persisten.
+
+    SmsEncoding:
+      type: string
+      enum: [GSM7, UCS2]
+
+    SmsSegmentation:
+      type: object
+      required: [encoding, units, unitsPerSegment, segments, exceedsSingleSegment]
+      properties:
+        encoding:
+          $ref: '#/components/schemas/SmsEncoding'
+        units:
+          type: integer
+        unitsPerSegment:
+          type: integer
+        segments:
+          type: integer
+        exceedsSingleSegment:
+          type: boolean
+
+    TemplatePreviewResponse:
+      type: object
+      required: [subject, body, missingVariables, characterCount, subjectCharacterCount, sms]
+      properties:
+        subject:
+          type: [string, 'null']
+        body:
+          type: string
+        missingVariables:
+          type: array
+          items:
+            type: string
+        characterCount:
+          type: integer
+        subjectCharacterCount:
+          type: integer
+        sms:
+          oneOf:
+            - $ref: '#/components/schemas/SmsSegmentation'
+            - type: 'null'
+
+    TemplateMappingEntry:
+      type: object
+      required: [variable, path]
+      properties:
+        variable:
+          type: string
+          pattern: '^[A-Za-z][A-Za-z0-9_]{0,39}$'
+        path:
+          type: string
+          maxLength: 200
+          pattern: '^[A-Za-z_][A-Za-z0-9_-]{0,39}(\.[A-Za-z_][A-Za-z0-9_-]{0,39}){0,7}$'
+          description: Segmentos separados por punto, hasta 8. Nunca se evalúa como expresión.
+        defaultValue:
+          type: [string, 'null']
+          maxLength: 2000
+
+    SaveTemplateMappingRequest:
+      type: object
+      required: [templateId, version, mappings]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+          description: Versión vigente del mapeo (0 si no existe); si no coincide, 409.
+        mappings:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/TemplateMappingEntry'
+
+    TemplateMappingResponse:
+      type: object
+      required: [templateId, version, mappings]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+        mappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateMappingEntry'
+
+    ResolveTemplateValuesRequest:
+      type: object
+      required: [templateId, event]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        event:
+          type: object
+          additionalProperties: true
+
+    ResolveTemplateValuesResponse:
+      type: object
+      required: [values]
+      properties:
+        values:
+          type: object
+          additionalProperties:
+            type: string
+
+    ProviderApprovalStatus:
+      type: string
+      enum: [NO_ENVIADA, PENDIENTE, APROBADA, RECHAZADA, PAUSADA]
+
+    TemplatePublicationStatus:
+      type: string
+      enum: [BORRADOR, PUBLICADA, SUSPENDIDA]
+
+    LinkProviderTemplateRequest:
+      type: object
+      required: [templateId, providerTemplateId, variableMap]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        providerTemplateId:
+          type: string
+          pattern: '^HX[0-9a-fA-F]{32}$'
+        variableMap:
+          type: object
+          maxProperties: 20
+          additionalProperties:
+            type: string
+
+    TemplateProviderLinkResponse:
+      type: object
+      required: [templateId, providerTemplateId, variableMap, approvalStatus, publicationStatus, rejectionReason, providerLanguage, lastSyncedAt, lastSyncError, version]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        providerTemplateId:
+          type: string
+        variableMap:
+          type: object
+          additionalProperties:
+            type: string
+        approvalStatus:
+          $ref: '#/components/schemas/ProviderApprovalStatus'
+        publicationStatus:
+          $ref: '#/components/schemas/TemplatePublicationStatus'
+        rejectionReason:
+          type: [string, 'null']
+        providerLanguage:
+          type: [string, 'null']
+        lastSyncedAt:
+          type: [string, 'null']
+          format: date-time
+        lastSyncError:
+          type: [string, 'null']
+        version:
+          type: integer
+          format: int64
+
+    SyncTemplateApprovalRequest:
+      type: object
+      required: [templateId]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+
+    PublishTemplateRequest:
+      type: object
+      required: [templateId, version]
+      properties:
+        templateId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+
+    ProviderTemplateAllowEntryRequest:
+      type: object
+      required: [providerTemplateId]
+      properties:
+        providerTemplateId:
+          type: string
+          pattern: '^HX[0-9a-fA-F]{32}$'
+
+    ProviderTemplateAllowEntryResponse:
+      type: object
+      required: [providerTemplateId, addedAt]
+      properties:
+        providerTemplateId:
+          type: string
+        addedAt:
+          type: string
+          format: date-time
+
+    ProviderTemplateAllowEntryListResponse:
+      type: object
+      required: [items, limit, offset, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProviderTemplateAllowEntryResponse'
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+          format: int64
+
+    TemplateBlockStatus:
+      type: string
+      enum: [ACTIVA, ARCHIVADA]
+
+    TemplateBlockResponse:
+      type: object
+      required: [blockId, key, channel, language, body, variables, blockRefs, status, version, createdAt, updatedAt]
+      properties:
+        blockId:
+          type: string
+          format: uuid
+        key:
+          type: string
+        channel:
+          type: string
+        language:
+          type: string
+        body:
+          type: string
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+        blockRefs:
+          type: array
+          items:
+            type: string
+        status:
+          $ref: '#/components/schemas/TemplateBlockStatus'
+        version:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    TemplateBlockListResponse:
+      type: object
+      required: [items, page, size, hasNext]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateBlockResponse'
+        page:
+          type: integer
+        size:
+          type: integer
+        hasNext:
+          type: boolean
+
+    CreateTemplateBlockRequest:
+      type: object
+      required: [key, channel, language, body]
+      properties:
+        key:
+          type: string
+          minLength: 1
+          maxLength: 60
+          pattern: '^[A-Za-z0-9._-]+$'
+        channel:
+          type: string
+        language:
+          type: string
+          minLength: 2
+          maxLength: 10
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        variables:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+
+    UpdateTemplateBlockRequest:
+      type: object
+      required: [blockId, version, body]
+      properties:
+        blockId:
+          type: string
+          format: uuid
+        version:
+          type: integer
+          format: int64
+          description: Versión vigente conocida por el cliente; si no coincide, 409.
+        body:
+          type: string
+          minLength: 1
+          maxLength: 5000
+        variables:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+
+    ArchiveTemplateBlockRequest:
+      type: object
+      required: [blockId]
+      properties:
+        blockId:
+          type: string
+          format: uuid

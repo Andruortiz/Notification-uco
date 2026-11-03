@@ -2,6 +2,7 @@ package co.edu.uco.notification.infrastructure.adapter.out.mongo;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.CompoundIndex;
 import org.springframework.data.mongodb.core.mapping.Document;
@@ -25,10 +26,12 @@ public record TemplateDocument(
     String status,
     long version,
     Instant createdAt,
-    Instant updatedAt) {
+    Instant updatedAt,
+    Map<String, String> sampleValues) {
 
   public TemplateDocument {
     variables = variables == null ? null : List.copyOf(variables);
+    sampleValues = sampleValues == null ? null : Map.copyOf(sampleValues);
   }
 
   public record VariableDocument(String name, boolean required) {}

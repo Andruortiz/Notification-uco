@@ -19,6 +19,7 @@ import java.util.Base64;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
@@ -95,12 +96,12 @@ class PlatformJwtTokenValidationAdapterTest {
   }
 
   @Test
-  void usesTheLowestRoleWhenTheRoleClaimIsMissingAndThePepEnforces() {
+  void usesClienteWhenTheRoleClaimIsMissingAndThePepEnforces() {
     final var environment =
         new MockEnvironment().withProperty("security.pep.enforcement.enabled", "true");
 
     StepVerifier.create(adapterWith(environment).validate(tokenWithoutRole()))
-        .assertNext(principal -> assertEquals(Role.CLIENTE, principal.role()))
+        .assertNext(principal -> assertEquals(Set.of(Role.CLIENTE), principal.roles()))
         .verifyComplete();
   }
 
@@ -110,7 +111,7 @@ class PlatformJwtTokenValidationAdapterTest {
         new MockEnvironment().withProperty("security.pep.enforcement.enabled", "true");
 
     StepVerifier.create(adapterWith(environment).validate(token(platformKeys).compact()))
-        .assertNext(principal -> assertEquals(Role.OPERADOR, principal.role()))
+        .assertNext(principal -> assertEquals(Set.of(Role.OPERADOR), principal.roles()))
         .verifyComplete();
   }
 
@@ -157,7 +158,7 @@ class PlatformJwtTokenValidationAdapterTest {
         Jwts.builder()
             .subject("attacker")
             .claim("tenantId", "tenant-a")
-            .claim("role", "ADMINISTRADOR")
+            .claim("role", "ADMINISTRADOR_PLATAFORMA")
             .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(5))))
             .signWith(Keys.hmacShaKeyFor(platformKeys.getPublic().getEncoded()))
             .compact();
@@ -255,21 +256,24 @@ class PlatformJwtTokenValidationAdapterTest {
         adapter(properties(null, null, Map.of("soporte", "OPERADOR", "sistema", "CLIENTE")));
 
     StepVerifier.create(adapter.validate(token(platformKeys).claim("role", "soporte").compact()))
-        .assertNext(principal -> assertEquals(Role.OPERADOR, principal.role()))
+        .assertNext(principal -> assertEquals(Set.of(Role.OPERADOR), principal.roles()))
         .verifyComplete();
   }
 
   @Test
-  void picksTheHighestPrivilegeWhenTheTokenCarriesSeveralRoles() {
+  void keepsEveryKnownRoleOfTheTokenAndIgnoresTheUnknownOnes() {
     final var adapter =
-        adapter(properties(null, null, Map.of("admin-plataforma", "ADMINISTRADOR")));
+        adapter(properties(null, null, Map.of("admin-plataforma", "ADMINISTRADOR_PLATAFORMA")));
     final String token =
         token(platformKeys)
             .claim("role", List.of("CLIENTE", "desconocido", "admin-plataforma"))
             .compact();
 
     StepVerifier.create(adapter.validate(token))
-        .assertNext(principal -> assertEquals(Role.ADMINISTRADOR, principal.role()))
+        .assertNext(
+            principal ->
+                assertEquals(
+                    Set.of(Role.CLIENTE, Role.ADMINISTRADOR_PLATAFORMA), principal.roles()))
         .verifyComplete();
   }
 
@@ -277,6 +281,23 @@ class PlatformJwtTokenValidationAdapterTest {
   void rejectsAnUnknownRole() {
     StepVerifier.create(
             adapter(defaults()).validate(token(platformKeys).claim("role", "invitado").compact()))
+        .expectError(InvalidTokenException.class)
+        .verify();
+  }
+
+  @Test
+  void rejectsTheRetiredAdministradorRoleAndAListOfOnlyUnknownRoles() {
+    StepVerifier.create(
+            adapter(defaults())
+                .validate(token(platformKeys).claim("role", "ADMINISTRADOR").compact()))
+        .expectError(InvalidTokenException.class)
+        .verify();
+    StepVerifier.create(
+            adapter(defaults())
+                .validate(
+                    token(platformKeys)
+                        .claim("role", List.of("ADMINISTRADOR", "invitado"))
+                        .compact()))
         .expectError(InvalidTokenException.class)
         .verify();
   }

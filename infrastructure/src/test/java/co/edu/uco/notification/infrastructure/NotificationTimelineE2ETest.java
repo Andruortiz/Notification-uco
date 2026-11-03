@@ -169,7 +169,7 @@ class NotificationTimelineE2ETest {
   void theTimelineShowsEveryAttemptWithCauseLatencyAndCorrelationIdAndNeverTheRawProviderText() {
     final String id = deliveredNotification("tenant-1", "timeline-1");
 
-    final Map<String, Object> body = timelineBody("tenant-1", Role.ADMINISTRADOR, id);
+    final Map<String, Object> body = timelineBody("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, id);
     final List<Map<String, Object>> attempts = attempts(body);
 
     assertEquals(id, body.get("notificationId"));
@@ -219,7 +219,8 @@ class NotificationTimelineE2ETest {
     final String id = deliveredNotification("tenant-1", "timeline-roles");
 
     final Object operator = timelineBody("tenant-1", Role.OPERADOR, id).get("recipient");
-    final Object admin = timelineBody("tenant-1", Role.ADMINISTRADOR, id).get("recipient");
+    final Object admin =
+        timelineBody("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, id).get("recipient");
 
     assertEquals("alice@example.com", admin);
     assertNotNull(operator);
@@ -232,14 +233,14 @@ class NotificationTimelineE2ETest {
     final String id = deliveredNotification("tenant-1", "timeline-iso");
 
     final String other =
-        timeline("tenant-2", Role.ADMINISTRADOR, id)
+        timeline("tenant-2", Role.ADMINISTRADOR_PLATAFORMA, id)
             .expectStatus()
             .isNotFound()
             .expectBody(String.class)
             .returnResult()
             .getResponseBody();
     final String unknown =
-        timeline("tenant-2", Role.ADMINISTRADOR, "00000000-0000-0000-0000-000000000000")
+        timeline("tenant-2", Role.ADMINISTRADOR_PLATAFORMA, "00000000-0000-0000-0000-000000000000")
             .expectStatus()
             .isNotFound()
             .expectBody(String.class)
@@ -249,7 +250,7 @@ class NotificationTimelineE2ETest {
     assertNotNull(other);
     assertFalse(other.contains("alice"));
     assertNotNull(unknown);
-    timeline("tenant-1", Role.ADMINISTRADOR, id).expectStatus().isOk();
+    timeline("tenant-1", Role.ADMINISTRADOR_PLATAFORMA, id).expectStatus().isOk();
   }
 
   @Test

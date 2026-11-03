@@ -1,13 +1,12 @@
 package co.edu.uco.notification.core.domain.valueobject;
 
 public enum Role {
-  ADMINISTRADOR,
+  ADMINISTRADOR_PLATAFORMA,
+  ADMINISTRADOR_APLICACION,
+  EDITOR_PLANTILLAS,
   OPERADOR,
+  AUDITOR,
   CLIENTE;
-
-  public boolean satisfies(final Role required) {
-    return this.ordinal() <= required.ordinal();
-  }
 
   public static Role of(final String value) {
     if (value == null) {

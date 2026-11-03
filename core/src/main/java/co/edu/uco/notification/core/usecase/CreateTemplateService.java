@@ -50,6 +50,7 @@ public final class CreateTemplateService implements CreateTemplateUseCase {
                               command.subject(),
                               command.body(),
                               command.variables() == null ? List.of() : command.variables(),
+                              command.sampleValues(),
                               clock.instant())))
               .flatMap(templateRepository::insert);
         });

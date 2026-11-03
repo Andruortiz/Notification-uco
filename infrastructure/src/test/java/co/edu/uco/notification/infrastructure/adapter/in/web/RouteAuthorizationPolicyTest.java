@@ -3,31 +3,40 @@ package co.edu.uco.notification.infrastructure.adapter.in.web;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import co.edu.uco.notification.core.domain.valueobject.Role;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.mock.env.MockEnvironment;
 
 class RouteAuthorizationPolicyTest {
 
+  private static final Set<Role> PLATFORM_ADMIN = Set.of(Role.ADMINISTRADOR_PLATAFORMA);
+
   private final RouteAuthorizationPolicy policy = new RouteAuthorizationPolicy();
 
   @Test
-  void requiresNoElevatedRoleWhenThePepEnforces() {
+  void allowsEveryRoleWhenThePepEnforces() {
     final var delegated =
         new RouteAuthorizationPolicy(
             new MockEnvironment().withProperty("security.pep.enforcement.enabled", "true"));
 
-    assertEquals(Role.CLIENTE, delegated.minimumRoleFor(HttpMethod.GET, "/notifications"));
-    assertEquals(Role.CLIENTE, delegated.minimumRoleFor(HttpMethod.GET, "/configuration"));
-    assertEquals(Role.CLIENTE, delegated.minimumRoleFor(HttpMethod.GET, "/unknown"));
+    assertEquals(
+        EnumSet.allOf(Role.class), delegated.allowedRolesFor(HttpMethod.GET, "/notifications"));
+    assertEquals(
+        EnumSet.allOf(Role.class), delegated.allowedRolesFor(HttpMethod.GET, "/configuration"));
+    assertEquals(EnumSet.allOf(Role.class), delegated.allowedRolesFor(HttpMethod.GET, "/unknown"));
   }
 
   @Test
   void keepsLocalRulesWhenThePepIsNotEnforcing() {
     final var local = new RouteAuthorizationPolicy(new MockEnvironment());
 
-    assertEquals(Role.OPERADOR, local.minimumRoleFor(HttpMethod.GET, "/notifications"));
-    assertEquals(Role.ADMINISTRADOR, local.minimumRoleFor(HttpMethod.GET, "/unknown"));
+    assertEquals(
+        Set.of(Role.OPERADOR, Role.ADMINISTRADOR_APLICACION, Role.ADMINISTRADOR_PLATAFORMA),
+        local.allowedRolesFor(HttpMethod.GET, "/notifications"));
+    assertEquals(PLATFORM_ADMIN, local.allowedRolesFor(HttpMethod.GET, "/unknown"));
   }
 
   @Test
@@ -38,116 +47,67 @@ class RouteAuthorizationPolicyTest {
                 .withProperty("security.enabled", "false")
                 .withProperty("security.pep.enforcement.enabled", "true"));
 
-    assertEquals(Role.ADMINISTRADOR, disabled.minimumRoleFor(HttpMethod.GET, "/configuration"));
+    assertEquals(PLATFORM_ADMIN, disabled.allowedRolesFor(HttpMethod.GET, "/unknown"));
   }
 
   @Test
-  void searchRequiresOperador() {
-    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.GET, "/notifications"));
-  }
-
-  @Test
-  void individualStatusRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/notifications/detail"));
-  }
-
-  @Test
-  void retryAndResendRequireOperador() {
-    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/notification-retries"));
-    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/notification-resends"));
-  }
-
-  @Test
-  void timelineRequiresOperador() {
-    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.GET, "/notifications/timeline"));
-  }
-
-  @Test
-  void sendRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications"));
-  }
-
-  @Test
-  void sendBatchRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/notifications/batches"));
-  }
-
-  @Test
-  void attachmentUploadFlowRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/attachment-uploads"));
+  void searchIsOpenToOperadorAndBothAdministrators() {
     assertEquals(
-        Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/attachment-upload-completions"));
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/attachment-uploads/status"));
+        Set.of(Role.OPERADOR, Role.ADMINISTRADOR_APLICACION, Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.GET, "/notifications"));
   }
 
   @Test
-  void subscribeRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/notifications/stream"));
-  }
-
-  @Test
-  void retiredTicketRouteFallsBackToAdministrador() {
+  void postNotificationsIsNotOpenToAuditorOrOperador() {
     assertEquals(
-        Role.ADMINISTRADOR,
-        policy.minimumRoleFor(HttpMethod.POST, "/notifications/stream/tickets"));
+        Set.of(Role.CLIENTE, Role.ADMINISTRADOR_APLICACION, Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.POST, "/notifications"));
   }
 
   @Test
-  void catalogReadRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/channels"));
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/providers"));
-  }
-
-  @Test
-  void providerConnectionTestRequiresAdministrador() {
+  void templateWritesBelongToTheEditorAndThePlatformAdministrator() {
     assertEquals(
-        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.POST, "/provider-connection-tests"));
-  }
-
-  @Test
-  void createTemplateRequiresOperador() {
-    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/templates"));
-  }
-
-  @Test
-  void updateTemplateRequiresOperador() {
-    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.PUT, "/templates"));
-  }
-
-  @Test
-  void listTemplatesRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/templates"));
-  }
-
-  @Test
-  void templateDetailRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.GET, "/templates/detail"));
-  }
-
-  @Test
-  void archiveTemplateRequiresOperador() {
-    assertEquals(Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/template-archivals"));
-  }
-
-  @Test
-  void detectTemplateVariablesRequiresOperador() {
+        Set.of(Role.EDITOR_PLANTILLAS, Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.POST, "/templates"));
     assertEquals(
-        Role.OPERADOR, policy.minimumRoleFor(HttpMethod.POST, "/template-variable-detections"));
+        Set.of(Role.EDITOR_PLANTILLAS, Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.PUT, "/templates"));
   }
 
   @Test
-  void renderTemplateRequiresOnlyCliente() {
-    assertEquals(Role.CLIENTE, policy.minimumRoleFor(HttpMethod.POST, "/template-renders"));
-  }
-
-  @Test
-  void configurationReadRequiresAdministrador() {
-    assertEquals(Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.GET, "/configuration"));
-  }
-
-  @Test
-  void unknownRouteDefaultsToTheMostRestrictiveRoleNeverToOpenAccess() {
+  void templatePreviewsAreOpenToTheEditorAndBothAdministratorsOnly() {
     assertEquals(
-        Role.ADMINISTRADOR, policy.minimumRoleFor(HttpMethod.DELETE, "/notifications/detail"));
+        Set.of(
+            Role.EDITOR_PLANTILLAS, Role.ADMINISTRADOR_APLICACION, Role.ADMINISTRADOR_PLATAFORMA),
+        policy.allowedRolesFor(HttpMethod.POST, "/template-previews"));
+  }
+
+  @Test
+  void channelsAndProvidersAreManagedOnlyByThePlatformAdministrator() {
+    assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.POST, "/channels"));
+    assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.POST, "/providers"));
+    assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.POST, "/device-erasures"));
+  }
+
+  @Test
+  void devicesAreOnlyOpenToTheClient() {
+    assertEquals(Set.of(Role.CLIENTE), policy.allowedRolesFor(HttpMethod.POST, "/devices"));
+    assertEquals(Set.of(Role.CLIENTE), policy.allowedRolesFor(HttpMethod.GET, "/devices"));
+  }
+
+  @Test
+  void aVersionOneRouteAndAnUndeclaredMethodFallBackToThePlatformAdministrator() {
+    assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.GET, "/notifications/abc-123"));
+    assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.DELETE, "/notifications"));
+  }
+
+  @Test
+  void variantsOfADeclaredRouteAreUndeclaredAndOnlyThePlatformAdministratorReachesThem() {
+    for (final String path :
+        List.of("/notifications;x=1", "/notifications/", "/NOTIFICATIONS", "/Notifications")) {
+      assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.GET, path), path);
+    }
+    assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.HEAD, "/notifications"));
+    assertEquals(PLATFORM_ADMIN, policy.allowedRolesFor(HttpMethod.DELETE, "/channels"));
   }
 }

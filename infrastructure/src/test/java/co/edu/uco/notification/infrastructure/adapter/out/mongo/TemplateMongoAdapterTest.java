@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.template.Template;
 import co.edu.uco.notification.core.domain.template.TemplateCategory;
+import co.edu.uco.notification.core.domain.template.TemplateId;
 import co.edu.uco.notification.core.domain.template.TemplateStatus;
 import co.edu.uco.notification.core.domain.template.TemplateVariable;
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
@@ -17,6 +18,8 @@ import co.edu.uco.notification.core.repository.TemplateSearchCriteria;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Map;
+import org.bson.Document;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -65,6 +68,7 @@ class TemplateMongoAdapterTest {
         "Asunto {{nombre}}",
         "Hola {{nombre}} {{curso}}",
         List.of(new TemplateVariable("curso", false)),
+        Map.of(),
         NOW);
   }
 
@@ -155,5 +159,49 @@ class TemplateMongoAdapterTest {
             .block()
             .stream()
             .anyMatch(t -> t.tenantId().equals(TENANT_B)));
+  }
+
+  @Test
+  void sampleValuesRoundTrip() {
+    final Template inserted = adapter.insert(template(TENANT_A, "samples", "EMAIL", "es")).block();
+    final Template replaced =
+        adapter
+            .replace(
+                inserted.update(
+                    TemplateCategory.ACADEMICO,
+                    null,
+                    "Hola {{nombre}} {{curso}}",
+                    List.of(new TemplateVariable("curso", false)),
+                    Map.of("nombre", "Ana"),
+                    NOW),
+                inserted.version())
+            .block();
+
+    assertEquals(
+        Map.of("nombre", "Ana"), adapter.findById(TENANT_A, replaced.id()).block().sampleValues());
+  }
+
+  @Test
+  void aDocumentWithoutSampleValuesReadsAsAnEmptyMap() {
+    final String id = "legacy-" + java.util.UUID.randomUUID();
+    mongoTemplate
+        .insert(
+            new Document("_id", id)
+                .append("tenantId", TENANT_A.value())
+                .append("key", "legacy")
+                .append("category", "ACADEMICO")
+                .append("channel", "EMAIL")
+                .append("language", "es")
+                .append("subject", null)
+                .append("body", "Hola")
+                .append("variables", List.of())
+                .append("status", "ACTIVA")
+                .append("version", 0L)
+                .append("createdAt", java.util.Date.from(NOW))
+                .append("updatedAt", java.util.Date.from(NOW)),
+            "templates")
+        .block();
+
+    assertTrue(adapter.findById(TENANT_A, TemplateId.of(id)).block().sampleValues().isEmpty());
   }
 }

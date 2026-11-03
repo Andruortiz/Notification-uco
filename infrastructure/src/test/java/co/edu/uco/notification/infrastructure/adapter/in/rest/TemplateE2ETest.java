@@ -95,7 +95,12 @@ class TemplateE2ETest {
   @Test
   void fullLifecycleWithVariablesOptionalsConflictsAndArchive() {
     final Reply created =
-        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("welcome", "es"));
+        call(
+            HttpMethod.POST,
+            "/templates",
+            tenantA,
+            Role.EDITOR_PLANTILLAS,
+            newTemplate("welcome", "es"));
     assertEquals(201, created.status());
     final String id = created.body().get("templateId").asString();
     assertEquals(0L, created.body().get("version").asLong());
@@ -107,7 +112,12 @@ class TemplateE2ETest {
     assertEquals("curso", created.body().get("variables").get(1).get("name").asString());
 
     final Reply duplicate =
-        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("welcome", "es"));
+        call(
+            HttpMethod.POST,
+            "/templates",
+            tenantA,
+            Role.EDITOR_PLANTILLAS,
+            newTemplate("welcome", "es"));
     assertEquals(409, duplicate.status());
     assertEquals("NTF-3051", duplicate.body().get("code").asString());
 
@@ -117,7 +127,12 @@ class TemplateE2ETest {
     assertEquals("welcome", detail.body().get("key").asString());
 
     final Reply english =
-        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("welcome", "en"));
+        call(
+            HttpMethod.POST,
+            "/templates",
+            tenantA,
+            Role.EDITOR_PLANTILLAS,
+            newTemplate("welcome", "en"));
     assertEquals(201, english.status());
     final Reply onlyEnglish =
         call(HttpMethod.GET, "/templates?language=en", tenantA, Role.CLIENTE, null);
@@ -156,7 +171,7 @@ class TemplateE2ETest {
             HttpMethod.PUT,
             "/templates",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             Map.of(
                 "templateId", id,
                 "version", 0,
@@ -173,7 +188,7 @@ class TemplateE2ETest {
             HttpMethod.PUT,
             "/templates",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             Map.of("templateId", id, "version", 0, "category", "SEGURIDAD", "body", "x"));
     assertEquals(409, stale.status());
     assertEquals("NTF-3052", stale.body().get("code").asString());
@@ -183,7 +198,7 @@ class TemplateE2ETest {
             HttpMethod.POST,
             "/template-archivals",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             Map.of("templateId", id));
     assertEquals(200, archived.status());
     assertEquals("ARCHIVADA", archived.body().get("status").asString());
@@ -202,7 +217,7 @@ class TemplateE2ETest {
             HttpMethod.PUT,
             "/templates",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             Map.of("templateId", id, "version", 2, "category", "SEGURIDAD", "body", "x"));
     assertEquals("NTF-3053", updateArchived.body().get("code").asString());
     final Reply archivedListing =
@@ -218,7 +233,7 @@ class TemplateE2ETest {
             HttpMethod.POST,
             "/templates",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             template("a", "es", "EMAIL", "Hola {{1abc}}"));
     assertEquals(400, syntax.status());
     assertEquals("NTF-1007", syntax.body().get("code").asString());
@@ -228,7 +243,7 @@ class TemplateE2ETest {
             HttpMethod.POST,
             "/templates",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             template("a", "es", "EMAIL", "Hola {{      nombre}}"));
     assertEquals("NTF-1007", spaces.body().get("code").asString());
 
@@ -237,7 +252,7 @@ class TemplateE2ETest {
             HttpMethod.POST,
             "/templates",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             Map.of(
                 "key", "a",
                 "category", "ACADEMICO",
@@ -254,7 +269,7 @@ class TemplateE2ETest {
             HttpMethod.POST,
             "/templates",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             template("a", "es", "EMAIL", "x".repeat(20001)));
     assertEquals("NTF-1009", tooLong.body().get("code").asString());
     assertEquals(
@@ -269,7 +284,7 @@ class TemplateE2ETest {
             HttpMethod.POST,
             "/templates",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             template("a", "es", "CARRIER_PIGEON", "Hola"));
     assertEquals(400, channel.status());
     assertEquals("NTF-1003", channel.body().get("code").asString());
@@ -279,7 +294,7 @@ class TemplateE2ETest {
             HttpMethod.POST,
             "/template-variable-detections",
             tenantA,
-            Role.OPERADOR,
+            Role.EDITOR_PLANTILLAS,
             Map.of("subject", "{{a}}", "body", "{{b}} {{ a }}"));
     assertEquals(200, detection.status());
     assertEquals(List.of("a", "b"), strings(detection.body().get("variables")));
@@ -311,35 +326,47 @@ class TemplateE2ETest {
     assertEquals(200, call(HttpMethod.GET, "/templates", tenantA, Role.CLIENTE, null).status());
     assertEquals(
         201,
-        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("r", "es"))
+        call(HttpMethod.POST, "/templates", tenantA, Role.EDITOR_PLANTILLAS, newTemplate("r", "es"))
             .status());
   }
 
   @Test
   void aTenantNeverSeesEditsOrRendersTheTemplatesOfAnother() {
     final String id =
-        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("shared", "es"))
+        call(
+                HttpMethod.POST,
+                "/templates",
+                tenantA,
+                Role.EDITOR_PLANTILLAS,
+                newTemplate("shared", "es"))
             .body()
             .get("templateId")
             .asString();
     final Map<String, Object> render = Map.of("templateId", id, "values", Map.of("nombre", "Ana"));
 
     assertEquals(
-        200, call(HttpMethod.POST, "/template-renders", tenantA, Role.OPERADOR, render).status());
+        200,
+        call(HttpMethod.POST, "/template-renders", tenantA, Role.EDITOR_PLANTILLAS, render)
+            .status());
     assertEquals(
         1,
-        call(HttpMethod.GET, "/templates", tenantA, Role.OPERADOR, null)
+        call(HttpMethod.GET, "/templates", tenantA, Role.EDITOR_PLANTILLAS, null)
             .body()
             .get("items")
             .size());
     assertEquals(
         200,
-        call(HttpMethod.GET, "/templates/detail?templateId=" + id, tenantA, Role.OPERADOR, null)
+        call(
+                HttpMethod.GET,
+                "/templates/detail?templateId=" + id,
+                tenantA,
+                Role.EDITOR_PLANTILLAS,
+                null)
             .status());
 
     assertEquals(
         0,
-        call(HttpMethod.GET, "/templates", tenantB, Role.ADMINISTRADOR, null)
+        call(HttpMethod.GET, "/templates", tenantB, Role.ADMINISTRADOR_PLATAFORMA, null)
             .body()
             .get("items")
             .size());
@@ -348,20 +375,21 @@ class TemplateE2ETest {
             HttpMethod.GET,
             "/templates/detail?templateId=" + id,
             tenantB,
-            Role.ADMINISTRADOR,
+            Role.ADMINISTRADOR_PLATAFORMA,
             null);
     assertEquals(404, foreignDetail.status());
     assertEquals("NTF-3050", foreignDetail.body().get("code").asString());
     assertEquals(
         404,
-        call(HttpMethod.POST, "/template-renders", tenantB, Role.ADMINISTRADOR, render).status());
+        call(HttpMethod.POST, "/template-renders", tenantB, Role.ADMINISTRADOR_PLATAFORMA, render)
+            .status());
     assertEquals(
         404,
         call(
                 HttpMethod.POST,
                 "/template-archivals",
                 tenantB,
-                Role.ADMINISTRADOR,
+                Role.ADMINISTRADOR_PLATAFORMA,
                 Map.of("templateId", id))
             .status());
     assertEquals(
@@ -370,16 +398,26 @@ class TemplateE2ETest {
                 HttpMethod.PUT,
                 "/templates",
                 tenantB,
-                Role.ADMINISTRADOR,
+                Role.ADMINISTRADOR_PLATAFORMA,
                 Map.of("templateId", id, "version", 0, "category", "MARKETING", "body", "hackeado"))
             .status());
 
     assertEquals(
         201,
-        call(HttpMethod.POST, "/templates", tenantB, Role.OPERADOR, newTemplate("shared", "es"))
+        call(
+                HttpMethod.POST,
+                "/templates",
+                tenantB,
+                Role.EDITOR_PLANTILLAS,
+                newTemplate("shared", "es"))
             .status());
     final Reply untouched =
-        call(HttpMethod.GET, "/templates/detail?templateId=" + id, tenantA, Role.OPERADOR, null);
+        call(
+            HttpMethod.GET,
+            "/templates/detail?templateId=" + id,
+            tenantA,
+            Role.EDITOR_PLANTILLAS,
+            null);
     assertEquals(0L, untouched.body().get("version").asLong());
     assertEquals("ACTIVA", untouched.body().get("status").asString());
     assertTrue(untouched.body().get("body").asString().startsWith("Hola"));
@@ -388,7 +426,12 @@ class TemplateE2ETest {
   @Test
   void renderedValuesAreNeitherLoggedNorPersisted() {
     final String id =
-        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("privacy", "es"))
+        call(
+                HttpMethod.POST,
+                "/templates",
+                tenantA,
+                Role.EDITOR_PLANTILLAS,
+                newTemplate("privacy", "es"))
             .body()
             .get("templateId")
             .asString();
@@ -447,10 +490,20 @@ class TemplateE2ETest {
   void languageCaseVariantsAreTheSameTemplateAndTheFilterIgnoresCase() {
     assertEquals(
         201,
-        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("lang", "ES"))
+        call(
+                HttpMethod.POST,
+                "/templates",
+                tenantA,
+                Role.EDITOR_PLANTILLAS,
+                newTemplate("lang", "ES"))
             .status());
     final Reply duplicate =
-        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("lang", "es"));
+        call(
+            HttpMethod.POST,
+            "/templates",
+            tenantA,
+            Role.EDITOR_PLANTILLAS,
+            newTemplate("lang", "es"));
 
     assertEquals(409, duplicate.status());
     assertEquals("NTF-3051", duplicate.body().get("code").asString());
@@ -463,7 +516,12 @@ class TemplateE2ETest {
   @Test
   void renderWithTooManyValuesIsRejectedWithTheLimitCode() {
     final String id =
-        call(HttpMethod.POST, "/templates", tenantA, Role.OPERADOR, newTemplate("limits", "es"))
+        call(
+                HttpMethod.POST,
+                "/templates",
+                tenantA,
+                Role.EDITOR_PLANTILLAS,
+                newTemplate("limits", "es"))
             .body()
             .get("templateId")
             .asString();

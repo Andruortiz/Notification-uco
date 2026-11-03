@@ -170,7 +170,10 @@ class AuthenticationWebFilterTest {
 
     final String adminToken =
         TestTokens.issue(
-            TenantId.of("tenant-a"), Role.ADMINISTRADOR, "client-1", Duration.ofMinutes(5));
+            TenantId.of("tenant-a"),
+            Role.ADMINISTRADOR_PLATAFORMA,
+            "client-1",
+            Duration.ofMinutes(5));
     final ServerWebExchange adminExchange =
         exchangeWithHeader(HttpMethod.GET, "/notifications", "Bearer " + adminToken);
     final AtomicBoolean adminChainInvoked = new AtomicBoolean(false);

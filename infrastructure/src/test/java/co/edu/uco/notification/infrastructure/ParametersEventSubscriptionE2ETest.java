@@ -128,7 +128,7 @@ class ParametersEventSubscriptionE2ETest {
         client()
             .get()
             .uri("/configuration")
-            .header("Authorization", TestTokens.bearer(TENANT, Role.ADMINISTRADOR))
+            .header("Authorization", TestTokens.bearer(TENANT, Role.ADMINISTRADOR_PLATAFORMA))
             .exchange()
             .expectStatus()
             .isOk()

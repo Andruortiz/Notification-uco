@@ -1,7 +1,6 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
 import co.edu.uco.notification.core.domain.DeliveryAttempt;
-import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.port.in.NotificationTimelineView;
 import co.edu.uco.notification.utils.LogSanitizer;
 import java.time.Instant;
@@ -44,13 +43,14 @@ public record NotificationTimelineResponse(
     }
   }
 
-  static NotificationTimelineResponse from(final NotificationTimelineView view, final Role role) {
+  static NotificationTimelineResponse from(
+      final NotificationTimelineView view, final boolean unmasked) {
     final String address = view.recipient().address();
     return new NotificationTimelineResponse(
         view.notificationId().value(),
         view.status().name(),
         view.channelType().value(),
-        role == Role.ADMINISTRADOR ? address : LogSanitizer.maskRecipient(address),
+        unmasked ? address : LogSanitizer.maskRecipient(address),
         view.correlationId() == null ? null : view.correlationId().value(),
         view.attempts().stream().map(Attempt::from).toList());
   }

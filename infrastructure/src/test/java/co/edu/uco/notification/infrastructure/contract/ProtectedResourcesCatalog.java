@@ -11,13 +11,9 @@ import tools.jackson.databind.ObjectMapper;
 
 public final class ProtectedResourcesCatalog {
 
-  public static final List<String> ROLES = List.of("CLIENTE", "OPERADOR", "ADMINISTRADOR");
+  public static final List<String> ROLES = ApiContract.ROLES;
 
   private ProtectedResourcesCatalog() {}
-
-  public static List<String> profilesFor(final String minimumRole) {
-    return ROLES.subList(ROLES.indexOf(minimumRole), ROLES.size());
-  }
 
   public static List<Map<String, Object>> entries() {
     final List<Map<String, Object>> entries = new ArrayList<>();
@@ -25,8 +21,7 @@ public final class ProtectedResourcesCatalog {
       final Map<String, Object> entry = new LinkedHashMap<>();
       entry.put("method", operation.method());
       entry.put("path", operation.path());
-      entry.put("minimumRole", operation.minimumRole());
-      entry.put("profiles", profilesFor(operation.minimumRole()));
+      entry.put("allowedRoles", operation.allowedRoles());
       entry.put("status", operation.status());
       entry.put("operationId", operation.operationId());
       entries.add(entry);

@@ -32,10 +32,12 @@ public final class TemplateDtos {
       String language,
       String subject,
       String body,
-      List<VariableDto> variables) {
+      List<VariableDto> variables,
+      Map<String, String> sampleValues) {
 
     public CreateTemplateRequest {
       variables = variables == null ? null : List.copyOf(variables);
+      sampleValues = sampleValues == null ? null : Map.copyOf(sampleValues);
     }
   }
 
@@ -45,10 +47,12 @@ public final class TemplateDtos {
       TemplateCategory category,
       String subject,
       String body,
-      List<VariableDto> variables) {
+      List<VariableDto> variables,
+      Map<String, String> sampleValues) {
 
     public UpdateTemplateRequest {
       variables = variables == null ? null : List.copyOf(variables);
+      sampleValues = sampleValues == null ? null : Map.copyOf(sampleValues);
     }
   }
 
@@ -90,10 +94,12 @@ public final class TemplateDtos {
       TemplateStatus status,
       long version,
       Instant createdAt,
-      Instant updatedAt) {
+      Instant updatedAt,
+      Map<String, String> sampleValues) {
 
     public TemplateResponse {
       variables = variables == null ? null : List.copyOf(variables);
+      sampleValues = sampleValues == null ? null : Map.copyOf(sampleValues);
     }
 
     static TemplateResponse from(final Template template) {
@@ -110,7 +116,8 @@ public final class TemplateDtos {
           template.status(),
           template.version(),
           template.createdAt(),
-          template.updatedAt());
+          template.updatedAt(),
+          template.sampleValues());
     }
   }
 

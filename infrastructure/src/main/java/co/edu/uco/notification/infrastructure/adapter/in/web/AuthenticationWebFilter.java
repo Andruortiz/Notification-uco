@@ -13,6 +13,8 @@ import co.edu.uco.notification.utils.ErrorCode;
 import co.edu.uco.notification.utils.LogSanitizer;
 import co.edu.uco.notification.utils.Preconditions;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -220,10 +222,10 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
       final ServerWebExchange exchange,
       final WebFilterChain chain,
       final AuthenticatedPrincipal principal) {
-    final Role minimumRole =
-        routeAuthorizationPolicy.minimumRoleFor(
+    final Set<Role> allowedRoles =
+        routeAuthorizationPolicy.allowedRolesFor(
             exchange.getRequest().getMethod(), exchange.getRequest().getPath().value());
-    if (!principal.role().satisfies(minimumRole)) {
+    if (Collections.disjoint(principal.roles(), allowedRoles)) {
       return rejectForbidden(exchange, principal.tenantId().value());
     }
     exchange.getAttributes().put(PRINCIPAL_ATTRIBUTE, principal);
@@ -297,7 +299,7 @@ public class AuthenticationWebFilter implements WebFilter, Ordered {
         exchange,
         HttpStatus.FORBIDDEN,
         ErrorCode.INSUFFICIENT_ROLE,
-        "role does not satisfy the minimum role required for this operation");
+        "none of the roles of the principal is allowed for this operation");
   }
 
   private static void logRejection(

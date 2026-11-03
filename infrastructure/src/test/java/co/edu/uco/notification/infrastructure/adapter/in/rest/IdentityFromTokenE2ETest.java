@@ -130,7 +130,7 @@ class IdentityFromTokenE2ETest {
         TestTokens.sign(
             Jwts.builder()
                 .subject("client-1")
-                .claim("role", "ADMINISTRADOR")
+                .claim("role", "ADMINISTRADOR_PLATAFORMA")
                 .expiration(new Date(System.currentTimeMillis() + 60_000)));
 
     webTestClient
@@ -156,7 +156,7 @@ class IdentityFromTokenE2ETest {
         Jwts.builder()
             .subject("client-1")
             .claim("tenantId", "tenant-a")
-            .claim("role", "ADMINISTRADOR")
+            .claim("role", "ADMINISTRADOR_PLATAFORMA")
             .expiration(new Date(System.currentTimeMillis() + 60_000))
             .signWith(
                 Keys.hmacShaKeyFor(

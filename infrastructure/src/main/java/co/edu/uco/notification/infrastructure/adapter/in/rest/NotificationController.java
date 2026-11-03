@@ -137,7 +137,7 @@ public class NotificationController {
         new GetNotificationStatusQuery(principal.tenantId(), NotificationId.of(notificationId));
     return getNotificationStatusUseCase
         .getTimeline(query)
-        .map(view -> NotificationTimelineResponse.from(view, principal.role()));
+        .map(view -> NotificationTimelineResponse.from(view, principal.seesUnmaskedData()));
   }
 
   @GetMapping
@@ -162,7 +162,7 @@ public class NotificationController {
             offset);
     return searchNotificationsUseCase
         .search(query)
-        .map(page -> NotificationSearchResponse.from(page, principal.role()));
+        .map(page -> NotificationSearchResponse.from(page, principal.seesUnmaskedData()));
   }
 
   private static SendNotificationCommand toCommand(

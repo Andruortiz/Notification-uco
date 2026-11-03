@@ -1,6 +1,5 @@
 package co.edu.uco.notification.infrastructure.adapter.in.rest;
 
-import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.port.in.UndeliverableMarkView;
 import co.edu.uco.notification.utils.EmailAddresses;
 import co.edu.uco.notification.utils.PhoneNumbers;
@@ -10,12 +9,12 @@ public record UndeliverableRecipientResponse(
     boolean marked, String channel, String address, String reason, Instant markedAt) {
 
   public static UndeliverableRecipientResponse from(
-      final UndeliverableMarkView view, final Role role) {
+      final UndeliverableMarkView view, final boolean unmasked) {
     final String channel = view.channelType().value();
     return new UndeliverableRecipientResponse(
         view.marked(),
         channel,
-        role == Role.ADMINISTRADOR ? view.address() : mask(channel, view.address()),
+        unmasked ? view.address() : mask(channel, view.address()),
         view.reason(),
         view.markedAt());
   }

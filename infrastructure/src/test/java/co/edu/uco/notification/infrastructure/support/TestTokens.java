@@ -26,7 +26,7 @@ public final class TestTokens {
   private TestTokens() {}
 
   public static String bearer(final String tenantId) {
-    return bearer(tenantId, Role.ADMINISTRADOR);
+    return bearer(tenantId, Role.ADMINISTRADOR_PLATAFORMA);
   }
 
   public static String bearer(final String tenantId, final Role role, final String subject) {
@@ -35,6 +35,18 @@ public final class TestTokens {
 
   public static String bearer(final String tenantId, final Role role) {
     return "Bearer " + issue(TenantId.of(tenantId), role, "test-client", Duration.ofMinutes(15));
+  }
+
+  public static String bearerWithRoleClaim(final String tenantId, final Object roleClaim) {
+    final Instant now = Instant.now();
+    return "Bearer "
+        + sign(
+            Jwts.builder()
+                .subject("test-client")
+                .claim("tenantId", tenantId)
+                .claim("role", roleClaim)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(Duration.ofMinutes(15)))));
   }
 
   public static String issue(

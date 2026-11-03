@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import co.edu.uco.notification.core.domain.valueobject.ChannelType;
+import co.edu.uco.notification.core.domain.valueobject.Role;
 import co.edu.uco.notification.core.domain.valueobject.TenantId;
 import co.edu.uco.notification.core.port.out.ChannelCatalogPort;
 import co.edu.uco.notification.infrastructure.support.AttachmentTestContainers;
@@ -129,7 +130,7 @@ abstract class ApiV2E2ESupport {
     return client
         .post()
         .uri("/attachment-uploads")
-        .header("Authorization", TestTokens.bearer(tenant))
+        .header("Authorization", TestTokens.bearer(tenant, Role.CLIENTE))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(
             Map.of(

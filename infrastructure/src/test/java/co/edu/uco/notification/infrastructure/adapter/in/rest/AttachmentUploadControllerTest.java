@@ -127,7 +127,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .post()
         .uri("/attachment-uploads")
-        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header("Authorization", TestTokens.bearer("tenant-1", Role.CLIENTE))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(BODY)
         .exchange()
@@ -163,7 +163,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .post()
         .uri("/attachment-upload-completions")
-        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header("Authorization", TestTokens.bearer("tenant-1", Role.CLIENTE))
         .bodyValue(java.util.Map.of("uploadId", "upload-1"))
         .exchange()
         .expectStatus()
@@ -191,7 +191,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .get()
         .uri("/attachment-uploads/status?uploadId=upload-1")
-        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header("Authorization", TestTokens.bearer("tenant-1", Role.CLIENTE))
         .exchange()
         .expectStatus()
         .isOk()
@@ -222,14 +222,14 @@ class AttachmentUploadControllerTest {
     webTestClient
         .get()
         .uri("/attachment-uploads/status?uploadId=upload-1")
-        .header("Authorization", TestTokens.bearer("tenant-2"))
+        .header("Authorization", TestTokens.bearer("tenant-2", Role.CLIENTE))
         .exchange()
         .expectStatus()
         .isNotFound();
     webTestClient
         .post()
         .uri("/attachment-upload-completions")
-        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header("Authorization", TestTokens.bearer("tenant-1", Role.CLIENTE))
         .bodyValue(java.util.Map.of("uploadId", "upload-1"))
         .exchange()
         .expectStatus()
@@ -237,7 +237,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .post()
         .uri("/attachment-uploads")
-        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header("Authorization", TestTokens.bearer("tenant-1", Role.CLIENTE))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(BODY)
         .exchange()
@@ -253,7 +253,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .post()
         .uri("/attachment-uploads")
-        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header("Authorization", TestTokens.bearer("tenant-1", Role.CLIENTE))
         .contentType(MediaType.APPLICATION_JSON)
         .bodyValue(BODY.replace("contract.pdf", "setup.exe"))
         .exchange()
@@ -272,7 +272,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .post()
         .uri("/attachment-upload-completions")
-        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header("Authorization", TestTokens.bearer("tenant-1", Role.CLIENTE))
         .bodyValue(java.util.Map.of("uploadId", "upload-1"))
         .exchange()
         .expectStatus()
@@ -290,7 +290,7 @@ class AttachmentUploadControllerTest {
     webTestClient
         .get()
         .uri("/attachment-uploads/status?uploadId=upload-1")
-        .header("Authorization", TestTokens.bearer("tenant-1"))
+        .header("Authorization", TestTokens.bearer("tenant-1", Role.CLIENTE))
         .exchange()
         .expectStatus()
         .isOk()

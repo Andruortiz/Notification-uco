@@ -11,7 +11,7 @@ const carga = base64url(
   JSON.stringify({
     sub: 'loadtest',
     tenantId: tenant,
-    role: 'ADMINISTRADOR',
+    role: 'ADMINISTRADOR_PLATAFORMA',
     iat: ahora,
     exp: ahora + ttlSegundos,
   }),

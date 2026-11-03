@@ -43,7 +43,7 @@ public class UndeliverableRecipientController {
             principal.tenantId(),
             channel,
             Preconditions.requireNonBlank(request.address(), "address must not be blank"))
-        .map(view -> UndeliverableRecipientResponse.from(view, principal.role()));
+        .map(view -> UndeliverableRecipientResponse.from(view, principal.seesUnmaskedData()));
   }
 
   @PostMapping("/undeliverable-releases")

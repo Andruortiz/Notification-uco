@@ -109,7 +109,7 @@ class PublicRoutesConsistencyTest {
       assertFalse(operationPaths.contains(path), path);
       assertFalse(ApiContract.paths().containsKey(path), path);
     }
-    assertEquals(33, ApiContract.operations().size());
+    assertEquals(52, ApiContract.operations().size());
   }
 
   @Test

@@ -144,7 +144,7 @@ class ConfigurationObservabilityE2ETest {
   @Test
   void administradorGetsTheRegistryWithEveryGroupAndNoCredentialsOrBaseAddresses() {
     final long started = System.nanoTime();
-    final JsonNode body = getConfiguration(Role.ADMINISTRADOR);
+    final JsonNode body = getConfiguration(Role.ADMINISTRADOR_PLATAFORMA);
     final Duration elapsed = Duration.ofNanos(System.nanoTime() - started);
 
     assertTrue(elapsed.compareTo(RESPONSE_LIMIT) < 0);
@@ -184,7 +184,7 @@ class ConfigurationObservabilityE2ETest {
 
   @Test
   void appliedAndRejectedChangesShowUpInTheEndpointTheLogAndTheMetric() {
-    final long baseline = getConfiguration(Role.ADMINISTRADOR).get("version").asLong();
+    final long baseline = getConfiguration(Role.ADMINISTRADOR_PLATAFORMA).get("version").asLong();
     final long applied = baseline + 1;
     final long rejected = baseline + 2;
 
@@ -196,7 +196,7 @@ class ConfigurationObservabilityE2ETest {
             .status();
     assertEquals(Status.APPLIED, appliedStatus);
 
-    final JsonNode afterApplied = getConfiguration(Role.ADMINISTRADOR);
+    final JsonNode afterApplied = getConfiguration(Role.ADMINISTRADOR_PLATAFORMA);
     assertEquals(applied, afterApplied.get("version").asLong());
     assertEquals("PARAMETERS", afterApplied.get("source").asText());
     assertEquals(6, currentValue(afterApplied, "dispatch.max-attempts"));
@@ -214,7 +214,7 @@ class ConfigurationObservabilityE2ETest {
             .status();
     assertEquals(Status.REJECTED, rejectedStatus);
 
-    final JsonNode afterRejected = getConfiguration(Role.ADMINISTRADOR);
+    final JsonNode afterRejected = getConfiguration(Role.ADMINISTRADOR_PLATAFORMA);
     assertEquals(applied, afterRejected.get("version").asLong());
     assertEquals(
         currentValue(afterApplied, "provider.brevo.timeout-ms"),

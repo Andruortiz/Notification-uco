@@ -46,7 +46,8 @@ public class DeviceController {
         .map(
             registration ->
                 ResponseEntity.status(registration.created() ? HttpStatus.CREATED : HttpStatus.OK)
-                    .body(DeviceResponse.from(registration.device(), principal.role())));
+                    .body(
+                        DeviceResponse.from(registration.device(), principal.seesUnmaskedData())));
   }
 
   @GetMapping("/devices")
@@ -55,7 +56,7 @@ public class DeviceController {
       @RequestParam(name = "subject", required = false) final String subject) {
     return listUseCase
         .list(principal, subject)
-        .map(device -> DeviceResponse.from(device, principal.role()))
+        .map(device -> DeviceResponse.from(device, principal.seesUnmaskedData()))
         .collectList()
         .map(DeviceListResponse::new);
   }

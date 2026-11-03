@@ -15,11 +15,19 @@ public final class ApiContract {
   public static final String PATH_REGEX = "^/[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$";
 
   private static final Set<String> METHODS = Set.of("get", "post", "put", "patch", "delete");
+  public static final List<String> ROLES =
+      List.of(
+          "ADMINISTRADOR_PLATAFORMA",
+          "ADMINISTRADOR_APLICACION",
+          "EDITOR_PLANTILLAS",
+          "OPERADOR",
+          "AUDITOR",
+          "CLIENTE");
 
   public record Operation(
       String method,
       String path,
-      String minimumRole,
+      List<String> allowedRoles,
       String status,
       String operationId,
       Map<String, Object> definition) {
@@ -89,7 +97,9 @@ public final class ApiContract {
             new Operation(
                 entry.getKey().toUpperCase(Locale.ROOT),
                 path.getKey(),
-                (String) definition.get("x-minimum-role"),
+                ApiContract.list(definition.get("x-allowed-roles")).stream()
+                    .map(String.class::cast)
+                    .toList(),
                 (String) definition.get("x-status"),
                 (String) definition.get("operationId"),
                 definition));

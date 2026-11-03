@@ -1,10 +1,10 @@
-# Resumen de la constitución (v2.0.1)
+# Resumen de la constitución (v2.1.0)
 
 Resumen para lectura rápida. La fuente vinculante es `constitution.md`; léela completa solo si una decisión depende del texto exacto o si este resumen no alcanza.
 
 ## Principios
 - **I. Hexagonal (no negociable):** `core` sin Spring ni frameworks; todo lo externo pasa por puertos; `HexagonalArchitectureTest` lo verifica.
-- **II. Contract-first, rutas literales:** el endpoint se define antes en `api-notificaciones.yaml`; rutas solo con `/`, letras, dígitos y `. _ ~ -` (sin `:` ni `{}`); ids en query string o cuerpo; cada operación con `x-status` y `x-minimum-role`.
+- **II. Contract-first, rutas literales:** el endpoint se define antes en `api-notificaciones.yaml`; rutas solo con `/`, letras, dígitos y `. _ ~ -` (sin `:` ni `{}`); ids en query string o cuerpo; cada operación con `x-status` y `x-allowed-roles` (lista de roles permitidos, sin orden).
 - **III. Cero comentarios explicativos:** solo Javadoc de API pública si una herramienta lo exige; el razonamiento va en spec/plan/PR.
 - **IV. Calidad verificada:** CI en verde, cobertura ≥80 % líneas y ≥70 % ramas, SpotBugs + FindSecBugs + Spotless, y al menos una prueba E2E por historia. La unitaria no sustituye la E2E.
 - **V. Trazabilidad en git:** commits de una línea `tipo(ámbito): descripción`, rama `feature/HU2-XXX-descripcion`; razonamiento en el PR o en `specs/`; la IA nunca mergea.

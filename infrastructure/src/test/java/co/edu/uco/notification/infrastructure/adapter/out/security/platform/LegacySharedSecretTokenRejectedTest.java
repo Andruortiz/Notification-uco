@@ -22,7 +22,7 @@ class LegacySharedSecretTokenRejectedTest {
         Jwts.builder()
             .subject("test-client")
             .claim("tenantId", "tenant-a")
-            .claim("role", "ADMINISTRADOR")
+            .claim("role", "ADMINISTRADOR_PLATAFORMA")
             .expiration(Date.from(Instant.now().plus(Duration.ofMinutes(5))))
             .signWith(Keys.hmacShaKeyFor(LEGACY_SECRET.getBytes(StandardCharsets.UTF_8)))
             .compact();

@@ -12,6 +12,7 @@ import co.edu.uco.notification.core.exception.InvalidTokenException;
 import co.edu.uco.notification.infrastructure.support.StubSecurityPlatform;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Set;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -125,7 +126,7 @@ class PdpSessionIdentityAdapterTest {
         .assertNext(
             principal -> {
               assertEquals("u-9", principal.subject());
-              assertEquals(Role.CLIENTE, principal.role());
+              assertEquals(Set.of(Role.CLIENTE), principal.roles());
             })
         .verifyComplete();
   }

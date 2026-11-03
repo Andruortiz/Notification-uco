@@ -43,6 +43,7 @@ public final class UpdateTemplateService implements UpdateTemplateUseCase {
                       command.subject(),
                       command.body(),
                       command.variables() == null ? List.of() : command.variables(),
+                      command.sampleValues(),
                       clock.instant());
               return templateRepository
                   .replace(next, current.version())

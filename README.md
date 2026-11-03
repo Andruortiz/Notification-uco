@@ -61,7 +61,7 @@ que empezaron.
   Con la variable definida activa el sondeo HTTP contra `{base-url}/notification-service/configuration`.
 - **Propiedades `notification.parameters.*`:** `base-url` (vacia), `poll-interval-ms` (30000), `timeout-ms`
   (5000), `connect-timeout-ms` (2000) y `last-known-load-timeout-ms` (5000).
-- **Consulta:** `GET /configuration` (rol `ADMINISTRADOR`) devuelve los parametros gestionables con su valor
+- **Consulta:** `GET /configuration` (roles `ADMINISTRADOR_APLICACION` o `ADMINISTRADOR_PLATAFORMA`) devuelve los parametros gestionables con su valor
   vigente, la version y el origen (`PARAMETERS`, `LAST_KNOWN` o `DEFAULTS`); nunca incluye credenciales ni
   direcciones base.
 - **Observabilidad:** eventos `CONFIG_APPLIED`, `CONFIG_REJECTED`, `CONFIG_IGNORED`, `PARAMETERS_UNAVAILABLE`
@@ -81,7 +81,7 @@ Desarrollo local: `pwsh scripts/dev-token.ps1 -Tenant tenant-a -Role OPERADOR` g
 
 Panel en vivo: `GET /notifications/stream` se autentica con la cabecera `Authorization: Bearer` o con la cookie de sesion `SECURITY_BASELINE_SESSION` (un `EventSource` nativo la envia con `withCredentials`). Sin credenciales o con una sesion invalida responde 401; si la plataforma de sesiones no responde, 503. Desde HU2-111 se retiraron `POST /notifications/stream/tickets` y el parametro `ticket`; `access_token` tampoco se acepta.
 
-Contrato de la API (version 2.0.0): todas las rutas son literales, sin `:` ni `{}`, para que el PDP las registre como recursos protegidos. Los identificadores viajan en la query o en el cuerpo: `GET /notifications/detail?notificationId=...`, `GET /attachment-uploads/status?uploadId=...`, `POST /attachment-upload-completions` con `{uploadId}`. Cada operacion declara `x-status` (`available` o `planned`) y `x-minimum-role` en `api-notificaciones.yaml`, que tambien trae la tabla de migracion v1 a v2. La lista de recursos protegidos se genera en cada build en `infrastructure/target/contract/protected-resources.json`.
+Contrato de la API (version 2.3.0): todas las rutas son literales, sin `:` ni `{}`, para que el PDP las registre como recursos protegidos. Los identificadores viajan en la query o en el cuerpo: `GET /notifications/detail?notificationId=...`, `GET /attachment-uploads/status?uploadId=...`, `POST /attachment-upload-completions` con `{uploadId}`. Cada operacion declara `x-status` (`available` o `planned`) y `x-allowed-roles` (lista de roles permitidos) en `api-notificaciones.yaml`, que tambien trae la tabla de migracion v1 a v2. La lista de recursos protegidos se genera en cada build en `infrastructure/target/contract/protected-resources.json`.
 
 | Variable | Para que sirve | Por defecto |
 | --- | --- | --- |
@@ -94,7 +94,7 @@ Contrato de la API (version 2.0.0): todas las rutas son literales, sin `:` ni `{
 | `AUTH_PLATFORM_CLIENT_CLAIM` | Claim opcional con el identificador del cliente | `azp` |
 | `AUTH_PLATFORM_CLOCK_SKEW_SECONDS` | Tolerancia de reloj | `30` |
 
-Los roles de la plataforma se traducen a los del servicio (`CLIENTE`, `OPERADOR`, `ADMINISTRADOR`) con una tabla, que se define en `application.yml` o en un archivo de configuracion (no en variables de entorno):
+Los roles de la plataforma se traducen a los del servicio (`ADMINISTRADOR_PLATAFORMA`, `ADMINISTRADOR_APLICACION`, `EDITOR_PLANTILLAS`, `OPERADOR`, `AUDITOR`, `CLIENTE`) con una tabla, que se define en `application.yml` o en un archivo de configuracion (no en variables de entorno):
 
 ```yaml
 notification:
@@ -105,7 +105,7 @@ notification:
         sistema-integrado: CLIENTE
 ```
 
-Si el token trae varios roles, gana el de mayor privilegio; si ninguno es valido, se rechaza. La firma se comprueba solo con la clave publica: un token firmado con HMAC usando esa clave es rechazado.
+Si el token trae varios roles, el permiso efectivo es la union de sus roles; los valores desconocidos se ignoran y, si ninguno es valido, se rechaza. La firma se comprueba solo con la clave publica: un token firmado con HMAC usando esa clave es rechazado.
 
 **Pendiente de acordar con el equipo de seguridad:** los nombres reales de los claims, la tabla de roles, el emisor y la audiencia, y como se garantiza que la peticion llega a traves del PEP (red privada, mTLS o firma). Esos valores se ajustan por configuracion.
 
@@ -123,7 +123,7 @@ Esta resolucion de identidad es provisional (excepcion registrada en `specs/025-
 
 ## Aprovisionar el PDP (recursos, roles y perfiles)
 
-`scripts/provision-pdp.ps1` (PowerShell 5.1 o 7) deja en el PDP los recursos `available` de `infrastructure/target/contract/protected-resources.json`, los roles `CLIENTE`, `OPERADOR`, `ADMINISTRADOR` (cada uno con los recursos de su rol minimo) y los perfiles acumulativos `PERFIL_CLIENTE`, `PERFIL_OPERADOR`, `PERFIL_ADMINISTRADOR`. Es idempotente, no borra nada (informa huerfanos) y acepta `--dry-run`.
+`scripts/provision-pdp.ps1` (PowerShell 5.1 o 7) deja en el PDP los recursos `available` de `infrastructure/target/contract/protected-resources.json`, los seis roles (`ADMINISTRADOR_PLATAFORMA`, `ADMINISTRADOR_APLICACION`, `EDITOR_PLANTILLAS`, `OPERADOR`, `AUDITOR`, `CLIENTE`), cada uno vinculado a los recursos cuya `allowedRoles` lo incluye, y un perfil `PERFIL_<ROL>` por rol con ese unico rol. Es idempotente, no borra nada (informa huerfanos) y acepta `--dry-run`.
 
 - Orden: recursos, roles, vinculos rol-recurso, perfiles, vinculos perfil-rol.
 - Credencial: variable de entorno `PDP_ADMIN_SESSION` con el valor de la cookie `SECURITY_BASELINE_SESSION` de un administrador de la aplicacion (el PDP local no ofrece otra); nunca se imprime ni se guarda.
@@ -187,7 +187,7 @@ Que demuestra cada panel de RNF y que no:
 
 Cada canal tiene una lista de proveedores en orden de preferencia (`NOTIFICATION_EMAIL_PROVIDERS`, `NOTIFICATION_SMS_PROVIDERS`, `NOTIFICATION_PUSH_PROVIDERS`). Si un proveedor falla o su breaker esta abierto, el despacho pasa al siguiente; el intento queda en el historial con `failedOver` y no cuenta para el tope de reintentos. El breaker es por proveedor y canal y se ajusta con `notification.provider.circuit-breaker.*`: `failure-rate-threshold` (50), `minimum-calls` (5), `sliding-window-size` (10), `open-wait` (30s) y `half-open-calls` (2); como variables de entorno, `NOTIFICATION_PROVIDER_CIRCUIT_BREAKER_FAILURE_RATE_THRESHOLD` y las equivalentes. `SIMULATED_PROVIDER_ENABLED` solo debe ser `true` en local y pruebas.
 
-`POST /provider-connection-tests` (rol `ADMINISTRADOR`) ejecuta una sonda sin crear notificaciones; su limite de tiempo es `notification.provider.probe.timeout` (`NOTIFICATION_PROVIDER_PROBE_TIMEOUT`, 5s).
+`POST /provider-connection-tests` (rol `ADMINISTRADOR_PLATAFORMA`) ejecuta una sonda sin crear notificaciones; su limite de tiempo es `notification.provider.probe.timeout` (`NOTIFICATION_PROVIDER_PROBE_TIMEOUT`, 5s).
 
 ## Registro de dispositivos push
 

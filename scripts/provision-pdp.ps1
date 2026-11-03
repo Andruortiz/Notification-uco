@@ -14,8 +14,9 @@ $SessionCookieName = 'SECURITY_BASELINE_SESSION'
 $CsrfCookieName = 'XSRF-TOKEN'
 $CsrfHeaderName = 'X-XSRF-TOKEN'
 $PageSize = 100
-$RoleOrder = @('CLIENTE', 'OPERADOR', 'ADMINISTRADOR')
-$ProfileByRole = @{ CLIENTE = 'PERFIL_CLIENTE'; OPERADOR = 'PERFIL_OPERADOR'; ADMINISTRADOR = 'PERFIL_ADMINISTRADOR' }
+$Roles = @('ADMINISTRADOR_PLATAFORMA', 'ADMINISTRADOR_APLICACION', 'EDITOR_PLANTILLAS', 'OPERADOR', 'AUDITOR', 'CLIENTE')
+$ProfileByRole = @{}
+foreach ($role in $Roles) { $ProfileByRole[$role] = "PERFIL_$role" }
 $PathPattern = '^/[A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*$'
 $AllowedMethods = @('GET', 'POST', 'PUT', 'PATCH', 'DELETE')
 
@@ -58,34 +59,30 @@ function Read-Catalog {
 function Get-DesiredState {
     param([object[]]$Entries)
     $resources = New-Object System.Collections.Specialized.OrderedDictionary
+    $grants = @{}
+    foreach ($role in $Roles) { $grants[$role] = New-Object System.Collections.Generic.List[string] }
     foreach ($entry in $Entries) {
         $status = [string]$entry.status
         if ($status -ne 'available') { continue }
         $method = [string]$entry.method
         $path = [string]$entry.path
-        $minimum = [string]$entry.minimumRole
         if ($AllowedMethods -notcontains $method) { Fail "metodo no admitido en la lista canonica: $method $path" }
         if ($path -notmatch $PathPattern) { Fail "ruta no registrable en el PDP (solo letras, digitos, . _ ~ - y /): $path" }
-        if ($RoleOrder -notcontains $minimum) { Fail "rol minimo desconocido '$minimum' en $method $path" }
-        $expectedProfiles = @($RoleOrder[([array]::IndexOf($RoleOrder, $minimum))..($RoleOrder.Count - 1)])
-        $declaredProfiles = @($entry.profiles)
-        if (($expectedProfiles -join ',') -ne ($declaredProfiles -join ',')) {
-            Fail "la lista canonica declara perfiles [$($declaredProfiles -join ',')] para $method $path pero el rol minimo $minimum implica [$($expectedProfiles -join ',')]"
+        $allowed = @($entry.allowedRoles | ForEach-Object { [string]$_ })
+        if ($allowed.Count -eq 0) { Fail "la operacion $method $path no declara allowedRoles" }
+        if (@($allowed | Select-Object -Unique).Count -ne $allowed.Count) { Fail "roles duplicados en allowedRoles de $method $path" }
+        foreach ($role in $allowed) {
+            if ($Roles -notcontains $role) { Fail "rol desconocido '$role' en allowedRoles de $method $path" }
         }
         $key = "$method $path"
         if ($resources.Contains($key)) { Fail "recurso duplicado en la lista canonica: $key" }
-        $resources.Add($key, @{ Method = $method; Path = $path; Role = $minimum })
+        $resources.Add($key, @{ Method = $method; Path = $path; Roles = $allowed })
+        foreach ($role in $allowed) { $grants[$role].Add($key) }
     }
     if ($resources.Count -eq 0) { Fail 'la lista canonica no trae operaciones available' }
 
-    $grants = @{}
-    foreach ($role in $RoleOrder) { $grants[$role] = New-Object System.Collections.Generic.List[string] }
-    foreach ($key in $resources.Keys) { $grants[$resources[$key].Role].Add($key) }
-
     $profiles = @{}
-    for ($i = 0; $i -lt $RoleOrder.Count; $i++) {
-        $profiles[$ProfileByRole[$RoleOrder[$i]]] = @($RoleOrder[0..$i])
-    }
+    foreach ($role in $Roles) { $profiles[$ProfileByRole[$role]] = @($role) }
     return @{ Resources = $resources; Grants = $grants; Profiles = $profiles }
 }
 
@@ -182,6 +179,7 @@ function Open-Session {
     $result = Invoke-Pdp 'GET' '/api/v1/session'
     if ($result.Status -eq 401 -or $result.Status -eq 403) { Fail 'el PDP rechazo la sesion: expiro o no es valida. Inicia sesion en la consola y vuelve a copiar la cookie' }
     Assert-Ok $result 'validar la sesion'
+    $script:SessionTenant = [string]$result.Body.data.tenantId
     $token = ''
     foreach ($line in $result.SetCookies) {
         if ($line -match "(?i)(?:^|[\s,])$([regex]::Escape($CsrfCookieName))=([^;,\s]+)") { $token = $Matches[1] }
@@ -213,17 +211,17 @@ $online = $true
 if ($DryRun -and -not [Environment]::GetEnvironmentVariable($SessionVariable)) { $online = $false }
 
 Write-Output "Aplicacion: $ApplicationName | PDP: $PdpUrl | modo: $(if ($DryRun) { 'dry-run' } else { 'aplicar' })"
-Write-Output "Lista canonica: $($desired.Resources.Count) recursos available, $($RoleOrder.Count) roles, $($ProfileByRole.Count) perfiles"
+Write-Output "Lista canonica: $($desired.Resources.Count) recursos available, $($Roles.Count) roles, $($ProfileByRole.Count) perfiles"
 
 if (-not $online) {
     Write-Output "PDP no consultado: $SessionVariable no esta definida, se lista el estado deseado completo"
     Write-Output 'Orden: recursos, roles, vinculos rol-recurso, perfiles, vinculos perfil-rol'
     foreach ($key in $desired.Resources.Keys) { Write-Action 'ASEGURAR' "recurso $key" }
-    foreach ($role in $RoleOrder) {
+    foreach ($role in $Roles) {
         Write-Action 'ASEGURAR' "rol $role"
         foreach ($key in $desired.Grants[$role]) { Write-Action 'ASEGURAR' "vinculo rol $role -> recurso $key" }
     }
-    foreach ($role in $RoleOrder) {
+    foreach ($role in $Roles) {
         $profile = $ProfileByRole[$role]
         Write-Action 'ASEGURAR' "perfil $profile"
         foreach ($member in $desired.Profiles[$profile]) { Write-Action 'ASEGURAR' "vinculo perfil $profile -> rol $member" }
@@ -235,6 +233,7 @@ if (-not $online) {
 $script:Http = New-HttpClient
 try {
     Open-Session
+    Write-Output "Tenant de la sesion: $($script:SessionTenant)"
     $application = Resolve-Application
     $appId = $application.Id
     $appPath = [Uri]::EscapeDataString($appId)
@@ -271,7 +270,7 @@ try {
 
     $allRoles = Get-Page '/api/v1/roles'
     $roleState = @{}
-    foreach ($role in $RoleOrder) {
+    foreach ($role in $Roles) {
         $found = @($allRoles | Where-Object { $_.name -eq $role -and [string]$_.applicationId -eq $appId })
         if ($found.Count -gt 0) {
             $roleState[$role] = @{ Id = [string]$found[0].id; Resources = @($found[0].resourceIds) }
@@ -290,7 +289,11 @@ try {
         }
     }
 
-    foreach ($role in $RoleOrder) {
+    foreach ($legacy in @($allRoles | Where-Object { [string]$_.applicationId -eq $appId -and $Roles -notcontains $_.name })) {
+        $counts.orphans++
+        Write-Action 'DIVERGENCIA' "rol $($legacy.name) fuera de la lista canonica (esquema anterior, no se borra)"
+    }
+    foreach ($role in $Roles) {
         $state = $roleState[$role]
         foreach ($key in $desired.Grants[$role]) {
             $resourceId = if ($resourceIds.ContainsKey($key)) { $resourceIds[$key] } else { '' }
@@ -319,7 +322,7 @@ try {
     }
 
     $allProfiles = Get-Page '/api/v1/profiles'
-    foreach ($role in $RoleOrder) {
+    foreach ($role in $Roles) {
         $profile = $ProfileByRole[$role]
         $found = @($allProfiles | Where-Object { $_.name -eq $profile -and [string]$_.applicationId -eq $appId })
         $profileId = ''
@@ -356,6 +359,17 @@ try {
             $counts.linked++
             Write-Action 'VINCULADO' "perfil $profile -> rol $member"
         }
+        foreach ($linkedId in $linkedRoles) {
+            $linkedName = @($allRoles | Where-Object { [string]$_.id -eq [string]$linkedId } | ForEach-Object { $_.name })
+            if ($linkedName.Count -gt 0 -and $desired.Profiles[$profile] -notcontains $linkedName[0]) {
+                $counts.orphans++
+                Write-Action 'DIVERGENCIA' "perfil $profile tiene el rol $($linkedName[0]) fuera de su lista (esquema anterior, no se revoca)"
+            }
+        }
+    }
+    foreach ($legacyProfile in @($allProfiles | Where-Object { [string]$_.applicationId -eq $appId -and $_.name -like 'PERFIL_*' -and -not $desired.Profiles.ContainsKey($_.name) })) {
+        $counts.orphans++
+        Write-Action 'DIVERGENCIA' "perfil $($legacyProfile.name) fuera de la lista canonica (esquema anterior, no se borra)"
     }
 } finally {
     if ($null -ne $script:Http) { $script:Http.Dispose() }

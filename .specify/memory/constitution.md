@@ -1,5 +1,15 @@
 <!--
 Sync Impact Report
+Version change: 2.0.1 -> 2.1.0
+Rationale: MINOR -- el rol mínimo jerárquico (`x-minimum-role`) no describe un modelo de roles no lineal. Cada operación
+declara `x-allowed-roles` (lista de roles permitidos, sin orden). Aprobado por el usuario en el lote de nivel 2 (HU2-123).
+Modified principles: II. Contract-first (`x-minimum-role` pasa a `x-allowed-roles`).
+Added sections: none.
+Removed sections: none.
+-->
+
+<!--
+Sync Impact Report
 Version change: 2.0.0 -> 2.0.1
 Rationale: PATCH -- el trabajo pasa a trunk-based con `main` como base desde 2026-10-14; se actualizan las
 referencias a `develop` y a GitFlow en el Principio V y en "Flujo de desarrollo". Ningun principio cambia de fondo.
@@ -90,7 +100,7 @@ y `. _ ~ -`, sin `:`, `{}` ni comodines, porque el PDP resuelve el recurso prote
 exacta de método y ruta. Los identificadores de recurso viajan en la query string (consultas, ej.
 `GET /notifications/detail?notificationId=...`) o en el cuerpo (comandos, ej.
 `POST /attachment-upload-completions`). Las acciones de negocio se modelan como recurso (ej.
-`POST /notification-retries`). Cada operación declara `x-status` y `x-minimum-role`. El contrato
+`POST /notification-retries`). Cada operación declara `x-status` y `x-allowed-roles` (lista de roles permitidos, sin orden entre ellos). El contrato
 puede contener operaciones planificadas/bloqueadas (`x-status: planned`), siempre que estén
 identificadas como tales y no estén servidas.
 
@@ -230,4 +240,4 @@ propio seguimiento — esta constitución no les asigna una ubicación formal ni
 herramienta externa como fuente de verdad. Lo único vinculante para el proceso de desarrollo asistido
 por IA es lo que está escrito en este archivo y en `specs/<historia>/`.
 
-**Version**: 2.0.1 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-10-23
+**Version**: 2.1.0 | **Ratified**: 2026-09-07 | **Last Amended**: 2026-10-26

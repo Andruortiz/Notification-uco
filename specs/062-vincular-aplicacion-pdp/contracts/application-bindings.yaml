@@ -1,0 +1,53 @@
+paths:
+  /application-bindings:
+    post:
+      operationId: bindApplication
+      x-status: planned
+      x-minimum-role: ADMINISTRADOR
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BindApplicationRequest' }
+      responses:
+        '201': { description: Vínculo creado, content: { application/json: { schema: { $ref: '#/components/schemas/ApplicationBinding' } } } }
+        '200': { description: Vínculo ya existente }
+        '403': { description: Sin permiso en el PDP o rol insuficiente }
+        '404': { description: Aplicación inexistente en el PDP }
+        '503': { description: PDP no disponible }
+    get:
+      operationId: listApplicationBindings
+      x-status: planned
+      x-minimum-role: ADMINISTRADOR
+      responses:
+        '200': { description: Vínculos del tenant de la sesión }
+    delete:
+      operationId: unbindApplication
+      x-status: planned
+      x-minimum-role: ADMINISTRADOR
+      parameters:
+        - { name: applicationId, in: query, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Vínculo retirado }
+        '404': { description: No existe en el tenant }
+  /application-bindings/audit:
+    get:
+      operationId: listApplicationBindingAudit
+      x-status: planned
+      x-minimum-role: ADMINISTRADOR
+      responses:
+        '200': { description: Registros de auditoría del tenant, del más reciente al más antiguo }
+components:
+  schemas:
+    BindApplicationRequest:
+      type: object
+      required: [applicationId]
+      properties:
+        applicationId: { type: string, maxLength: 100 }
+    ApplicationBinding:
+      type: object
+      properties:
+        applicationId: { type: string }
+        applicationName: { type: string }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        managementUrl: { type: string }

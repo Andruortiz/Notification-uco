@@ -15,7 +15,14 @@ public final class ProviderContentLimits {
               "body.maxLength",
               1_600L,
               "https://www.twilio.com/docs/messaging/api/message-resource",
-              LocalDate.of(2026, 10, 5)));
+              LocalDate.of(2026, 10, 5)),
+          new Entry(
+              "twilio-whatsapp",
+              "WHATSAPP",
+              "body.maxLength",
+              1_600L,
+              "https://www.twilio.com/docs/messaging/api/message-resource",
+              LocalDate.of(2026, 10, 21)));
 
   private ProviderContentLimits() {}
 

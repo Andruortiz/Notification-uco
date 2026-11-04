@@ -297,7 +297,7 @@ class ProviderConnectionTestE2ETest {
             .getResponseBody();
     @SuppressWarnings("unchecked")
     final List<Map<String, Object>> items = (List<Map<String, Object>>) catalog.get("items");
-    assertEquals(3, items.size());
+    assertEquals(4, items.size());
     for (final Map<String, Object> channel : items) {
       @SuppressWarnings("unchecked")
       final List<Map<String, Object>> providers =

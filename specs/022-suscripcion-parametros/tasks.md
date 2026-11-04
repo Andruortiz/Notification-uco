@@ -94,17 +94,14 @@ Los paquetes Java viven bajo `core/src/main/java/co/edu/uco/notification/core/`,
   ignorado. Cada "no cambia" lleva control positivo (la versión válida siguiente sí se adopta). (escrita, no
   ejecutada)
 
-## Phase 5: Verificación (PENDIENTE -- el usuario pidió no ejecutar pruebas)
+## Phase 5: Verificación (T026-T028 pendientes)
 
-- [ ] T022 Ejecutar `./mvnw -B -ntp -pl core test`. pendiente: el usuario pidió no ejecutar pruebas
-- [ ] T023 Ejecutar las clases nuevas de `infrastructure` (`ParametersEventsPropertiesTest`,
+- [x] T022 Ejecutar `./mvnw -B -ntp -pl core test`. verificado 2026-10-21 (verify + clases individuales en verde)
+- [x] T023 Ejecutar las clases nuevas de `infrastructure` (`ParametersEventsPropertiesTest`,
   `ParametersEventPayloadContractTest`, `ParametersEventListenerTest`, `ParametersEventsInactiveTest`,
-  `ConfigurationEventLoggerTest`, `ParametersPollingSchedulerTest`). pendiente: el usuario pidió no ejecutar
-  pruebas
-- [ ] T024 Ejecutar `ParametersEventSubscriptionE2ETest` con Docker (SC-001 a SC-004, SC-006). pendiente: el
-  usuario pidió no ejecutar pruebas
-- [ ] T025 Ejecutar `HexagonalArchitectureTest` y `ModularityTests`. pendiente: el usuario pidió no ejecutar
-  pruebas
+  `ConfigurationEventLoggerTest`, `ParametersPollingSchedulerTest`). verificado 2026-10-21 (clases individuales en verde)
+- [x] T024 Ejecutar `ParametersEventSubscriptionE2ETest` con Docker (SC-001 a SC-004, SC-006). verificado 2026-10-21 (clases individuales en verde)
+- [x] T025 Ejecutar `HexagonalArchitectureTest` y `ModularityTests`. verificado 2026-10-21 (clases individuales en verde)
 - [ ] T026 Ejecutar `./mvnw -B -ntp verify` completo (cobertura 80 % líneas y 70 % ramas, Spotless, SpotBugs,
   FindSecBugs). pendiente: el usuario pidió no ejecutar pruebas
 - [ ] T027 Recorrer la demostración manual de `quickstart.md`. pendiente: el usuario pidió no ejecutar pruebas

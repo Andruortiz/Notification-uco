@@ -29,6 +29,7 @@ public final class ContentSchemaValidator {
               builder.schemaRegistryConfig(
                   SchemaRegistryConfig.builder().pathType(PathType.LEGACY).build()));
   private static final String ATTACHMENTS = "attachments";
+  private static final String PROVIDER_TEMPLATE = "providerTemplate";
 
   private static final String ATTACHMENTS_TOTAL_BYTES = "attachmentsTotalBytes";
 
@@ -39,8 +40,11 @@ public final class ContentSchemaValidator {
       final String schema,
       final NotificationContent content,
       final List<AttachmentSubmission> attachments) {
-    if (!attachments.isEmpty() && !declaresAttachments(schema)) {
+    if (!attachments.isEmpty() && !declaresProperty(schema, ATTACHMENTS)) {
       throw new InvalidContentException(channelType, "channel does not accept attachments");
+    }
+    if (content.hasProviderTemplate() && !declaresProperty(schema, PROVIDER_TEMPLATE)) {
+      throw new InvalidContentException(channelType, "channel does not accept provider templates");
     }
     if (schema == null || schema.isBlank()) {
       return;
@@ -56,12 +60,12 @@ public final class ContentSchemaValidator {
     }
   }
 
-  private static boolean declaresAttachments(final String schema) {
+  private static boolean declaresProperty(final String schema, final String property) {
     if (schema == null || schema.isBlank()) {
       return false;
     }
     try {
-      return MAPPER.readTree(schema).path("properties").has(ATTACHMENTS);
+      return MAPPER.readTree(schema).path("properties").has(property);
     } catch (final JacksonException e) {
       return false;
     }
@@ -71,7 +75,15 @@ public final class ContentSchemaValidator {
       final NotificationContent content, final List<AttachmentSubmission> attachments) {
     final ObjectNode contentNode = MAPPER.createObjectNode();
     contentNode.put("subject", content.subject());
-    contentNode.put("body", content.body());
+    if (content.body() != null) {
+      contentNode.put("body", content.body());
+    }
+    if (content.hasProviderTemplate()) {
+      final ObjectNode templateNode = contentNode.putObject(PROVIDER_TEMPLATE);
+      templateNode.put("templateId", content.providerTemplate().templateId());
+      final ObjectNode variablesNode = templateNode.putObject("variables");
+      content.providerTemplate().variables().forEach(variablesNode::put);
+    }
     if (!attachments.isEmpty()) {
       final ArrayNode attachmentsNode = contentNode.putArray(ATTACHMENTS);
       attachments.forEach(attachment -> attachmentsNode.add(toNode(attachment)));

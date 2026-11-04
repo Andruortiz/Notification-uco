@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-19
 
-**Status**: Borrador (pendiente de clarify y de aprobación del plan)
+**Status**: Implementado (PR #94); pendiente T023, verificación manual con cookie real contra el PDP
 
 **Input**: User description: "Como usuario del panel web de Notification-uco, quiero que el backend acepte la cookie de
 sesión `SECURITY_BASELINE_SESSION` emitida por la plataforma de Seguridad (BFF/PDP) además del Bearer, y que el navegador

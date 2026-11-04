@@ -29,7 +29,7 @@ public final class ConfigurationFixtures {
             "EMAIL", Set.of("simulated", "brevo"),
             "SMS", Set.of("simulated", "twilio"),
             "PUSH", Set.of("simulated", "fcm")),
-        Set.of("simulated", "brevo", "twilio", "fcm"),
+        Set.of("simulated", "brevo", "twilio", "twilio-whatsapp", "fcm"),
         10_000,
         3,
         3_600_000,

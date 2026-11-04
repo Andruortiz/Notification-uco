@@ -4,7 +4,7 @@
 
 **Created**: 2026-10-18
 
-**Status**: Borrador (specify y clarify completos; pendiente de aprobación del plan)
+**Status**: Implementado (PR #93, contrato 2.0.0)
 
 **Input**: User description: "Como equipo de desarrollo, quiero una versión 2 del contrato de la API cuyas rutas sean todas
 literales (sin ':' ni '{}'), con respuestas completamente tipadas y los errores de seguridad documentados, para poder

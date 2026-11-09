@@ -1,6 +1,6 @@
 services:
   prometheus:
-    image: prom/prometheus:v3.5.1
+    image: prom/prometheus:v3.16.0
     container_name: notification-prometheus
     restart: unless-stopped
     command:

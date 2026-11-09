@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Configurar JDK 25
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: temurin
           java-version: "25"
@@ -32,7 +32,7 @@ jobs:
         run: mkdir -p ~/.m2 && cp .mvn/settings-github-packages.xml ~/.m2/settings.xml
 
       - name: Inicializar CodeQL
-        uses: github/codeql-action/init@7999b86c43a865dc79d8923397f35af22de63401 # v4
+        uses: github/codeql-action/init@ce8b5602e2e75eddc698f13db2342ef698999255 # v4
         with:
           languages: java-kotlin
           build-mode: manual
@@ -44,6 +44,6 @@ jobs:
         run: ./mvnw -B -ntp clean compile
 
       - name: Analisis CodeQL
-        uses: github/codeql-action/analyze@7999b86c43a865dc79d8923397f35af22de63401 # v4
+        uses: github/codeql-action/analyze@ce8b5602e2e75eddc698f13db2342ef698999255 # v4
         with:
           category: "/language:java-kotlin"
